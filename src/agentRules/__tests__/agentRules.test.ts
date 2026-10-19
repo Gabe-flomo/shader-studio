@@ -16,6 +16,7 @@ import { getNodeDefinition, resolveNodeAliases } from '../../nodes/definitions';
 import { n } from '../../store/graphBuilder';
 import type { GraphNode } from '../../types/nodeGraph';
 import { EXAMPLE_GRAPHS } from '../../store/exampleGraphs';
+import { antsNodes } from '../../store/agentExamplesP3';
 import { EXAMPLE_FOLDERS, EXAMPLE_INDEX } from '../../store/exampleIndex';
 import { AGENT_RULE_EXAMPLE_KEYS } from '../../store/agentRuleExamples';
 import { applyRulesToGroup, backToRules, ensureBirthEmit, isRulesGroup, openRulesAsNodes, rulesNeedRegenerating } from '../apply';
@@ -400,7 +401,7 @@ describe('templates, examples and the starter', () => {
 
   it('the Agents: rules folder holds every template as an example, each compiling, with notes everywhere', () => {
     expect(EXAMPLE_FOLDERS.find(f => f.label === 'Agents: rules')?.keys).toEqual(AGENT_RULE_EXAMPLE_KEYS);
-    expect(AGENT_RULE_EXAMPLE_KEYS.length).toBe(13);
+    expect(AGENT_RULE_EXAMPLE_KEYS.length).toBe(12); // Ants with food was deleted (2026-10-19)
     const walk = (nodes: GraphNode[], f: (x: GraphNode) => void) => { for (const x of nodes) { f(x); const sg = x.params.subgraph as { nodes?: GraphNode[] } | undefined; if (sg?.nodes) walk(sg.nodes, f); } };
     for (const k of AGENT_RULE_EXAMPLE_KEYS) {
       expect(EXAMPLE_INDEX[k]?.label, k).toMatch(/^Agent rules \d+ · /);
@@ -425,7 +426,7 @@ describe('templates, examples and the starter', () => {
   it('a rules group\'s walkers lay no trail on the step they are born; node-built groups are as they were', () => {
     const r = compileGraph({ nodes: rulesTemplateNodes('dla', 'qb') });
     expect(r.agents!.groups[0].fragmentShader).toMatch(/o_c = vec4\(\w+_bs, 0\.0, 0\.0, 16777215\.0\); o_d = vec4\(0\.0\);/);
-    const ants = compileGraph({ nodes: EXAMPLE_GRAPHS.agentAnts.nodes });
+    const ants = compileGraph({ nodes: antsNodes(0, 0) }); // the node-built ants (their example was deleted; the graph still builds)
     expect(ants.agents!.groups[0].fragmentShader).toMatch(/o_d = agOneHot\(\w+_bs\);/);
   });
 

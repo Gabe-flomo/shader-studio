@@ -11,6 +11,7 @@
 import { GROUP_PORT_SENTINEL, type GraphNode, type SubgraphData } from '../types/nodeGraph';
 import type { ExampleGraph } from './exampleIndex';
 import { ctl, n, play } from './graphBuilder';
+import { exprBlock, wiggleFinish } from './wiggleLook';
 import { getNodeDefinition } from '../nodes/definitions';
 
 export const FOURD_EXAMPLE_INDEX: Record<string, { label: string; description: string; play: true }> = {
@@ -106,9 +107,9 @@ export function scene(id: string, x: number, y: number, label: string, shapes: G
     label, ...note(comment),
     subgraph: {
       ...sub([
-        n('scenePos', 'sp', 0, 200, { _groupOriginal: true }),
+        n('scenePos', 'sp', 0, 200, { _groupOriginal: true, ...note('Scene Pos: the 3D point being measured, the start of the 4D work.') }),
         ...shapes,
-        n('sceneOutput', 'so', 1700, 200, { _groupOriginal: true }, { dist }),
+        n('sceneOutput', 'so', 1700, 200, { _groupOriginal: true, ...note('Scene Output: the distance that comes out of the 4D work: the 3D scene the March Loop draws.') }, { dist }),
       ]),
       inputPorts: ports.map(p => ({ key: p.key, type: 'float' as const, label: p.label, toNodeId: p.to[0], toInputKey: p.to[1] })),
     },
@@ -131,8 +132,8 @@ export function expr(id: string, x: number, y: number, label: string, wires: Rec
 
 /** The March Loop body that changes nothing: Group Inputs → March Pos → Group Output. */
 export const passBody = (id: string): SubgraphData => sub([
-  n('marchLoopInputs', `${id}_in`, 0, 180, { _groupOriginal: true }),
-  n('marchLoopOutput', `${id}_out`, 440, 180, { _groupOriginal: true }, { pos: [`${id}_in`, 'marchPos'] }),
+  n('marchLoopInputs', `${id}_in`, 0, 180, { _groupOriginal: true, ...note('Group Inputs: the ray\'s point at this step of the march.') }),
+  n('marchLoopOutput', `${id}_out`, 440, 180, { _groupOriginal: true, ...note('Group Output: the point goes on to the scene unchanged (nothing is warped).') }, { pos: [`${id}_in`, 'marchPos'] }),
 ]);
 
 export const SUN = { x: 0.55, y: 0.85, z: 0.45 };
@@ -215,20 +216,24 @@ export function buildFourDExamples(): Record<string, ExampleGraph> {
       ], ['un', 'dist'],
       'A hypersphere inside a hollow tesseract, both measured at the same turned 4D point. W comes in through a port from the LFO outside; the turn and the cut height are Play controls on settings inside this group.',
       [{ key: 'w', label: 'W (slice)', from: ['sweep', 'value'], to: ['lift', 'w'] }]),
-      ...finish([0.06, 0.05, 0.09],
-        expr('col', 1180, 520, 'Surface colour', { x: ['hp', 'x'], y: ['hp', 'y'], z: ['hp', 'z'], w: ['sweep', 'value'] },
-          'length(vec3(x, y, z)) < sqrt(max(0.36 - w * w, 0.0)) + 0.04 ? vec3(1.0, 0.4, 0.16) + vec3(0.0, 0.35, 0.14) * clamp(0.5 + 0.7 * y, 0.0, 1.0) : vec3(0.3, 0.52, 0.72) + vec3(0.25, 0.26, 0.18) * clamp(0.5 + 0.4 * y, 0.0, 1.0)',
-          'Which surface did the ray land on? The ball\'s slice has radius sqrt(0.36 - W²), and the shell is always further from the middle than that (the inner box holds a 4D ball of radius 0.8). So a hit point closer than the ball\'s radius plus a little is the ball: orange. Anything else is the shell: blue.'),
-        'March Loop: finds where each ray meets the scene and the surface direction there.', 1700),
+      n('marchLoopGroup', 'march', 340, 220, { bg: [0.012, 0.012, 0.028], maxSteps: 128, maxDist: 24, subgraph: passBody('march'),
+        ...note('March Loop: finds where each ray meets the scene, how far it went (Distance) and how many steps it took (Iter Count): the two numbers the colouring reads.') },
+        { ro: ['cam', 'ro'], rd: ['cam', 'rd'], scene: ['scene', 'scene'] }),
+      n('splitVec3', 'hp', 640, 520, { ...note('Split Vec3: the hit point as x, y, z.') }, { v: ['march', 'pos'] }),
+      exprBlock('which', 880, 520, 'Ball or shell?', { x: { type: 'float', from: ['hp', 'x'] }, y: { type: 'float', from: ['hp', 'y'] }, z: { type: 'float', from: ['hp', 'z'] }, w: { type: 'float', from: ['sweep', 'value'] } }, [],
+        'length(vec3(x, y, z)) < sqrt(max(0.36 - w * w, 0.0)) + 0.04 ? 0.38 : 0.0',
+        'Which surface did the ray land on? The ball\'s slice has radius sqrt(0.36 - W²), and the shell is always further from the middle than that (the inner box holds a 4D ball of radius 0.8). So a hit point closer than the ball\'s radius plus a little is the ball: it gets 0.38 more round the palette (cream and orange), the shell stays in the blues.', 'float'),
+      ...wiggleFinish({ march: 'march', x: 1120, y: 220, distK: 0.14, iterK: 0.003, shift: 0.62, bg: [0.012, 0.012, 0.028], fog: 4, fogStart: 3, form: 0.5, halo: 0.15,
+        extra: { from: ['which', 'result'], note: 'Add: plus 0.38 on the ball, so the ball and the box are two ends of the same palette.' } }),
     ],
     play: play([
       ctl('sweep', 'sweep::amplitude', 'Sweep (w range)', 0, 0.6, 0.01),
       ctl('a', 'scene::rot::rxw', 'Turn (deg)', -180, 180, 0.5),
       ctl('lid', 'scene::lid::height', 'Cut height', -0.2, 0.9, 0.01),
       ctl('c', 'cam::camAngle', 'Camera angle', 0, 6.28, 0.02),
-    ], `**What it shows.** A hypersphere (a ball with four directions) inside a hollow tesseract, seen through a slice. The ball's slice is always a ball, but its size depends on **w**: biggest at w = 0, shrinking to a point as w reaches its radius, so as the slice sweeps the orange ball swells and shrinks. Meanwhile the box around it, turning in the xw plane, morphs from a cube to a corner-cut shape and back. The top is cut off so you can see in, and the box casts a shadow into itself and darkens the corners where the ball nearly touches.
+    ], `**What it shows.** A hypersphere (a ball with four directions) inside a hollow tesseract, seen through a slice. The ball's slice is always a ball, but its size depends on **w**: biggest at w = 0, shrinking to a point as w reaches its radius, so as the slice sweeps the orange ball swells and shrinks. Meanwhile the box around it, turning in the xw plane, morphs from a cube to a corner-cut shape and back. The top is cut off so you can see in: the box in the blues, the ball in cream and orange.
 
-**How it is built.** Inside the Scene Group: Scene Pos → **Lift to 4D** (w comes from an LFO outside, through a port) → **Transform** (4D, turning in xw) → a **Hypersphere SDF**, and two **Tesseract SDF**s subtracted to make a shell; a plane trims the shell open; Union joins the two. An Expression Block outside tells ball from shell by distance from the middle, using the same w. Soft Shadow and SDF Ambient Occlusion measure the Scene Group with the same w.
+**How it is built.** Inside the Scene Group: Scene Pos → **Lift to 4D** (w comes from an LFO outside, through a port) → **Transform** (4D, turning in xw) → a **Hypersphere SDF**, and two **Tesseract SDF**s subtracted to make a shell; a plane trims the shell open; Union joins the two. An Expression Block outside tells ball from shell by distance from the middle, using the same w. The colouring is the Wiggle Tunnel's (Distance and Iter Count on one cosine palette), with the ball pushed round to the warm end.
 
 **Try.** **Turn** and **Cut height** are Play knobs set directly on nodes inside the Scene Group (the 4D Transform and the plane), no wiring needed. Raise **Sweep** to 0.6 to take the slice all the way to the ball's edge, where it vanishes. Set it to 0 and the slice stays through the middle. **Turn** changes the box only: the sphere looks the same however you turn it in 4D.`),
   };

@@ -364,7 +364,7 @@ export const WALKER_KINDS: Record<WalkerKind, { label: string; blurb: string; se
     sections: ['states', 'channels', 'masks', 'sensors', 'flow'],
     conditions: ['state', 'memory', 'sense', 'near', 'mask', 'chance', 'age', 'neighbours', 'shape'],
     actions: ['state', 'memory', 'turn', 'trail', 'wander', 'speed', 'bounce', 'stop', 'stick', 'die', 'spawn', 'flow'],
-    templates: ['ants', 'termites', 'sir', 'fireflies'],
+    templates: ['termites', 'sir', 'fireflies'],
   },
   swarm: {
     label: 'Swarm / orbiters', blurb: 'Orbit a point (or the mouse) and flock loosely: keep apart, drift together.',

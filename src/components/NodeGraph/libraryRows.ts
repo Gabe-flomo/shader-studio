@@ -80,7 +80,7 @@ const ROW_LABELS: Record<string, string> = {
 };
 export const rowLabel = (row: string) => ROW_LABELS[row] ?? row;
 
-const PRESET_TYPES = ['slimeMoldPreset', 'multiSlimePreset', 'antsPreset', 'boidsPreset', 'strandsPreset', 'growPicturePreset', 'myceliumPreset', 'particlesPreset', 'curlSmokePreset', 'soundBurstPreset', 'galaxyPreset', 'sandPlatePreset'];
+const PRESET_TYPES = ['slimeMoldPreset', 'multiSlimePreset', 'boidsPreset', 'strandsPreset', 'growPicturePreset', 'myceliumPreset', 'particlesPreset', 'curlSmokePreset', 'soundBurstPreset', 'galaxyPreset', 'sandPlatePreset'];
 const FOURD_SPACE = ['lift4D', 'rotate4D', 'translate4D', 'scale4D', 'repeat4D', 'fold4D', 'twist4D', 'noise4D'];
 const FOURD_PROJECTION = ['wireframe4D', 'project4D', 'stereo4D', 'stereoDist4D', 'wireframe4D2D', 'planeSlice4D'];
 

@@ -6,7 +6,7 @@
  * Listed in the 3D SDF folder. Built from the node definitions (graphBuilder.ts).
  */
 import type { GraphNode, SubgraphData } from '../types/nodeGraph';
-import { ctl, n, out, play } from './graphBuilder';
+import { ctl, n, play } from './graphBuilder';
 import { expr, note } from './agentExampleKit';
 import type { ExampleGraph } from './exampleIndex';
 import { REPEAT_SCENE_EXAMPLE_INDEX } from './repeatSceneExampleIndex';
@@ -81,7 +81,7 @@ function bubbles(centre = false): GraphNode[] {
       label: 'Shade', inputs: [{ name: 'pos', type: 'vec3' }, { name: 'nrm', type: 'vec3' }, { name: 'hit', type: 'float' }, { name: 'dist', type: 'float' }, { name: 'h', type: 'float' }],
       lines: [
         ['float fl', 'step(0.95, nrm.y) * step(pos.y, -0.98)'],
-        ['vec3 base', 'mix(0.55 + 0.45 * cos(6.28318 * (h + vec3(0.0, 0.33, 0.67))), vec3(0.18, 0.2, 0.26), fl)'],
+        ['vec3 base', 'mix(0.5 + 0.5 * cos(6.28318 * (0.2 + h * 0.5 + dist * 0.01 + vec3(0.3, 0.416, 0.557))), vec3(0.07, 0.08, 0.11), fl)'],
         ...(centre ? [['base', 'mix(base, vec3(0.92, 0.88, 0.8), smoothstep(2.4, 2.0, length(pos)) * (1.0 - fl))'] as [string, string]] : []),
         ['float sun', 'max(dot(nrm, normalize(vec3(0.5, 0.8, 0.35))), 0.0)'],
         ['float sky', '0.5 + 0.5 * nrm.y'],
@@ -90,11 +90,11 @@ function bubbles(centre = false): GraphNode[] {
       result: `mix(vec3(${BG.join(', ')}), base * (0.15 + 0.3 * sky + 0.9 * sun) + 0.15 * rim, hit * exp(-dist * 0.03))`,
       outputType: 'vec3', wires: { pos: ['march', 'pos'], nrm: ['march', 'normal'], hit: ['march', 'hit'], dist: ['march', 'dist'], h: ['hitCell', 'random'] },
       note: [
-        'Shade: a colour per bubble from Repeat Cell\'s Random (h), a sun and sky light, a little rim, and fog into the background.',
+        'Shade: a colour per bubble from Repeat Cell\'s Random (h) on the Wiggle Tunnel\'s palette (phase 0.3, 0.416, 0.557: navy, sky blue, cream, orange), turned a little further round with distance so the far field warms; a dark slate floor; a sun and sky light, a little rim, and fog into the background.',
       ],
     }),
     n('toneMap', 'tone', 1220, 220, { mode: 'aces', ...note(['Tone Map: film-like curve into the displayable range.']) }, { color: ['shade', 'result'] }),
-    out(['tone', 'color'], 1480),
+    n('output', 'out', 1480, 220, { ...note(['Output: the picture.']) }, { color: ['tone', 'color'] }),
   ];
 }
 

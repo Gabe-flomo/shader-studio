@@ -698,6 +698,7 @@ export const GILitMarchGroupNode: NodeDefinition = {
     maxSteps: 80, maxDist: 20.0, stepScale: 1.0,
     // Jitter on (even pattern) for new loops; saved graphs keep their own jitter and the old pattern.
     volumetric: false, passthrough: 0.1, jitter: 1.0, jitterNoise: 'even', animateJitter: false,
+    voxels: false, voxelSize: 0.08,
     bg: [0.0, 0.0, 0.0],
     albedo: [0.7, 0.7, 0.7],
     metallic: 0.0,
@@ -720,6 +721,8 @@ export const GILitMarchGroupNode: NodeDefinition = {
     stepScale:   { section: 'March', label: 'Step Scale',   type: 'float' as const, min: 0.3,  max: 1.0,  step: 0.05, hint: 'Fraction of SDF distance to step. Lower = safer, slower.' },
     ...WARP_SAFETY_PARAMS,
     curvature:   { section: 'Advanced', label: 'Space curvature', type: 'float' as const, min: -1.0, max: 1.0, step: 0.01, hint: 'Bends the rays like a curved universe. 0 = flat, ordinary space. Above 0 (spherical): rays curve back toward each other, so things shrink with distance, then grow again past the halfway point, and the far side of the world looms large. Below 0 (hyperbolic): rays spread, a fisheye tunnel where repeated things shrink fast. Left at 0 and never touched, the loop is built exactly as before.' },
+    voxels:      { section: 'Advanced', label: 'Voxels',       type: 'bool'  as const, hint: 'Draws the scene as cubes on a grid (Voxel size), as on the March Loop: the ray walks the grid cell by cell and a cell is solid where the scene is inside at its centre. The shadow, bounce and reflection rays walk the same grid, so shadows and reflections are cubes too, and AO darkens the corners where cubes meet. Not with Volumetric, Space curvature or Warp safety (those march as before).' },
+    voxelSize:   { section: 'Advanced', label: 'Voxel size',   type: 'float' as const, min: 0.01, max: 0.5, step: 0.005, showWhen: { param: 'voxels', value: 'true' }, hint: 'The size of each cube, in scene units. Smaller is finer and takes more steps (raise Max Steps if far parts go missing).' },
     volumetric:  { section: 'Advanced', label: 'Volumetric',   type: 'bool'  as const,                                   hint: 'Accumulate density along the ray. GI/specular are disabled in this mode.' },
     passthrough: { section: 'Advanced', label: 'Passthrough',  type: 'float' as const, min: 0.001, max: 0.5, step: 0.005, showWhen: { param: 'volumetric', value: 'true' }, hint: 'Minimum step in volumetric mode.' },
     jitter:      { section: 'Advanced', label: 'Jitter',      type: 'float' as const,   min: 0.0,  max: 1.0,   step: 0.01,  hint: 'Starts each pixel\'s ray a little way along, by a different amount, so the steps of neighbouring rays don\'t line up into rings (banding). 1 = spread over one step, 0 = off.' },

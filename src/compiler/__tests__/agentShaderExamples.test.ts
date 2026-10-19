@@ -31,10 +31,10 @@ describe('Agents with shaders', () => {
     expect(top('agentShaderRings', 'srTrail').inputs.add.connection?.nodeId).toBe('srFood');
     expect(compile('agentShaderRings').agents!.trails[0].stepShader).toMatch(/circleSDF\(/);
   });
-  it('walls: the shapes\' distance reaches Move\'s Obstacle ƒ and the Trail\'s Block', () => {
+  it('walls: the maze\'s distance reaches Move\'s Obstacle ƒ and the Trail\'s Block', () => {
     const fs = compile('agentShaderWalls').agents!.groups[0].fragmentShader;
-    expect(fs).toMatch(/sdHeart\(/);
-    expect(fs).toMatch(/sdStarN\(/);
+    expect(fs).toMatch(/43758\.5453/); // the Truchet maze's cell hash, read at the walker
+    expect(fs).toMatch(/length\(tile - 0\.5\)/);
     expect(top('agentShaderWalls', 'swTrail').inputs.block.connection?.nodeId).toBe('swBlock');
   });
   it('noise flow, polar, sound rings: an outer chain is read at the walker inside the group', () => {

@@ -13,6 +13,7 @@
 import type { GraphNode } from '../types/nodeGraph';
 import type { ExampleGraph } from './exampleIndex';
 import { n } from './graphBuilder';
+import { backdrop, cinemaFinish } from './cinemaLook';
 import { agentsGroup, expr, note, withOutputs } from './agentExampleKit';
 import { antsNodes, boidsNodes, growPictureNodes, multiSlimeNodes, strandsNodes } from './agentExamplesP3';
 import { galaxyNodes, myceliumNodes, sandPlateNodes } from './agentExamplesP6';
@@ -33,10 +34,6 @@ export const AGENT_EXAMPLE_INDEX: Record<string, { label: string; description: s
   agentMultiSlime: {
     label: 'Multi-species slime',
     description: 'Three slime colonies, coral, teal and violet, grow out of three discs toward each other. Each walker follows its own kind\'s trail and avoids the others\', so the picture is carved into living territories whose borders keep shifting. Species and a different speed for each come from one rule (By species).',
-  },
-  agentAnts: {
-    label: 'Ants',
-    description: 'An ant colony built from nodes: ants leave the nest, wander until they find food, pick it up and follow the home smell back, marking a food trail as they go. Busy roads form between the nest and three food piles and bend round the rocks. Each ant remembers whether it carries food (Memory) and leaves a smell of its own (Deposit).',
   },
   agentBoids: {
     label: 'Boids',
@@ -191,11 +188,10 @@ export function slimeMoldNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
 export function buildAgentExamples(): Record<string, ExampleGraph> {
   return {
     slimeMold: { ...AGENT_EXAMPLE_INDEX.slimeMold, counter: 40, nodes: slimeMoldNodes(0, 200) },
-    agentParticles: { ...AGENT_EXAMPLE_INDEX.agentParticles, counter: 40, nodes: particlesNodes(0, 200) },
+    agentParticles: { ...AGENT_EXAMPLE_INDEX.agentParticles, counter: 40, nodes: particlesShowpiece(0, 200) },
     agentCurlSmoke: { ...AGENT_EXAMPLE_INDEX.agentCurlSmoke, counter: 40, nodes: curlSmokeNodes(0, 200) },
     agentSoundBurst: { ...AGENT_EXAMPLE_INDEX.agentSoundBurst, counter: 40, nodes: soundBurstNodes(0, 200) },
     agentMultiSlime: { ...AGENT_EXAMPLE_INDEX.agentMultiSlime, counter: 40, nodes: multiSlimeNodes(0, 200) },
-    agentAnts: { ...AGENT_EXAMPLE_INDEX.agentAnts, counter: 40, nodes: antsNodes(0, 200) },
     agentBoids: { ...AGENT_EXAMPLE_INDEX.agentBoids, counter: 40, nodes: boidsNodes(0, 200) },
     agentStrands: { ...AGENT_EXAMPLE_INDEX.agentStrands, counter: 40, nodes: strandsNodes(0, 200) },
     agentGrowPicture: { ...AGENT_EXAMPLE_INDEX.agentGrowPicture, counter: 40, nodes: growPictureNodes(0, 200) },
@@ -313,6 +309,35 @@ export function particlesNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
   const nodes = [emit, group, draw];
   if (withOutput) nodes.push(n('output', 'ptOutput', X(1680), Y(0), { ...note(['Output: the drawn particles over the glow are the picture.']) }, { color: ['ptDraw', 'color'] }));
   return nodes;
+}
+
+/**
+ * The Particles from nodes example: the same rule as the starter (particlesNodes), finished like a film still
+ * (cinemaLook.ts): small embers with no wide glow, two dim lights instead of four haloed ones, a dark warm backdrop,
+ * a filmic tone map, vignette and grain.
+ */
+function particlesShowpiece(x = 0, y = 0): GraphNode[] {
+  const nodes = particlesNodes(x, y, false).map(nd => nd.id !== 'ptDraw' ? nd : {
+    ...nd,
+    params: {
+      ...nd.params,
+      style: 'points', size: 1.6, brightness: 0.95, glow: 0.15, lights: '2', lightPower: 1.1, lightReach: 0.26, halo: 0.05,
+      ...note([
+        'Draw agents: every particle as a small soft dot, coloured along the Ember palette by age (pale yellow when born, deep red as it dies) and fading in and out over its life.',
+        'Kept restrained on purpose: Points with a faint glow (0.15) and a modest Brightness, so the crowded inner edge of the ring stays below white and the embers read one by one. A wide glow would melt them into a blurred band.',
+        'Two lights orbit the ring with almost no halo: particles near one shine brighter and larger, so the cloud has a lit side and a dark side, like smoke caught by a lamp.',
+        'Try: Style Streaks for sparks; Palette Gold or Ice; Lights None for an evenly lit cloud.',
+      ]),
+    },
+    inputs: { ...nd.inputs, over: { ...nd.inputs.over, connection: { nodeId: 'ptBg', outputKey: 'color' } } },
+  });
+  return [
+    ...nodes,
+    n('uv', 'uv', x, y + 420, { ...note(['UV: where each pixel is, for the backdrop and the grain.']) }),
+    n('time', 't', x, y + 560, { ...note(['Time: moves the grain.']) }),
+    backdrop('ptBg', x + 840, y + 420, ['uv', 'uv'], [0.05, 0.028, 0.022], [0.004, 0.003, 0.005], 'Gradient (Radial): the backdrop, a warm dark brown in the middle to near black at the edges, wired into Draw agents\' Background so the embers float in a space with depth.'),
+    ...cinemaFinish(['ptDraw', 'color'], { x: x + 1680, y }),
+  ];
 }
 
 /**
@@ -493,6 +518,7 @@ const PRESET_BUILDERS: Record<string, { build: (x: number, y: number) => GraphNo
   curlSmokePreset: { build: (x, y) => curlSmokeNodes(x, y, false), out: ['csDraw', 'color'], label: 'Curl smoke' },
   soundBurstPreset: { build: (x, y) => soundBurstNodes(x, y, false), out: ['sbDraw', 'color'], label: 'Sound burst' },
   multiSlimePreset: { build: (x, y) => multiSlimeNodes(x, y, false), out: ['msColour', 'result'], label: 'Multi-species slime' },
+  // Ants: retired 2026-10-19 (the user: the ants looked terrible); the starter is offered nowhere (nodes/notOffered.ts) but still builds.
   antsPreset: { build: (x, y) => antsNodes(x, y, false), out: ['antDraw', 'color'], label: 'Ants' },
   boidsPreset: { build: (x, y) => boidsNodes(x, y, false), out: ['bdDraw', 'color'], label: 'Boids' },
   strandsPreset: { build: (x, y) => strandsNodes(x, y, false), out: ['stDraw', 'color'], label: 'Strands' },

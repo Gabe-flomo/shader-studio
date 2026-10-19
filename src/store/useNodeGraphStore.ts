@@ -306,7 +306,12 @@ function upgradeExprNodes(nodes: GraphNode[]): GraphNode[] {
  * compile a saved graph off-screen without loading it (Present snapshots).
  */
 /** Example keys merged into another: a link or recent entry to the old key opens the one kept. */
-export const MERGED_EXAMPLES: Record<string, string> = { rayMarchOutputs3D: 'learnRaymarch' };
+export const MERGED_EXAMPLES: Record<string, string> = {
+  rayMarchOutputs3D: 'learnRaymarch',
+  // The ants examples were deleted (2026-10-19, the user: they looked terrible). An old link opens the nearest teacher:
+  // Memory per walker (the 2D Galaxy), and the same rule kind's other example (Termites).
+  agentAnts: 'agentGalaxy', agentRulesAnts: 'agentRulesTermites',
+};
 
 export function migrateLoadedNodes(nodes: GraphNode[]): GraphNode[] {
   return switchRetiredTransforms(upgradeExprNodes(resolveNodeAliases(nodes, getNodeDefinition)).map(n => migrateNodeParams(n.params ? n : { ...n, params: {} }, getNodeDefinition)));

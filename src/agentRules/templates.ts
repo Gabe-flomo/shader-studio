@@ -307,6 +307,14 @@ export const RULES_TEMPLATES: RulesTemplate[] = [
 
 export const rulesTemplate = (key: string) => RULES_TEMPLATES.find(t => t.key === key);
 
+/**
+ * Templates no longer offered (2026-10-19: Ants with food, with its examples; the user: the ants looked terrible). They stay
+ * in RULES_TEMPLATES so a key that names one (a saved builder state, the Agents builder's own copy) still loads it.
+ */
+export const RETIRED_RULES_TEMPLATES: ReadonlySet<string> = new Set(['ants']);
+/** The templates the Agent rules window offers. */
+export const OFFERED_RULES_TEMPLATES = RULES_TEMPLATES.filter(t => !RETIRED_RULES_TEMPLATES.has(t.key));
+
 // ── The setups round them (the examples) ─────────────────────────────────────
 
 const note = (lines: string[]) => ({ __comment: lines.filter(Boolean).join('\n') });

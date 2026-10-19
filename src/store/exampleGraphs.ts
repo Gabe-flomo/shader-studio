@@ -1,5 +1,6 @@
 import { BLANK_GRAPH } from './exampleIndex';
 import { n } from './graphBuilder';
+import { backdrop, cinemaFinish } from './cinemaLook';
 import { GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import { gpPreset } from '../play/kit/gpuParticles.js';
 // An original picture made for the examples (tools/ridges-at-dusk.mjs), inlined as a data URL.
@@ -28,6 +29,8 @@ import { buildTimeCubeExamples } from './timeCubeExamples';
 import { buildFrameStackExamples } from './frameStackExamples';
 import { buildFourDExamples } from './fourDExamples';
 import { buildFourDProjectionExamples } from './fourDProjectionExamples';
+import { buildVoxelExamples } from './voxelExamples';
+import { addExampleNotes3d } from './exampleNotes3d';
 import { buildTextureToolExamples } from './textureToolExamples';
 import { buildMemoryExamples } from './memoryExamples';
 import { buildSendReceiveExamples } from './sendReceiveExamples';
@@ -2154,8 +2157,8 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
     description: 'A Particles node in a flow field: a quarter of a million particles drift on curling currents while an FBM noise wired into Flow (Around) steers them along its contours, drawn as fine streaks coloured by their heading.',
     counter: 5,
     nodes: [
-      { id: 'fd_uv', type: 'uv', position: { x: 40, y: 140 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
-      { id: 'fd_time', type: 'time', position: { x: 40, y: 300 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      { id: 'fd_uv', type: 'uv', position: { x: 40, y: 140 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: { __comment: 'UV: where each pixel is, for the noise, the backdrop and the grain.' } },
+      { id: 'fd_time', type: 'time', position: { x: 40, y: 300 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: { __comment: 'Time: drifts the noise and moves the grain.' } },
       {
         id: 'fd_noise',
         type: 'fbm',
@@ -2174,7 +2177,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         type: 'gpuParticles',
         position: { x: 680, y: 160 },
         inputs: {
-          over: { type: 'vec3', label: 'Over' },
+          over: { type: 'vec3', label: 'Over', connection: { nodeId: 'fd_bg', outputKey: 'color' } },
           uv: { type: 'vec2', label: 'UV' },
           flow: { type: 'float', label: 'Flow', connection: { nodeId: 'fd_noise', outputKey: 'value' } },
         },
@@ -2183,22 +2186,16 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           particles: { type: 'vec3', label: 'Particles' },
           density: { type: 'float', label: 'Density' },
         },
-        params: { __comment: "A box of particles filling the picture. Flow (Around) makes them circle along the noise's contours, so they gather into rivers; Thread draws each one as a short streak, and Colour by Heading tints them by the way they travel.",
+        params: { __comment: "A box of particles filling the picture. Flow (Around) makes them circle along the noise's contours, so they gather into rivers; Thread draws each one as a short streak. Colour by Heading on the Ice palette: one family of blues, deep to near white by the way they travel, so the rivers read by direction without a rainbow. Glow is low (0.12) and Brightness stays under the point where crowds clip to white: the light is the threads themselves, not a haze round them.",
           ...gpPreset('embers'), sound: 0, handX: 0.35, handY: 0.5, hand2X: 0.65, hand2Y: 0.5, _schemaVersion: 2,
           count: '256k', emitter: 'box', emitSize: 1.9, life: 8, speed: 0, spread: 1,
           gravity: 0, wind: 0, turbulence: 0.08, scale: 0.6, swirl: 0, attract: 0, drag: 2.5,
-          size: 1, thread: 1.2, brightness: 2.5, palette: 'neon', colorBy: 'heading', glow: 0.9, lights: '0',
+          size: 0.9, thread: 1.3, brightness: 1.25, palette: 'ice', colorBy: 'heading', glow: 0.12, lights: '0',
           flowForce: 1.6, flowMode: 'around',
         },
       },
-      {
-        id: 'fd_out',
-        type: 'output',
-        position: { x: 1080, y: 160 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'fd_parts', outputKey: 'color' } } },
-        outputs: {},
-        params: {},
-      },
+      backdrop('fd_bg', 300, 420, ['fd_uv', 'uv'], [0.03, 0.055, 0.09], [0.003, 0.005, 0.012], 'Gradient (Radial): the backdrop, a deep blue-grey in the middle falling to near black at the edges. It goes into the particles\' Over, so the threads sit in a space with some depth instead of on flat black.'),
+      ...cinemaFinish(['fd_parts', 'color'], { x: 1080, y: 160, uv: ['fd_uv', 'uv'], time: ['fd_time', 'time'], outId: 'fd_out' }),
     ],
   },
 
@@ -6716,7 +6713,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 60, y: 200 },
         inputs: {},
         outputs: { uv: { type: 'vec2', label: 'UV' } },
-        params: {},
+        params: { __comment: 'UV: where each pixel is, for the nebula noise and the grain.' },
       },
       {
         id: 't',
@@ -6724,7 +6721,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 60, y: 360 },
         inputs: {},
         outputs: { time: { type: 'float', label: 'Time' } },
-        params: {},
+        params: { __comment: 'Time: drifts the nebula and moves the grain.' },
       },
       {
         id: 'n',
@@ -6752,25 +6749,17 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           phase: { type: 'vec3', label: 'Phase' },
         },
         outputs: { color: { type: 'vec3', label: 'Color' } },
-        params: { __comment: "Turns the noise into dim blue and purple colour, wired into the particles' Over so they glow on top of it.",
+        params: { __comment: "Turns the noise into a faint nebula, deep blue with a hint of rust where it is thickest, wired into the particles' Over. It stays dark (the brightest it gets is about 0.13), so it gives the space depth without competing with the stars.",
           value: 0,
           anim: 0,
           scale: 0.6,
           speed: 1,
           preset: 'custom',
-          offset: [0.05, 0.05, 0.12],
-          amplitude: [0.1, 0.05, 0.2],
+          offset: [0.045, 0.04, 0.075],
+          amplitude: [0.045, 0.03, 0.06],
           freq: [1, 1, 1],
-          phase: [0, 0.33, 0.67],
+          phase: [0.45, 0.5, 0.62],
         },
-      },
-      {
-        id: 'out',
-        type: 'output',
-        position: { x: 1740, y: 200 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'parts', outputKey: 'color' } } },
-        outputs: {},
-        params: {},
       },
       {
         id: 'parts',
@@ -6785,14 +6774,15 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           particles: { type: 'vec3', label: 'Particles' },
           density: { type: 'float', label: 'Density' },
         },
-        params: { __comment: "The galaxy: particles born on a ring, spun by Swirl while Attract pulls them in, curled by Turbulence. Coloured by speed (the fast inner ones are brightest) and lit by two orbiting lights.",
+        params: { __comment: "The galaxy: particles born on a ring, spun by Swirl while Attract pulls them in, curled by Turbulence. Coloured by speed on the Ice palette (the fast inner ones pale, the slow outer ones deep blue) and warmed by two orbiting amber lights, which give the cloud a lit side and a shadow side. Small dots, low Brightness and almost no glow: the shape comes from the stars themselves, so the arms stay crisp.",
           count: '256k', emitter: 'ring', emit: 'stream', follow: 'none',
           emitSize: 0.75, life: 6, speed: 0.02, spread: 0.5,
           gravity: 0, turbulence: 0.25, swirl: 0.6, attract: 0.7, drag: 0.8,
-          size: 1.6, brightness: 1.5, palette: 'ice', colorBy: 'speed', glow: 0.8,
-          lights: '2', lightColor: [1, 0.7, 0.4], lightPower: 1.4, lightReach: 0.35, halo: 0.3, lightMotion: 'orbit',
+          size: 1.3, brightness: 1.5, palette: 'ice', colorBy: 'speed', glow: 0.12,
+          lights: '2', lightColor: [1, 0.7, 0.4], lightPower: 1.5, lightReach: 0.3, halo: 0.06, lightMotion: 'orbit',
         },
       },
+      ...cinemaFinish(['parts', 'color'], { x: 1740, y: 200 }),
     ],
   },
 
@@ -6834,8 +6824,8 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
     description: 'A Particles node talking to a 2D shader: a Circle SDF wired into Obstacle parts a breeze of particles round it (they can\'t enter it, and pile up along its edge), an FBM noise wired into Flow (Around) swirls them along its contours, and an SDF Fill paints the disc over them. Change the circle, the noise or wire any shape in.',
     counter: 7,
     nodes: [
-      { id: 'uv', type: 'uv', position: { x: 60, y: 120 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
-      { id: 't', type: 'time', position: { x: 60, y: 300 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      { id: 'uv', type: 'uv', position: { x: 60, y: 120 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: { __comment: 'UV: where each pixel is, for the circle, the noise, the backdrop and the grain.' } },
+      { id: 't', type: 'time', position: { x: 60, y: 300 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: { __comment: 'Time: drifts the noise and moves the grain.' } },
       {
         id: 'disc',
         type: 'circleSDF',
@@ -6866,7 +6856,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         type: 'gpuParticles',
         position: { x: 700, y: 60 },
         inputs: {
-          over: { type: 'vec3', label: 'Over' },
+          over: { type: 'vec3', label: 'Over', connection: { nodeId: 'bg', outputKey: 'color' } },
           uv: { type: 'vec2', label: 'UV' },
           obstacle: { type: 'float', label: 'Obstacle', connection: { nodeId: 'disc', outputKey: 'distance' } },
           flow: { type: 'float', label: 'Flow', connection: { nodeId: 'n', outputKey: 'value' } },
@@ -6876,11 +6866,11 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           particles: { type: 'vec3', label: 'Particles' },
           density: { type: 'float', label: 'Density' },
         },
-        params: { __comment: "A breeze of particles (Wind) blowing across the picture. Obstacle (SDF) keeps them out of the circle, so they part round it and pile up on its edge; Flow (Around) adds the swirls.",
+        params: { __comment: "A breeze of particles (Wind) blowing across the picture. Obstacle (SDF) keeps them out of the circle, so they part round it and pile up on its edge; Flow (Around) adds the swirls. Ice, by speed: the fast streams that squeeze past the disc turn pale, the slow wake stays deep blue. A million particles at a low Brightness (0.62) and almost no glow, so the breeze reads as fine silk rather than a white fog.",
           ...gpPreset('embers'), sound: 0, handX: 0.35, handY: 0.5, hand2X: 0.65, hand2Y: 0.5, _schemaVersion: 2,
           count: '1m', emitter: 'disk', emitSize: 1.7, life: 7, speed: 0, spread: 1,
           gravity: 0, wind: 0.45, turbulence: 0.12, scale: 1, swirl: 0, drag: 1.6,
-          size: 1, thread: 0.5, brightness: 1.2, palette: 'ice', colorBy: 'speed', glow: 0.8, lights: '0',
+          size: 0.85, thread: 0.7, brightness: 0.62, palette: 'ice', colorBy: 'speed', glow: 0.08, lights: '0',
           obstacleMode: 'sdf', flowForce: 0.5, flowMode: 'around',
         },
       },
@@ -6897,16 +6887,10 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           antialias: { type: 'float', label: 'Softness' },
         },
         outputs: { result: { type: 'vec3', label: 'Color' }, alpha: { type: 'float', label: 'Alpha' } },
-        params: { __comment: "Paints the circle itself on top of the particles (they arrive through Background).", strokeWidth: 0, antialias: 0.005, strokeAlign: 'center', aaMode: 'pixel' },
+        params: { __comment: "Paints the circle on top of the particles (they arrive through Background) as a dark body with a thin warm rim, like a planet in eclipse: the eye reads it as a solid in front of the flow, and the one warm line makes the blues look colder.", fillColor: [0.008, 0.01, 0.018], strokeColor: [1.0, 0.62, 0.32], strokeWidth: 0.004, antialias: 0.004, strokeAlign: 'inside', aaMode: 'pixel' },
       },
-      {
-        id: 'out',
-        type: 'output',
-        position: { x: 1460, y: 60 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'fill', outputKey: 'result' } } },
-        outputs: {},
-        params: {},
-      },
+      backdrop('bg', 320, 460, ['uv', 'uv'], [0.025, 0.04, 0.07], [0.002, 0.003, 0.008], 'Gradient (Radial): the backdrop behind the breeze, deep blue-grey in the middle to black at the edges, into the particles\' Over.'),
+      ...cinemaFinish(['fill', 'result'], { x: 1460, y: 60 }),
     ],
   },
 
@@ -7158,7 +7142,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         type: 'gpuParticles',
         position: { x: 760, y: 120 },
         inputs: {
-          over: { type: 'vec3', label: 'Over' },
+          over: { type: 'vec3', label: 'Over', connection: { nodeId: 'plate', outputKey: 'color' } },
           uv: { type: 'vec2', label: 'UV' },
           sound: { type: 'float', label: 'Sound level', connection: { nodeId: 'beat', outputKey: 'result' } },
         },
@@ -7169,18 +7153,14 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         },
         params: {
           ...gpPreset('chladni'), handX: 0.35, handY: 0.5, hand2X: 0.65, hand2Y: 0.5, _schemaVersion: 3,
-          sound: 0, emitSize: 0.7, modes: 3, plateFreq: 1.6, plateWeights: 0.55,
-          __comment: 'The Chladni sand preset: a quarter of a million grains poured on a square plate (Pattern: Chladni square, the plate as big as Emitter size). Mode from Sound: what it hears picks which of the plate\'s modes ring, up to Modes at once (Weights: how much the quieter ones count; Frequency: how fine the figures get). The sand slides to the still lines (Settle speed) and is shaken off the moving parts (Shake), harder on every hit. Set Mode from to Manual and turn N and M to pick a figure by hand.',
+          sound: 0, emitSize: 0.7, modes: 3, plateFreq: 1.6, plateWeights: 0.55, glow: 0.1, brightness: 1.25,
+          __comment: 'The Chladni sand preset: a quarter of a million grains poured on a square plate (Pattern: Chladni square, the plate as big as Emitter size). Mode from Sound: what it hears picks which of the plate\'s modes ring, up to Modes at once (Weights: how much the quieter ones count; Frequency: how fine the figures get). The sand slides to the still lines (Settle speed) and is shaken off the moving parts (Shake), harder on every hit. Set Mode from to Manual and turn N and M to pick a figure by hand. Glow 0.1: the grains stay sharp sand, not a neon line.',
         },
       },
-      {
-        id: 'out',
-        type: 'output',
-        position: { x: 1160, y: 120 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'sand', outputKey: 'color' } } },
-        outputs: {},
-        params: {},
-      },
+      n('uv', 'uv', 60, 420, { __comment: 'UV: where each pixel is, for the plate and the grain.' }),
+      n('time', 't', 60, 560, { __comment: 'Time: moves the grain.' }),
+      backdrop('plate', 400, 420, ['uv', 'uv'], [0.06, 0.055, 0.05], [0.006, 0.006, 0.008], 'Gradient (Radial): the plate under the sand, a dark warm grey in the middle (as if lit from above) to near black at the edges, into the particles\' Over.'),
+      ...cinemaFinish(['sand', 'color'], { x: 1160, y: 120 }),
     ],
   },
 
@@ -7231,7 +7211,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         type: 'gpuParticles',
         position: { x: 940, y: 120 },
         inputs: {
-          over: { type: 'vec3', label: 'Over' },
+          over: { type: 'vec3', label: 'Over', connection: { nodeId: 'bg', outputKey: 'color' } },
           uv: { type: 'vec2', label: 'UV' },
           flow: { type: 'float', label: 'Flow', connection: { nodeId: 'ridge', outputKey: 'result' } },
         },
@@ -7242,21 +7222,16 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         },
         params: {
           ...gpPreset('embers'), sound: 0, handX: 0.35, handY: 0.5, hand2X: 0.65, hand2Y: 0.5, _schemaVersion: 3,
-          count: '256k', emitter: 'box', emitSize: 1, life: 6, speed: 0, spread: 1,
+          count: '256k', emitter: 'box', emitSize: 1.9, life: 6, speed: 0, spread: 1,
           gravity: 0, wind: 0, turbulence: 0.22, scale: 1.4, swirl: 0.35, attract: 0, drag: 2,
-          size: 1.2, thread: 0.45, brightness: 1.6, palette: 'gold', colorBy: 'speed', glow: 0.8, lights: '0',
+          size: 1, thread: 0.6, brightness: 0.95, palette: 'gold', colorBy: 'speed', glow: 0.1, lights: '0',
           flowForce: 1.2, flowMode: 'slope',
-          __comment: 'Particles born all over the picture (a Box as big as it). Flow is the ridge on the star\'s outline: with Flow along Slope they climb it, so they gather on the outline. Swirl keeps them running round it, a little Turbulence makes them shimmer, and Thread draws each one as a short streak.',
+          __comment: 'Particles born all over the picture (a Box wider than it, Emitter size 1.9, so there is no edge to the swarm). Flow is the ridge on the star\'s outline: with Flow along Slope they climb it, so they gather on the outline. Swirl keeps them running round it, a little Turbulence makes them shimmer, and Thread draws each one as a short streak. Gold, coloured by speed (the fast ones pale, the slow ones amber), with almost no glow (0.1) and a modest Brightness: the outline is drawn by thousands of fine threads, not one blurred band.',
         },
       },
-      {
-        id: 'out',
-        type: 'output',
-        position: { x: 1320, y: 120 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'parts', outputKey: 'color' } } },
-        outputs: {},
-        params: {},
-      },
+      n('time', 't', 60, 300, { __comment: 'Time: moves the grain.' }),
+      backdrop('bg', 620, 360, ['uv', 'uv'], [0.06, 0.035, 0.02], [0.004, 0.003, 0.004], 'Gradient (Radial): the backdrop, a warm dark brown in the middle to near black at the edges, into the particles\' Over, so the gold sits in a room rather than on flat black.'),
+      ...cinemaFinish(['parts', 'color'], { x: 1320, y: 120 }),
     ],
   },
 
@@ -12282,302 +12257,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
     ],
   },
-  voxelTerrain: {
-    label: '3D: Voxel Terrain',
-    description: 'Voxelize snaps the ray position to a 0.5 grid inside the Scene Group; Box 3D on its Cell Pos is one cube per cell and an Expression Block decides which cells are solid from the Cell ID (a wave plus a hash gives the height), and, for empty cells, steps exactly to where the ray leaves the cell (the camera\'s Ray Dir is wired into the Scene Group as a port) — a voxel traversal inside an ordinary march. Outside, the March Loop Group\'s Hit Pos goes through a second Voxelize whose Cell ID drives a Palette, so every cube has its own colour; Mix by Hit keeps the sky plain.',
-    counter: 20,
-    nodes: [
-      { id: 'vt_uv', type: 'uv', position: { x: 40, y: 160 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
-      { id: 'vt_t', type: 'time', position: { x: 40, y: 300 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
-      { id: 'vt_size', type: 'constant', position: { x: 40, y: 440 }, inputs: { value: { type: 'float', label: 'Value' } }, outputs: { value: { type: 'float', label: 'Value' } }, params: { label: 'Cell Size', value: 0.5, x: 0, y: 0, z: 0, w: 1, outputType: 'float' } },
-      {
-        id: 'vt_cam', type: 'marchCamera', position: { x: 280, y: 120 },
-        inputs: {
-          uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'vt_uv', outputKey: 'uv' } },
-          time: { type: 'float', label: 'Time', connection: { nodeId: 'vt_t', outputKey: 'time' } },
-          camDist: { type: 'float', label: 'Cam Distance' }, camAngle: { type: 'float', label: 'Cam Angle' }, camElevation: { type: 'float', label: 'Elevation' },
-          rotSpeed: { type: 'float', label: 'Rot Speed' }, fov: { type: 'float', label: 'FOV' },
-          targetX: { type: 'float', label: 'Target X' }, targetY: { type: 'float', label: 'Target Y' }, targetZ: { type: 'float', label: 'Target Z' },
-        },
-        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
-        params: { camDist: 7, camAngle: 0.8, camElevation: 0.5, rotSpeed: 0.06, fov: 1.3, targetX: 0, targetY: -0.6, targetZ: 0, aperture: 0, focalDist: 7, lensSpeed: 0 },
-      },
-      {
-        id: 'vt_scene', type: 'sceneGroup', position: { x: 280, y: 380 },
-        inputs: {
-          rd: { type: 'vec3', label: 'Ray Dir', connection: { nodeId: 'vt_cam', outputKey: 'rd' } },
-          size: { type: 'float', label: 'Cell Size', connection: { nodeId: 'vt_size', outputKey: 'value' } },
-        },
-        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
-        params: {
-          label: 'Voxel Terrain',
-          subgraph: {
-            inputPorts: [
-              { key: 'rd', type: 'vec3', label: 'Ray Dir', toNodeId: 'vt_sel', toInputKey: 'rd' },
-              { key: 'size', type: 'float', label: 'Cell Size', toNodeId: 'vt_vox', toInputKey: 'size' },
-            ],
-            nodes: [
-              { id: 'vt_sp', type: 'scenePos', position: { x: 40, y: 200 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
-              {
-                id: 'vt_vox', type: 'voxelize', position: { x: 260, y: 200 },
-                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'vt_sp', outputKey: 'pos' } }, size: { type: 'float', label: 'Cell Size' } },
-                outputs: { cellPos: { type: 'vec3', label: 'Cell Pos' }, cellID: { type: 'vec3', label: 'Cell ID' }, cellCenter: { type: 'vec3', label: 'Cell Center' }, edge: { type: 'float', label: 'Edge' } },
-                params: { size: 0.5 },
-              },
-              {
-                id: 'vt_box', type: 'boxSDF3D', position: { x: 520, y: 120 },
-                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'vt_vox', outputKey: 'cellPos' } }, sizeX: { type: 'float', label: 'Size X' }, sizeY: { type: 'float', label: 'Size Y' }, sizeZ: { type: 'float', label: 'Size Z' } },
-                outputs: { dist: { type: 'float', label: 'Distance' } },
-                params: { sizeX: 0.245, sizeY: 0.245, sizeZ: 0.245 },
-              },
-              {
-                id: 'vt_sel', type: 'exprNode', position: { x: 780, y: 200 },
-                inputs: {
-                  id: { type: 'vec3', label: 'id', connection: { nodeId: 'vt_vox', outputKey: 'cellID' } },
-                  cp: { type: 'vec3', label: 'cp', connection: { nodeId: 'vt_vox', outputKey: 'cellPos' } },
-                  box: { type: 'float', label: 'box', connection: { nodeId: 'vt_box', outputKey: 'dist' } },
-                  rd: { type: 'vec3', label: 'rd' },
-                },
-                outputs: { result: { type: 'float', label: 'Result' } },
-                params: {
-                  label: 'Solid cells / step to exit',
-                  inputs: [
-                    { name: 'id', type: 'vec3', slider: null },
-                    { name: 'cp', type: 'vec3', slider: null },
-                    { name: 'box', type: 'float', slider: null },
-                    { name: 'rd', type: 'vec3', slider: null },
-                  ],
-                  outputType: 'float',
-                  lines: [
-                    { lhs: 'float h', op: '=', rhs: 'floor(sin(id.x * 0.6) * cos(id.z * 0.5) * 2.0 + fract(sin(dot(id.xz, vec2(12.9898, 78.233))) * 43758.5453) * 1.5) - 2.0' },
-                    { lhs: 'float solid', op: '=', rhs: 'step(id.y, h)' },
-                    { lhs: 'vec3 toWall', op: '=', rhs: '(0.25 - cp * sign(rd)) / max(abs(rd), 1e-5)' },
-                    { lhs: 'float exitDist', op: '=', rhs: 'min(toWall.x, min(toWall.y, toWall.z)) + 0.002' },
-                  ],
-                  result: 'mix(exitDist, box, solid)',
-                  expr: 'mix(exitDist, box, solid)',
-                },
-              },
-              {
-                id: 'vt_sout', type: 'sceneOutput', position: { x: 1040, y: 200 },
-                inputs: { dist: { type: 'float', label: 'Distance', connection: { nodeId: 'vt_sel', outputKey: 'result' } } },
-                outputs: { dist: { type: 'float', label: 'Distance' } }, params: {},
-              },
-            ],
-            outputNodeId: 'vt_sout',
-            outputKey: 'dist',
-          },
-        },
-      },
-      {
-        id: 'vt_mlg', type: 'marchLoopGroup', position: { x: 620, y: 200 },
-        inputs: {
-          ro: { type: 'vec3', label: 'Ray Origin', connection: { nodeId: 'vt_cam', outputKey: 'ro' } },
-          rd: { type: 'vec3', label: 'Ray Dir', connection: { nodeId: 'vt_cam', outputKey: 'rd' } },
-          scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'vt_scene', outputKey: 'scene' } },
-          uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'vt_uv', outputKey: 'uv' } },
-          time: { type: 'float', label: 'Time', connection: { nodeId: 'vt_t', outputKey: 'time' } },
-        },
-        outputs: {
-          color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' },
-          iter: { type: 'float', label: 'Iter' }, iterCount: { type: 'float', label: 'Iter Count' }, hit: { type: 'float', label: 'Hit' }, pos: { type: 'vec3', label: 'Hit Pos' },
-        },
-        params: {
-          maxSteps: 128, maxDist: 40, stepScale: 0.8, volumetric: false, passthrough: 0.1, jitter: 0,
-          bg: [0.55, 0.66, 0.82], albedo: [0.95, 0.95, 0.95],
-          subgraph: {
-            nodes: [
-              { id: 'vt_mli', type: 'marchLoopInputs', position: { x: 80, y: 160 }, inputs: {}, outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' }, marchPos: { type: 'vec3', label: 'March Pos' }, marchDist: { type: 'float', label: 'March Dist' } }, params: { extraInputs: [] } },
-              { id: 'vt_mlo', type: 'marchLoopOutput', position: { x: 420, y: 160 }, inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'vt_mli', outputKey: 'marchPos' } } }, outputs: {}, params: { hiddenOutputs: [] } },
-            ],
-            inputPorts: [], outputPorts: [],
-          },
-        },
-      },
-      {
-        id: 'vt_vox2', type: 'voxelize', position: { x: 960, y: 420 },
-        inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'vt_mlg', outputKey: 'pos' } }, size: { type: 'float', label: 'Cell Size', connection: { nodeId: 'vt_size', outputKey: 'value' } } },
-        outputs: { cellPos: { type: 'vec3', label: 'Cell Pos' }, cellID: { type: 'vec3', label: 'Cell ID' }, cellCenter: { type: 'vec3', label: 'Cell Center' }, edge: { type: 'float', label: 'Edge' } },
-        params: { size: 0.5 },
-      },
-      {
-        id: 'vt_hue', type: 'exprNode', position: { x: 1200, y: 420 },
-        inputs: { id: { type: 'vec3', label: 'id', connection: { nodeId: 'vt_vox2', outputKey: 'cellID' } } },
-        outputs: { result: { type: 'float', label: 'Result' } },
-        params: {
-          label: 'Cell hue',
-          inputs: [{ name: 'id', type: 'vec3', slider: null }],
-          outputType: 'float', lines: [],
-          result: 'id.y * 0.12 + fract(sin(dot(id, vec3(12.9898, 78.233, 37.719))) * 43758.5453) * 0.25',
-          expr: 'id.y * 0.12 + fract(sin(dot(id, vec3(12.9898, 78.233, 37.719))) * 43758.5453) * 0.25',
-        },
-      },
-      {
-        id: 'vt_pal', type: 'palette', position: { x: 1440, y: 420 },
-        inputs: {
-          value: { type: 'float', label: 'Angle', connection: { nodeId: 'vt_hue', outputKey: 'result' } }, anim: { type: 'float', label: 'Angle offset' },
-          offset: { type: 'vec3', label: 'Offset' }, amplitude: { type: 'vec3', label: 'Amplitude' }, freq: { type: 'vec3', label: 'Frequency' }, phase: { type: 'vec3', label: 'Phase' },
-        },
-        outputs: { color: { type: 'vec3', label: 'Color' } },
-        params: { preset: '2', scale: 1, speed: 0 },
-      },
-      {
-        id: 'vt_tint', type: 'multiply', position: { x: 1680, y: 260 },
-        inputs: { a: { type: 'vec3', label: 'A', connection: { nodeId: 'vt_mlg', outputKey: 'color' } }, b: { type: 'vec3', label: 'B', connection: { nodeId: 'vt_pal', outputKey: 'color' } } },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { outputType: 'vec3' },
-      },
-      {
-        id: 'vt_gain', type: 'multiply', position: { x: 1900, y: 260 },
-        inputs: { a: { type: 'vec3', label: 'A', connection: { nodeId: 'vt_tint', outputKey: 'result' } }, b: { type: 'vec3', label: 'B' } },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { outputType: 'vec3', b: 1.8 },
-      },
-      {
-        id: 'vt_sky', type: 'mix', position: { x: 2120, y: 200 },
-        inputs: {
-          a: { type: 'vec3', label: 'A', connection: { nodeId: 'vt_mlg', outputKey: 'color' } },
-          b: { type: 'vec3', label: 'B', connection: { nodeId: 'vt_gain', outputKey: 'result' } },
-          t: { type: 'float', label: 'Blend', connection: { nodeId: 'vt_mlg', outputKey: 'hit' } },
-        },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { outputType: 'vec3', t: 0.5 },
-      },
-      { id: 'vt_out', type: 'output', position: { x: 2340, y: 260 }, inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'vt_sky', outputKey: 'result' } } }, outputs: {}, params: {} },
-    ],
-  },
-  comboVoxelSpheres: {
-    label: 'Combo: Voxelize + Sphere 3D + Hash',
-    description: 'Voxelize → Sphere 3D on the Cell Pos puts one sphere in every 0.6 cell; an Expression Block hashes the Cell ID into the sphere\'s Radius so sizes vary per cell (some vanish), and Intersect with a Box 3D on the raw position trims the infinite field to a block. Outside the scene, Hit Pos → Voxelize → Cell ID → Palette colours each sphere — one Cell Size Constant feeds both Voxelize nodes (the scene\'s through a group port), so the colour grid always matches the geometry. The 3D twin of Combo: Repeat + Cell ID + Hash; the terrain version is 3D: Voxel Terrain.',
-    counter: 20,
-    nodes: [
-      { id: 'vs_uv', type: 'uv', position: { x: 40, y: 160 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
-      { id: 'vs_t', type: 'time', position: { x: 40, y: 300 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
-      { id: 'vs_size', type: 'constant', position: { x: 40, y: 440 }, inputs: { value: { type: 'float', label: 'Value' } }, outputs: { value: { type: 'float', label: 'Value' } }, params: { label: 'Cell Size', value: 0.6, x: 0, y: 0, z: 0, w: 1, outputType: 'float' } },
-      {
-        id: 'vs_cam', type: 'marchCamera', position: { x: 280, y: 120 },
-        inputs: {
-          uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'vs_uv', outputKey: 'uv' } },
-          time: { type: 'float', label: 'Time', connection: { nodeId: 'vs_t', outputKey: 'time' } },
-          camDist: { type: 'float', label: 'Cam Distance' }, camAngle: { type: 'float', label: 'Cam Angle' }, camElevation: { type: 'float', label: 'Elevation' },
-          rotSpeed: { type: 'float', label: 'Rot Speed' }, fov: { type: 'float', label: 'FOV' },
-          targetX: { type: 'float', label: 'Target X' }, targetY: { type: 'float', label: 'Target Y' }, targetZ: { type: 'float', label: 'Target Z' },
-        },
-        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
-        params: { camDist: 6.5, camAngle: 0.6, camElevation: 0.35, rotSpeed: 0.1, fov: 1.3, targetX: 0, targetY: 0, targetZ: 0, aperture: 0, focalDist: 6.5, lensSpeed: 0 },
-      },
-      {
-        id: 'vs_scene', type: 'sceneGroup', position: { x: 280, y: 380 },
-        inputs: { size: { type: 'float', label: 'Cell Size', connection: { nodeId: 'vs_size', outputKey: 'value' } } },
-        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
-        params: {
-          label: 'Voxel Spheres',
-          subgraph: {
-            inputPorts: [{ key: 'size', type: 'float', label: 'Cell Size', toNodeId: 'vs_vox', toInputKey: 'size' }],
-            nodes: [
-              { id: 'vs_sp', type: 'scenePos', position: { x: 40, y: 200 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
-              {
-                id: 'vs_vox', type: 'voxelize', position: { x: 260, y: 120 },
-                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'vs_sp', outputKey: 'pos' } }, size: { type: 'float', label: 'Cell Size' } },
-                outputs: { cellPos: { type: 'vec3', label: 'Cell Pos' }, cellID: { type: 'vec3', label: 'Cell ID' }, cellCenter: { type: 'vec3', label: 'Cell Center' }, edge: { type: 'float', label: 'Edge' } },
-                params: { size: 0.6 },
-              },
-              {
-                id: 'vs_rad', type: 'randomFromId', position: { x: 520, y: 40 },
-                inputs: { id: { type: 'vec3', label: 'Cell ID (3D)', connection: { nodeId: 'vs_vox', outputKey: 'cellID' } }, id2: { type: 'vec2', label: 'Cell ID (2D)' }, n: { type: 'float', label: 'Number' }, seed: { type: 'float', label: 'Seed' }, from: { type: 'float', label: 'From' }, to: { type: 'float', label: 'To' } },
-                outputs: { value: { type: 'float', label: 'Value' }, colour: { type: 'vec3', label: 'Random colour' }, signed: { type: 'float', label: 'Signed' } },
-                params: { seed: 0, from: 0, to: 0.28, __comment: 'Random (from ID): each cell\'s own radius, 0 to 0.28, from its Cell ID, so every sphere is a different size but keeps it.' },
-              },
-              {
-                id: 'vs_sph', type: 'sphereSDF3D', position: { x: 780, y: 120 },
-                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'vs_vox', outputKey: 'cellPos' } }, radius: { type: 'float', label: 'Radius', connection: { nodeId: 'vs_rad', outputKey: 'value' } } },
-                outputs: { dist: { type: 'float', label: 'Distance' } },
-                params: { radius: 0.2 },
-              },
-              {
-                id: 'vs_bound', type: 'boxSDF3D', position: { x: 520, y: 320 },
-                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'vs_sp', outputKey: 'pos' } }, sizeX: { type: 'float', label: 'Size X' }, sizeY: { type: 'float', label: 'Size Y' }, sizeZ: { type: 'float', label: 'Size Z' } },
-                outputs: { dist: { type: 'float', label: 'Distance' } },
-                params: { sizeX: 2.4, sizeY: 1.2, sizeZ: 2.4 },
-              },
-              {
-                id: 'vs_cut', type: 'sdfIntersect', position: { x: 1040, y: 200 },
-                inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'vs_sph', outputKey: 'dist' } }, b: { type: 'float', label: 'B', connection: { nodeId: 'vs_bound', outputKey: 'dist' } }, k: { type: 'float', label: 'Blend radius' } },
-                outputs: { dist: { type: 'float', label: 'Distance' }, blend: { type: 'float', label: 'Blend' } },
-                params: { k: 0 },
-              },
-              {
-                id: 'vs_sout', type: 'sceneOutput', position: { x: 1300, y: 200 },
-                inputs: { dist: { type: 'float', label: 'Distance', connection: { nodeId: 'vs_cut', outputKey: 'dist' } } },
-                outputs: { dist: { type: 'float', label: 'Distance' } }, params: {},
-              },
-            ],
-            outputNodeId: 'vs_sout',
-            outputKey: 'dist',
-          },
-        },
-      },
-      {
-        id: 'vs_mlg', type: 'marchLoopGroup', position: { x: 620, y: 200 },
-        inputs: {
-          ro: { type: 'vec3', label: 'Ray Origin', connection: { nodeId: 'vs_cam', outputKey: 'ro' } },
-          rd: { type: 'vec3', label: 'Ray Dir', connection: { nodeId: 'vs_cam', outputKey: 'rd' } },
-          scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'vs_scene', outputKey: 'scene' } },
-          uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'vs_uv', outputKey: 'uv' } },
-          time: { type: 'float', label: 'Time', connection: { nodeId: 'vs_t', outputKey: 'time' } },
-        },
-        outputs: {
-          color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' },
-          iter: { type: 'float', label: 'Iter' }, iterCount: { type: 'float', label: 'Iter Count' }, hit: { type: 'float', label: 'Hit' }, pos: { type: 'vec3', label: 'Hit Pos' },
-        },
-        params: {
-          maxSteps: 128, maxDist: 30, stepScale: 0.6, volumetric: false, passthrough: 0.1, jitter: 0,
-          bg: [0.06, 0.05, 0.09], albedo: [0.95, 0.95, 0.95],
-          subgraph: {
-            nodes: [
-              { id: 'vs_mli', type: 'marchLoopInputs', position: { x: 80, y: 160 }, inputs: {}, outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' }, marchPos: { type: 'vec3', label: 'March Pos' }, marchDist: { type: 'float', label: 'March Dist' } }, params: { extraInputs: [] } },
-              { id: 'vs_mlo', type: 'marchLoopOutput', position: { x: 420, y: 160 }, inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'vs_mli', outputKey: 'marchPos' } } }, outputs: {}, params: { hiddenOutputs: [] } },
-            ],
-            inputPorts: [], outputPorts: [],
-          },
-        },
-      },
-      {
-        id: 'vs_vox2', type: 'voxelize', position: { x: 960, y: 420 },
-        inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'vs_mlg', outputKey: 'pos' } }, size: { type: 'float', label: 'Cell Size', connection: { nodeId: 'vs_size', outputKey: 'value' } } },
-        outputs: { cellPos: { type: 'vec3', label: 'Cell Pos' }, cellID: { type: 'vec3', label: 'Cell ID' }, cellCenter: { type: 'vec3', label: 'Cell Center' }, edge: { type: 'float', label: 'Edge' } },
-        params: { size: 0.6 },
-      },
-      {
-        id: 'vs_hue', type: 'randomFromId', position: { x: 1200, y: 420 },
-        inputs: { id: { type: 'vec3', label: 'Cell ID (3D)', connection: { nodeId: 'vs_vox2', outputKey: 'cellID' } }, id2: { type: 'vec2', label: 'Cell ID (2D)' }, n: { type: 'float', label: 'Number' }, seed: { type: 'float', label: 'Seed' }, from: { type: 'float', label: 'From' }, to: { type: 'float', label: 'To' } },
-        outputs: { value: { type: 'float', label: 'Value' }, colour: { type: 'vec3', label: 'Random colour' }, signed: { type: 'float', label: 'Signed' } },
-        params: { seed: 0, from: 0, to: 1, __comment: 'Random (from ID): a number 0 to 1 for each cell, the same cells as the scene\'s, so each sphere gets its own palette colour.' },
-      },
-      {
-        id: 'vs_pal', type: 'palette', position: { x: 1440, y: 420 },
-        inputs: {
-          value: { type: 'float', label: 'Angle', connection: { nodeId: 'vs_hue', outputKey: 'value' } }, anim: { type: 'float', label: 'Angle offset' },
-          offset: { type: 'vec3', label: 'Offset' }, amplitude: { type: 'vec3', label: 'Amplitude' }, freq: { type: 'vec3', label: 'Frequency' }, phase: { type: 'vec3', label: 'Phase' },
-        },
-        outputs: { color: { type: 'vec3', label: 'Color' } },
-        params: { preset: '1', scale: 1, speed: 0 },
-      },
-      {
-        id: 'vs_tint', type: 'multiply', position: { x: 1680, y: 260 },
-        inputs: { a: { type: 'vec3', label: 'A', connection: { nodeId: 'vs_mlg', outputKey: 'color' } }, b: { type: 'vec3', label: 'B', connection: { nodeId: 'vs_pal', outputKey: 'color' } } },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { outputType: 'vec3' },
-      },
-      {
-        id: 'vs_gain', type: 'multiply', position: { x: 1900, y: 260 },
-        inputs: { a: { type: 'vec3', label: 'A', connection: { nodeId: 'vs_tint', outputKey: 'result' } }, b: { type: 'vec3', label: 'B' } },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { outputType: 'vec3', b: 1.8 },
-      },
-      { id: 'vs_out', type: 'output', position: { x: 2120, y: 260 }, inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'vs_gain', outputKey: 'result' } } }, outputs: {}, params: {} },
-    ],
-  },
+  // voxelTerrain and comboVoxelSpheres: voxelExamples.ts (the March Loop's Voxels; the Voxelize node is retired).
   midiGlowKeys: {
     label: 'MIDI: Keys to Glow',
     description: 'MIDI Input turns a controller into floats — or the computer keyboard: turn on the keyboard stand-in on the card and play the A–K row. Velocity sets the circle\'s Radius (Multiply + Add), Gate brightens the SDF Glow while a key is held (Multiply on the Tinted output), Note picks the Palette colour, and CC 1 (the mod wheel) drives Turbulence strength on the UV. The same shape as the Audio examples: an outside signal in, floats out, everything else is ordinary nodes.',
@@ -12727,10 +12407,12 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
 };
 
 // The Learn folder is built from the node definitions at load; its last lesson reuses a graph above.
-Object.assign(EXAMPLE_GRAPHS, buildLearnExamples(EXAMPLE_GRAPHS), buildLearn3dExamples(), buildCurvedSpaceExamples(), buildRepeatSceneExamples(), buildPiecesExamples(), buildCurveTraceExamples(), buildComboExamples(), buildMatrixExamples(), buildDataExamples(), buildGridExamples(), buildBoundsExamples(), buildConvertExamples(), buildPassExamples(), buildAgentExamples(), buildAgentShaderExamples(), buildAgent3dExamples(), buildSimAgentExamples(), buildRideCurveExamples(), buildAgentSketchExamples(), buildBakeExamples(EXAMPLE_GRAPHS), buildExprLoopExamples(), buildSplatExamples(EXAMPLE_GRAPHS), buildTimeCubeExamples(), buildFrameStackExamples(), buildFourDExamples(), buildFourDProjectionExamples(), buildTextureToolExamples(), buildMemoryExamples(), buildSendReceiveExamples(), buildAudioExamples(), buildPictureExamples(), buildPictures3DExamples(), buildRaysExamples(), buildSimGridExamples(), buildSceneBuilderExamples(), buildSceneBuilder2DExamples(), buildAgentRuleExamples(), buildGridRulesExamples());
+Object.assign(EXAMPLE_GRAPHS, buildLearnExamples(EXAMPLE_GRAPHS), buildVoxelExamples(), buildLearn3dExamples(), buildCurvedSpaceExamples(), buildRepeatSceneExamples(), buildPiecesExamples(), buildCurveTraceExamples(), buildComboExamples(), buildMatrixExamples(), buildDataExamples(), buildGridExamples(), buildBoundsExamples(), buildConvertExamples(), buildPassExamples(), buildAgentExamples(), buildAgentShaderExamples(), buildAgent3dExamples(), buildSimAgentExamples(), buildRideCurveExamples(), buildAgentSketchExamples(), buildBakeExamples(EXAMPLE_GRAPHS), buildExprLoopExamples(), buildSplatExamples(EXAMPLE_GRAPHS), buildTimeCubeExamples(), buildFrameStackExamples(), buildFourDExamples(), buildFourDProjectionExamples(), buildTextureToolExamples(), buildMemoryExamples(), buildSendReceiveExamples(), buildAudioExamples(), buildPictureExamples(), buildPictures3DExamples(), buildRaysExamples(), buildSimGridExamples(), buildSceneBuilderExamples(), buildSceneBuilder2DExamples(), buildAgentRuleExamples(), buildGridRulesExamples());
 // 3D: Hello Sphere was the same graph as Learn's first ray march (which is built from it above, with notes and
 // Play controls): one copy is kept, in Learn (MERGED_EXAMPLES opens the old key there).
 delete EXAMPLE_GRAPHS.rayMarchOutputs3D;
+// Notes for the older 3D lighting and material examples (exampleNotes3d.ts).
+addExampleNotes3d(EXAMPLE_GRAPHS);
 
 // Every example's Play setup is in the rules shape (implementation guide, phase 9): authored with actions,
 // a signal's When and links where that reads easiest, opened as the rules they play as.

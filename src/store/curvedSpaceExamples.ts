@@ -12,7 +12,7 @@
  */
 import type { GraphNode, SubgraphData } from '../types/nodeGraph';
 import type { PlayControl } from '../types/play';
-import { ctl, n, out, play } from './graphBuilder';
+import { ctl, n, play } from './graphBuilder';
 import { expr, note } from './agentExampleKit';
 import type { ExampleGraph } from './exampleIndex';
 import { CURVED_EXAMPLE_INDEX } from './curvedSpaceExampleIndex';
@@ -63,7 +63,7 @@ function shade(cellOf: string, extra: Array<[string, string]>, fogRate: number, 
     lines: [
       ['vec3 cell', cellOf],
       ['float h', 'fract(sin(dot(cell, vec3(12.9898, 78.233, 37.719))) * 43758.5453)'],
-      ['vec3 base', '0.5 + 0.5 * cos(6.28318 * (h + vec3(0.0, 0.33, 0.67)))'],
+      ['vec3 base', '0.5 + 0.5 * cos(6.28318 * (0.18 + h * 0.5 + dist * 0.012 + vec3(0.3, 0.416, 0.557)))'],
       ['float sun', 'max(dot(nrm, normalize(vec3(0.5, 0.8, 0.35))), 0.0)'],
       ['float sky', '0.5 + 0.5 * nrm.y'],
       ['float occ', '1.0 - 0.55 * iter'],
@@ -76,7 +76,7 @@ function shade(cellOf: string, extra: Array<[string, string]>, fogRate: number, 
     wires: { pos: ['march', 'pos'], nrm: ['march', 'normal'], hit: ['march', 'hit'], dist: ['march', 'dist'], iter: ['march', 'iter'] },
     note: [
       'Shade (an Expression Block): the colour of each pixel from what the March Loop found.',
-      'cell: which repeat of the pattern the hit point is in. h: a random number from 0 to 1 for that cell. base: a colour from h along a cosine palette, so each object has its own colour.',
+      'cell: which repeat of the pattern the hit point is in. h: a random number from 0 to 1 for that cell. base: a colour from the Wiggle Tunnel\'s cosine palette (phase 0.3, 0.416, 0.557: navy, sky blue, cream, orange), half of it spread by h so each object has its own colour, and turned a little further round with the distance the ray travelled, so the far ones drift toward warm and the depth reads in colour as well as in fog.',
       'sun: how much the surface faces the sun (1 = straight on). sky: the surface\'s upward-ness, a little ambient light from above.',
       'occ: 1 minus the share of steps used (Iter), darker in crevices and along edges, a cheap ambient occlusion.',
       'fog: fades with the true distance the ray travelled (Distance), into the background; Hit zero (a miss) shows only the background.',
@@ -99,7 +99,7 @@ const nodesFor = (cam: GraphNode, sc: GraphNode, lp: GraphNode, sh: GraphNode, e
   n('time', 'time', 40, 460, { ...note(['Time in seconds: it turns the camera slowly so the bend is seen from every side.']) }),
   cam, sc, lp, sh,
   n('toneMap', 'tone', 900, 220, { mode: 'aces', ...note(['Tone Map: squeezes the lit colours into the displayable range with a film-like curve.']) }, { color: ['shade', 'result'] }),
-  out(['tone', 'color'], 1140),
+  n('output', 'out', 1140, 220, { ...note(['Output: the picture.']) }, { color: ['tone', 'color'] }),
   ...extra,
 ];
 

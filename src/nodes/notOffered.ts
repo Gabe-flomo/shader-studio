@@ -50,6 +50,14 @@ export const CATALOGUE_RETIRED_TYPES: readonly string[] = [
   'simpleSDF', 'sdfColorize',
   // Radiance Cascades 2D: too slow for what it gives (the user's call, 2026-10-17); SDF Glow lights a shape cheaply.
   'radianceCascadesApprox',
+  // Voxelize (2026-10-19): one voxel system, the Voxels setting on the March Loop and GI Lit March Group
+  // (docs/march-voxels.md). Voxelize snapped space inside the scene, so its cubes came from the shapes you built per cell;
+  // the loop's Voxels turn any scene into cubes. Not the same picture, so a saved Voxelize graph keeps its node.
+  'voxelize',
+  // The Ants starter (2026-10-19): the ants examples and presets were deleted (the user: they looked terrible). Its
+  // definition stays, so the starter still builds if anything asks for it; the Ants rule kind stays (Termites, SIR
+  // and Fireflies use it).
+  'antsPreset',
 ];
 
 /**

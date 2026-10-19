@@ -18,10 +18,30 @@ only the cells near a surface are walked one by one.
 - Warps (a Space Warp group in the body) bend where each cell centre is measured.
 - Iter, Hit, Distance, Depth, Normal and Position work as usual; Position is where the ray enters the cube.
 
+## A colour per cube
+
+Hit Pos is on the cube's face, so step half a cube back along the Normal to land inside it:
+`cell = floor((pos - normal * 0.5 * size) / size)`. A Random (from ID) or a Palette on that cell gives every cube
+its own colour (3D: Voxel Terrain does this in an Expression Block).
+
+## The GI Lit March Group
+
+The GI loop has the same Voxels and Voxel size. Its camera ray walks the grid as above; so do its shadow ray, its
+bounce ray and its reflection ray, so shadows are cube-shaped and reflections show cubes. AO counts the solid
+cells round each face, weighted by how close the point is to each (the block-game corner shading), instead of
+marching out along the normal. AO Steps is unused with Voxels; Shadow / GI / Spec Steps set the walks' lengths.
+
+## Other scene types
+
+- **Repeat Scene** is a scene like any other: wired into a voxel loop, every copy is cubes.
+- **Space Warp groups** and warps in the loop body bend where each cell centre is measured.
+- **3D Scene Builder**: `quality voxel=0.08` turns Voxels on its loop.
+- The **Voxelize** node is retired (docs/node-retirements.md): this setting is the one voxel system.
+
 ## Not with
 
-Volumetric, Space curvature and Warp safety march as before (Voxels is ignored on those loops), and the
-GI-lit loop has no Voxels yet.
+Volumetric, Space curvature and Warp safety march as before (Voxels is ignored on those loops).
 
-Code: `src/compiler/shaderAssembler.ts` (`voxelLoop` in the March Loop group), params in
-`src/nodes/definitions/scene3d.ts`. Tests: `src/compiler/__tests__/marchVoxels.test.ts`.
+Code: `src/compiler/voxelMarch.ts` (the walk and the corner AO, shared by both loops), called from
+`src/compiler/shaderAssembler.ts`; params in `src/nodes/definitions/scene3d.ts`.
+Tests: `src/compiler/__tests__/marchVoxels.test.ts`.

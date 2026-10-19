@@ -27,8 +27,8 @@ export const WARP_STRIP_KEYS = [] as const;
 
 /** Agents builder, by walker kind. */
 export const AGENT_STRIP_KEYS: Record<WalkerKind, readonly string[]> = {
-  trail: ['slime', 'veins', 'ants', 'dla'],
-  ants: ['slime', 'veins', 'ants', 'dla'],
+  trail: ['slime', 'veins', 'cells', 'dla'],
+  ants: ['slime', 'veins', 'cells', 'dla'],
   particles: ['particles', 'smoke', 'snow', 'burst'],
   flock: ['boids', 'streams', 'balls', 'murmuration'],
   crowd: ['crowd', 'door', 'crossing'],

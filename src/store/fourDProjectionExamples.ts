@@ -14,6 +14,7 @@ import type { GraphNode } from '../types/nodeGraph';
 import type { ExampleGraph } from './exampleIndex';
 import { ctl, n, play } from './graphBuilder';
 import { FOURD_EXAMPLE_INDEX, SUN_ANGLES, checker, expr, finish, note, passBody, scene } from './fourDExamples';
+import { exprBlock, wiggleFinish } from './wiggleLook';
 
 /** An Add node set to vec3 (the card's type picker retypes its sockets). */
 function vec3Add(id: string, x: number, y: number, comment: string, a: [string, string], b: [string, string]): GraphNode {
@@ -57,21 +58,20 @@ export function buildFourDProjectionExamples(): Record<string, ExampleGraph> {
     counter: 60,
     nodes: [
       n('time', 'time', 40, 460, { ...note('Time: drives the camera orbit (the 4D turns have their own Spin settings).') }),
-      n('marchCamera', 'cam', 40, 220, { camDist: 5.2, camAngle: 0.6, camElevation: 0.3, rotSpeed: 0.05, fov: 1.5, ...note('March Camera: slowly circles the middle. The 3D camera only looks; the shape changes because it turns in 4D.') }, { time: ['time', 'time'] }),
+      n('marchCamera', 'cam', 40, 220, { camDist: 4.3, camAngle: 0.6, camElevation: 0.3, rotSpeed: 0.05, fov: 1.5, ...note('March Camera: slowly circles the middle. The 3D camera only looks; the shape changes because it turns in 4D.') }, { time: ['time', 'time'] }),
       scene('scene', 40, 860, 'Tesseract (projection)', [
         n('wireframe4D', 'wire', 240, 80, {
-          polytope: 'tesseract', projection: 'perspective', radius: 1.5, camDist: 3.2, edge: 0.028, vertex: 0.065,
+          polytope: 'tesseract', projection: 'perspective', radius: 1.5, camDist: 3.2, edge: 0.04, vertex: 0.08,
           plane1: 'xw', spin1: 22, plane2: 'yz', spin2: 14,
           ...note('4D Wireframe, Tesseract, Perspective. Sixteen corners (±1, ±1, ±1, ±1 scaled to radius 1.5) and thirty-two edges. Each corner is turned in 4D, then seen by a camera on the w axis 3.2 away: a corner at w moves to xyz × 3.2 / (3.2 − w), so the corners with positive w are closer and bigger (the outer cube) and those with negative w are farther and smaller (the inner cube). The edges between them are the eight struts. Turn 1 is the xw plane, which swaps the two cubes through each other; Turn 2 is yz, an ordinary roll. Spin is in degrees a second.'),
         }, { pos: ['sp', 'pos'] }),
       ], ['wire', 'dist'],
       'One 3D shape, built from a 4D object: the wireframe is a distance to thin tubes along the projected edges and balls at the projected corners, so it behaves like any other 3D shape here (lighting, glow).'),
-      ...finishGlow([0.02, 0.025, 0.06],
-        expr('col', 1180, 520, 'Tube colour', { x: ['hp', 'x'], y: ['hp', 'y'], z: ['hp', 'z'] },
-          'mix(vec3(0.25, 0.85, 1.0), vec3(1.0, 0.35, 0.65), clamp(length(vec3(x, y, z)) / 1.25 - 0.45, 0.0, 1.0))',
-          'Tube colour from the distance to the middle: the inner (far) cube and the struts near it are cyan, the outer (near) cube magenta, so the cube-in-a-cube reads at a glance.'),
-        glowBlock([0.2, 0.55, 1.0], 1.8, 'Glow: Iter (steps taken, 0 to 1) times 2.2, cubed, times a blue-white colour. Rays that graze a tube take many steps, so every edge gets a soft halo; rays through empty space take few and stay dark.'),
-        'March Loop: finds, for each pixel, where the ray meets the wireframe, and how many steps it took (Iter, used for the glow).'),
+      n('marchLoopGroup', 'march', 340, 220, { bg: [0.01, 0.012, 0.03], maxSteps: 128, maxDist: 20, subgraph: passBody('march'),
+        ...note('March Loop: finds, for each pixel, where the ray meets the wireframe, how far it went and how many steps it took. Rays that graze a tube take many steps, which the colouring and the faint halo use.') },
+        { ro: ['cam', 'ro'], rd: ['cam', 'rd'], scene: ['scene', 'scene'] }),
+      ...wiggleFinish({ march: 'march', x: 700, y: 220, distK: 0.2, iterK: 0.006, shift: 0.5, bg: [0.01, 0.012, 0.03], fog: 4, fogStart: 3, form: 0.45, halo: 0.45,
+        paletteNote: 'Palette: the Wiggle Tunnel\'s colours (offset and amplitude 0.5, frequency 1, phase 0.3, 0.416, 0.557). Distance moves along it, so the outer (near) cube and the inner (far) cube land on different colours and the cube-in-a-cube reads at a glance; Angle offset 0.55 puts the near tubes in the blues.' }),
     ],
     play: play([
       ctl('s1', 'scene::wire::spin1', 'xw turn (deg/s)', -90, 90, 0.5),
@@ -81,7 +81,7 @@ export function buildFourDProjectionExamples(): Record<string, ExampleGraph> {
       ctl('c', 'cam::camAngle', 'Camera angle', 0, 6.28, 0.02),
     ], `**What it shows.** The tesseract, a cube in four directions, drawn the way a cube is drawn on paper: not one slice but all of it at once, squashed into 3D. A perspective camera sits on the fourth axis looking toward the middle, so the cube nearer to it (positive w) looks big and the cube farther away (negative w) looks small: the famous **cube inside a cube**, with eight struts joining their corners. The shape turns in 4D, and the inner cube swells outward through the faces of the outer one while the outer shrinks, which is what a 4D turn looks like when you only see its shadow.
 
-**How it is built.** One Scene Group holds a **4D Wireframe** node (Tesseract, Perspective) reading Scene Pos and giving a distance: thin tubes along the 32 projected edges and balls at the 16 corners. Turn 1 is in the xw plane, Turn 2 in yz. Outside, a normal March Camera and March Loop find the surface, Multi-Light and Ambient Occlusion shade it, and the glow is the loop's Iter output added on top.
+**How it is built.** One Scene Group holds a **4D Wireframe** node (Tesseract, Perspective) reading Scene Pos and giving a distance: thin tubes along the 32 projected edges and balls at the 16 corners. Turn 1 is in the xw plane, Turn 2 in yz. Outside, a normal March Camera and March Loop find the surface; the colour is the Wiggle Tunnel's, Distance and Iter Count on one cosine palette, so depth shows as colour (near cube blue, far cube cream and orange) and rays that graze an edge leave a faint halo.
 
 **Try.** Set both turns to 0 and the cubes just sit there: a picture of the shape facing you. Slide **Camera distance** down toward 1.8 for a dramatic perspective (the near cube nearly fills the view) and up toward 8 for the flat, orthographic look where both cubes become the same size. Change Projection to Orthographic inside the group to see what dropping w does: the cube-in-a-cube becomes a single cube with a smaller one inside it in a different arrangement. Try Turn 1 in the zw plane, or pick another Polytope.`),
   };
@@ -181,7 +181,7 @@ export function buildFourDProjectionExamples(): Record<string, ExampleGraph> {
     nodes: [
       n('time', 'time', 40, 460, { ...note('Time: drives the camera orbit and the flow along the circles.') }),
       n('multiply', 'flow', 40, 620, { b: 18, outputType: 'float', ...note('Multiply: Time × 18 = the Hopf Circles phase in degrees. Going in through the phase port, it slides every circle along itself (the Hopf flow). B is the Play knob Flow (deg/s).') }, { a: ['time', 'time'] }),
-      n('marchCamera', 'cam', 40, 220, { camDist: 6.4, camAngle: 0.7, camElevation: 0.55, rotSpeed: 0.05, fov: 1.5, ...note('March Camera: a slow orbit, from above so the half-cut torus shows its inside.') }, { time: ['time', 'time'] }),
+      n('marchCamera', 'cam', 40, 220, { camDist: 5.4, camAngle: 0.7, camElevation: 0.55, rotSpeed: 0.05, fov: 1.5, ...note('March Camera: a slow orbit, from above so the half-cut torus shows its inside.') }, { time: ['time', 'time'] }),
       scene('scene', 40, 860, 'Hopf rings', [
         n('stereo4D', 'st', 240, 100, {
           scale: 1.0, radius: 1.0, plane1: 'xw', spin1: 6, plane2: 'xy', spin2: 3,
@@ -207,12 +207,14 @@ export function buildFourDProjectionExamples(): Record<string, ExampleGraph> {
       ], ['fit', 'dist'],
       'Scene Pos goes to the 3-sphere and is turned; the Clifford torus and the Hopf circles measure it; each distance is corrected for the stretch of the map; the scene is their union, cut open and bounded. A port brings in the flow.',
       [{ key: 'phase', label: 'Phase (deg)', from: ['flow', 'result'], to: ['hc', 'phase'] }]),
-      ...finishGlow([0.025, 0.02, 0.06],
-        expr('col', 1180, 520, 'Ring colour', { x: ['hp', 'x'], y: ['hp', 'y'], z: ['hp', 'z'] },
-          'vec3(0.5) + 0.5 * cos(6.2832 * (atan(z, x) / 6.2832 + vec3(0.0, 0.33, 0.67)))',
-          'Ring colour: a rainbow by the angle round the y axis, so neighbouring circles differ and you can follow one round its link.'),
-        glowBlock([0.4, 0.5, 1.0], 1.4, 'Glow: Iter (steps taken, 0 to 1) times 2.2, cubed, in a cool blue. Rings that sit close together make rays linger, so the dense regions glow.'),
-        'March Loop: finds where each ray meets a circle or the torus, and how many steps it took (Iter, used for the glow).'),
+      n('marchLoopGroup', 'march', 340, 220, { bg: [0.01, 0.012, 0.03], maxSteps: 128, maxDist: 20, subgraph: passBody('march'),
+        ...note('March Loop: finds where each ray meets a circle or the torus, how far it went (Distance) and how many steps it took (Iter Count). Those two numbers colour the picture, as in the Wiggle Tunnel.') },
+        { ro: ['cam', 'ro'], rd: ['cam', 'rd'], scene: ['scene', 'scene'] }),
+      n('splitVec3', 'hp', 640, 520, { ...note('Split Vec3: the hit point as x, y, z.') }, { v: ['march', 'pos'] }),
+      exprBlock('ang', 880, 520, 'Angle round the axis', { x: { type: 'float', from: ['hp', 'x'] }, z: { type: 'float', from: ['hp', 'z'] } }, [],
+        'atan(z, x) / 6.2832 * 0.3', 'Angle round the y axis as 0 to 0.3: added to the palette position, so neighbouring circles sit at different colours and you can follow one round its link.', 'float'),
+      ...wiggleFinish({ march: 'march', x: 1120, y: 220, distK: 0.11, iterK: 0.007, shift: 0.42, bg: [0.01, 0.012, 0.03], fog: 6, fogStart: 4.5, form: 0.4, halo: 0.25,
+        extra: { from: ['ang', 'result'], note: 'Add: plus the angle round the axis, so each circle of a ring gets its own place on the palette.' } }),
     ],
     play: play([
       ctl('t', 'scene::st::spin1', 'xw turn (deg/s)', -60, 60, 0.5),
@@ -223,7 +225,7 @@ export function buildFourDProjectionExamples(): Record<string, ExampleGraph> {
       ctl('c', 'cam::camAngle', 'Camera angle', 0, 6.28, 0.02),
     ], `**What it shows.** The 3-sphere is the 4D ball's skin, and all of 3D space can be laid onto it by **stereographic projection**: every point of space lands on a point of the 3-sphere, the origin at one pole and "infinity" at the other. Here that picture is turned in 4D and then looked at back in 3D. The **Hopf circles** (a few of the great circles that fill the 3-sphere, any two linked once) become the famous interlocking rings that fill space, nested around a **Clifford torus** (the half-cut shell). Circles stay circles under the map, so each ring is a true circle, or a line if it passes through the north pole.
 
-**How it is built.** Inside the Scene Group: Scene Pos → **Stereographic 4D** (scale 1, turned in xw and xy) → **Hopf Circles SDF** (3 rings of 8) and **Clifford Torus SDF**; each distance goes through **Stereographic Distance**, which divides out the stretch of the map so the march cannot step through a ring; a plane cuts the torus open and a sphere bounds the whole. A port brings in the Hopf flow. Outside: the usual camera, loop, lighting and an Iter glow.
+**How it is built.** Inside the Scene Group: Scene Pos → **Stereographic 4D** (scale 1, turned in xw and xy) → **Hopf Circles SDF** (3 rings of 8) and **Clifford Torus SDF**; each distance goes through **Stereographic Distance**, which divides out the stretch of the map so the march cannot step through a ring; a plane cuts the torus open and a sphere bounds the whole. A port brings in the Hopf flow. Outside, the colouring is the Wiggle Tunnel's: the March Loop's Distance and Iter Count (plus each ring's angle round the axis) pick a place on one cosine palette, so near tubes are blue, far ones and tight bends turn cream and orange; a light touch of shading and a depth fade keep it solid.
 
 **Try.** Set **xw turn** to 0 and the picture holds still while **Flow** slides the circles round themselves, and no ring ever collides. Slide **Ring latitude** to move the middle ring of circles (90 is the one on the torus), and set Fibres per ring to 16 inside the group for a denser bundle. Slide **Scale** to zoom the picture in or out; circles near the middle are thin, those out near the north pole are fat, which is the stretch of the map. In Hopf Circles SDF try Rings 1, Latitude 90: one ring, all on the torus (the Villarceau circles).`),
   };
@@ -293,7 +295,7 @@ export function buildFourDProjectionExamples(): Record<string, ExampleGraph> {
     counter: 40,
     nodes: [
       n('time', 'time', 40, 460, { ...note('Time: drives the camera and the drift of c.') }),
-      n('marchCamera', 'cam', 40, 220, { camDist: 2.1, camAngle: 0.4, camElevation: 0.35, rotSpeed: 0.06, fov: 1.4, ...note('March Camera: slowly circles the fractal, close in.') }, { time: ['time', 'time'] }),
+      n('marchCamera', 'cam', 40, 220, { camDist: 1.8, camAngle: 0.4, camElevation: 0.35, rotSpeed: 0.06, fov: 1.4, ...note('March Camera: slowly circles the fractal, close in.') }, { time: ['time', 'time'] }),
       n('lfo', 'cxd', 40, 640, { waveform: 'sine', freq: 0.031, amplitude: 0.22, offset: -0.2, ...note('LFO: c x drifts between -0.42 and 0.02 about once every 32 seconds. Amplitude is the Play knob Drift.') }, { time: ['time', 'time'] }),
       n('lfo', 'cyd', 40, 800, { waveform: 'sine', freq: 0.047, phase: 0.25, amplitude: 0.18, offset: 0.58, ...note('LFO: c y drifts between 0.4 and 0.76, at another speed so the two never line up.') }, { time: ['time', 'time'] }),
       scene('scene', 40, 980, 'Quaternion Julia', [
@@ -303,12 +305,11 @@ export function buildFourDProjectionExamples(): Record<string, ExampleGraph> {
       ], ['jul', 'dist'],
       'Scene Pos is lifted to 4D, turned in xw and measured against a quaternion Julia set whose constant c drifts in through ports.',
       [{ key: 'cx', label: 'c x', from: ['cxd', 'value'], to: ['jul', 'cx'] }, { key: 'cy', label: 'c y', from: ['cyd', 'value'], to: ['jul', 'cy'] }]),
-      ...finish([0.03, 0.03, 0.06],
-        expr('col', 1180, 520, 'Surface colour', { x: ['hp', 'x'], y: ['hp', 'y'], z: ['hp', 'z'] },
-          'vec3(0.55, 0.45, 0.95) + vec3(0.45, 0.35, -0.35) * clamp(0.5 + 0.5 * sin(4.0 * length(vec3(x, y, z)) + 2.0 * y), 0.0, 1.0)',
-          'Surface colour: violet to warm orange in bands by distance from the middle, so the folds read.'),
-        'March Loop: finds where each ray meets the fractal. Its distance is an estimate, so Step Scale is a little under 1.'),
-    ].map(nd => (nd.type === 'marchLoopGroup' ? { ...nd, params: { ...nd.params, stepScale: 0.8, maxSteps: 160 } } : nd)),
+      n('marchLoopGroup', 'march', 340, 220, { bg: [0.012, 0.012, 0.025], maxSteps: 160, maxDist: 12, stepScale: 0.8, subgraph: passBody('march'),
+        ...note('March Loop: finds where each ray meets the fractal, how far it went and how many steps it took. The distance is an estimate, so Step Scale is a little under 1; the steps pile up in the folds, which the colouring uses.') },
+        { ro: ['cam', 'ro'], rd: ['cam', 'rd'], scene: ['scene', 'scene'] }),
+      ...wiggleFinish({ march: 'march', x: 700, y: 220, distK: 0.25, iterK: 0.0065, shift: 0.6, bg: [0.012, 0.012, 0.025], fog: 2.5, fogStart: 1.3, form: 0.4, halo: 0.2 }),
+    ],
     play: play([
       ctl('w', 'scene::lift::w', 'Slice (w)', -0.8, 0.8, 0.01),
       ctl('d', 'cxd::amplitude', 'Drift', 0, 0.5, 0.005),
@@ -317,7 +318,7 @@ export function buildFourDProjectionExamples(): Record<string, ExampleGraph> {
       ctl('c', 'cam::camAngle', 'Camera angle', 0, 6.28, 0.02),
     ], `**What it shows.** A quaternion Julia set is the 4D version of the famous Julia fractal: each 4D point is squared (as a quaternion) and shifted by a constant c, over and over, and the points that never run away make the solid. What you see is its 3D slice: lumpy bulbs that curl into each other. As the LFOs move c, the whole set reshapes.
 
-**How it is built.** Inside the Scene Group: Scene Pos → **Lift to 4D** → **Transform** (4D, turning in xw) → **Quaternion Julia SDF**. Outside, two **LFOs** drift c x and c y into the group through ports; the usual camera, loop and lighting draw it, with Step Scale 0.8 because the distance is an estimate.
+**How it is built.** Inside the Scene Group: Scene Pos → **Lift to 4D** → **Transform** (4D, turning in xw) → **Quaternion Julia SDF**. Outside, two **LFOs** drift c x and c y into the group through ports; the March Loop draws it with Step Scale 0.8 because the distance is an estimate. The colour is the Wiggle Tunnel's: Distance and Iter Count on one cosine palette. Rays slow down in the folds, so every fold gets its own ring of colour, blue on the open surfaces and cream to maroon where the set curls in.
 
 **Try.** Set **Drift** to 0 and slide **c z** to explore single sets. Move **Slice** to cut the 4D fractal somewhere else. In the node, Iterations 6 is softer and faster; 14 adds fine detail.`),
   };

@@ -33,7 +33,7 @@ import {
 } from '../../agentRules/spec';
 import { groupRules } from '../../agentRules/apply';
 import { generateRulesInside, ruleIds } from '../../agentRules/generate';
-import { RULES_TEMPLATES } from '../../agentRules/templates';
+import { OFFERED_RULES_TEMPLATES as RULES_TEMPLATES } from '../../agentRules/templates';
 import { applyGroupRules, applyGroupTemplate3d, openGroupAsNodes, setGroupShape, setGroupSpace, setGroupView } from '../../agentRules/storeActions';
 import { CAMERA_3D, CAMERA_CONTROLS, RULES_TEMPLATES_3D, SHAPE_KINDS, rescaleForSpace, shapeOf, type AgentSpace, type CameraKey, type ShapeKind } from '../../agentRules/space3d';
 import { SurpriseBar } from '../surprise/SurpriseBar';

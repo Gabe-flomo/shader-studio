@@ -444,6 +444,8 @@ export const Repeat3DNode: NodeDefinition = {
   },
 };
 
+// Retired 2026-10-19 (nodes/notOffered.ts): the March Loop's Voxels setting is the one voxel system now
+// (docs/march-voxels.md). Kept registered so saved graphs load and render as before.
 // Voxel builder: snap space to a cube grid. A Box 3D on Cell Pos is a cube per
 // cell; a hash or noise on Cell ID picks which cells are solid; Edge (distance
 // to the nearest wall of the current cell) is what an empty cell returns so
@@ -464,7 +466,7 @@ export const VoxelizeNode: NodeDefinition = {
     cellPos:    { type: 'vec3',  label: 'Cell Pos',    hint: 'Position relative to the cell centre, in ±Cell Size / 2. Feed a Box 3D or Sphere 3D.' },
     cellID:     { type: 'vec3',  label: 'Cell ID',     hint: 'Integer cell coordinates (floor(pos / size)). Random (from ID) on it gives each cell its own number, to vary or drop cells; a Palette on that colours per cube.' },
     cellCenter: { type: 'vec3',  label: 'Cell Center', hint: 'World-space centre of the cell.' },
-    edge:       { type: 'float', label: 'Edge',        hint: 'Distance from the position to the nearest wall of its cell. Return it for empty cells so the march skips ahead; for an exact voxel traversal, wire the camera\'s Ray Dir into the Scene Group and step to the cell exit along it (see 3D: Voxel Terrain).' },
+    edge:       { type: 'float', label: 'Edge',        hint: 'Distance from the position to the nearest wall of its cell. Return it for empty cells so the march skips ahead; for an exact voxel traversal, wire the camera\'s Ray Dir into the Scene Group and step to the cell exit along it.' },
   },
   defaultParams: { size: 0.5 },
   paramDefs: {

@@ -14,10 +14,6 @@ export const AGENT_RULE_EXAMPLE_INDEX: Record<string, { label: string; descripti
     label: 'Agent rules 1 · Slime mold',
     description: 'The slime-mold walker as one rule: "When always → turn toward its own trail, wander, leave trail". Press Edit rules on the Agents card to change it, or Open as nodes to see the nodes it makes. The node version: Simulation → Slime mold.',
   },
-  agentRulesAnts: {
-    label: 'Agent rules 2 · Ants with food',
-    description: 'Ants in six rules with two states (searching, carrying) and two masks (Food, Nest): searching ants lay the home smell and follow the food smell, carrying ants the other way round; they turn at the food and at the nest. The node version: Simulation → Ants.',
-  },
   agentRulesBoids: {
     label: 'Agent rules 3 · Flock (boids)',
     description: 'Kind: Flock. Boids in one rule, from the birds themselves (Neighbours): steer away from the birds near it, match their heading, drift to their centre, wobble. Flocks gather, keep their spacing and wheel together. (It used to read a blurred velocity trail.) The node version: Simulation → Boids.',
@@ -68,7 +64,7 @@ export const AGENT_RULE_EXAMPLE_INDEX: Record<string, { label: string; descripti
 export const AGENT_RULE_EXAMPLE_KEYS = Object.keys(AGENT_RULE_EXAMPLE_INDEX);
 
 const TEMPLATE_OF: Record<string, [string, string]> = {
-  agentRulesSlime: ['slime', 'arSl'], agentRulesAnts: ['ants', 'arAn'], agentRulesBoids: ['boids', 'arBo'], agentRulesPredatorPrey: ['predatorPrey', 'arPp'],
+  agentRulesSlime: ['slime', 'arSl'], agentRulesBoids: ['boids', 'arBo'], agentRulesPredatorPrey: ['predatorPrey', 'arPp'],
   agentRulesSir: ['sir', 'arSir'], agentRulesTermites: ['termites', 'arTe'], agentRulesFireflies: ['fireflies', 'arFf'], agentRulesDla: ['dla', 'arDla'],
   agentRulesParticles: ['particles', 'arPa'], agentRulesSwarm: ['swarm', 'arSw'], agentRulesCrowd: ['crowd', 'arCr'],
   agentRulesScan: ['scanWalkers', 'arSc'],
