@@ -193,13 +193,14 @@ export function StudioShell(p: StudioShellProps) {
           <Icon name={p.icon} />
         </span>
       )}
-      <span style={{ display: 'flex', flexDirection: 'column', gap: p.crumb ? 0 : 1, minWidth: phone ? 96 : 0, flexShrink: phone ? 6 : 1, maxWidth: phone ? '55%' : undefined, marginRight: 'auto', paddingLeft: phone && !p.onBack ? 6 : 0 }}>
+      <span style={{ display: 'flex', flexDirection: 'column', gap: p.crumb ? 0 : 1, minWidth: phone ? 96 : 140, flexShrink: phone ? 6 : 1, maxWidth: phone ? '55%' : undefined, marginRight: 'auto', paddingLeft: phone && !p.onBack ? 6 : 0 }}>
         {p.crumb && <span data-studio-crumb style={{ fontSize: 11, lineHeight: '14px', color: tk.text.muted, display: 'flex', minWidth: 0, overflow: phone ? 'hidden' : undefined }}>{p.crumb}</span>}
         <b data-studio-title title={typeof p.title === 'string' ? p.title : undefined} style={{ fontSize: 15, fontWeight: 650, letterSpacing: '-0.01em', lineHeight: 1.2, ...clampLines(2) }}>{p.title}</b>
         {p.kind && !(phone && p.crumb) && <span data-studio-kind style={{ fontSize: 12, color: tk.text.muted, lineHeight: 1.25 }}>{p.kind}</span>}
       </span>
-      {/* On a phone the title gives way first (down to 96px), then the actions slide sideways. */}
-      <span style={{ display: 'flex', alignItems: 'center', gap: phone ? 2 : 6, minWidth: 0, overflowX: phone ? 'auto' : undefined, scrollbarWidth: 'none' }}>
+      {/* The title gives way first (down to 96px on a phone, 140 on desktop), then the actions slide sideways;
+          the main action and × always stay in view (docs/toolbars.md). */}
+      <span data-studio-actions="" style={{ display: 'flex', alignItems: 'center', gap: phone ? 2 : 6, minWidth: 0, overflowX: 'auto', scrollbarWidth: 'none' }}>
         {!phone && p.nav !== undefined && foldButton('nav', 'panelLeft', 'the sections', sc('['))}
         {!phone && p.presets !== undefined && foldButton('presets', 'panelBottom', 'the presets')}
         {!phone && p.inspector !== undefined && foldButton('inspector', 'panelRight', 'the settings', sc(']'))}
@@ -211,10 +212,9 @@ export function StudioShell(p: StudioShellProps) {
         )}
         {!phone && p.surprise}
         {p.actions}
-        {!phone && primary}
       </span>
-      {/* On a phone the actions above scroll sideways when they don't fit; Done stays in view beside them. */}
-      {phone && primary && <span style={{ flexShrink: 0, display: 'flex' }}>{primary}</span>}
+      {/* The actions above scroll sideways when they don't fit; Done stays in view beside them. */}
+      {primary && <span style={{ flexShrink: 0, display: 'flex' }}>{primary}</span>}
       {/* In a Scene builder session × drops the draft (asking first when there are changes): builders/sceneDraft.ts. */}
       <IconButton icon="close" label="Close" shortcut="esc" onClick={() => void closeSceneWindow(() => onCloseRef.current())} data-studio-close />
     </div>

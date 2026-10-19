@@ -16,6 +16,7 @@ import { Popover } from '../ui/Popover';
 import { Menu } from '../ui/Menu';
 import { randomiseMenuItems } from './canvasGraphMenu';
 import { Tooltip } from '../ui/Tooltip';
+import { FitToolbar, type FitToolbarItem } from '../ui/FitToolbar';
 import { computeGraphStats, countNodes, mainBodyLines } from './graphStats';
 import { PerfBadge, PerfPanel } from './PerfPanel';
 import { useGraphMaximize } from './graphLayout';
@@ -50,6 +51,53 @@ export function CanvasToolbar({ showOutline = false, onToggleOutline, readOnly =
   const tk = useTokens();
   // Narrow canvas (tablet, phone): Fit and Auto layout become icon buttons.
   const compact = !isDesktop(useBreakpoint());
+  const graphMaximized = useGraphMaximize(s => s.on);
+  const showMaximize = !readOnly && isDesktop(useBreakpoint());
+  // Whatever doesn't fit the canvas's width folds into a "⋯" by priority (ui/FitToolbar, docs/toolbars.md):
+  // Fit and zoom stay longest; the stats, Clear and Randomise go first.
+  const items: FitToolbarItem[] = [
+    { key: 'stats', label: 'Graph stats', hint: 'Node count and frame time', node: <GraphStatus />, priority: 30 },
+    ...(zoom !== undefined && onZoom ? [
+      { key: 'sepZoom', label: '', divider: true, priority: 30 },
+      {
+        key: 'zoom', label: 'Zoom', priority: 80,
+        node: (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+            <IconButton icon="minus" label="Zoom out" size="sm" onClick={() => onZoom(zoom / 1.2)} />
+            <Tooltip label="Reset zoom to 100%">
+              <button type="button" data-zoom-readout="" onClick={onResetZoom}
+                style={{ minWidth: 42, height: 30, border: 0, borderRadius: radius.md, background: 'none', cursor: 'pointer', color: tk.text.secondary, font: `600 12px ${fontFamily.ui}`, fontVariantNumeric: 'tabular-nums' }}
+              >{Math.round(zoom * 100)}%</button>
+            </Tooltip>
+            <IconButton icon="plus" label="Zoom in" size="sm" onClick={() => onZoom(zoom * 1.2)} />
+          </span>
+        ),
+      },
+    ] : []),
+    { key: 'sepView', label: '', divider: true, priority: 70 },
+    ...(onFit ? [{
+      key: 'fit', label: 'Fit all nodes in view', icon: 'fit' as const, shortcut: 'f', onSelect: onFit, priority: 90,
+      node: compact
+        ? <IconButton icon="fit" label="Fit all nodes in view" shortcut="f" size="sm" data-fit="" onClick={onFit} />
+        : <Tooltip label="Fit all nodes in view" shortcut="f"><ToolButton icon="fit" onClick={onFit}>Fit</ToolButton></Tooltip>,
+    }] : []),
+    ...(!readOnly && onAutoLayout ? [{
+      key: 'autoLayout', label: 'Auto layout', hint: 'Arrange left-to-right by data flow (one undo step)', icon: 'layout' as const, onSelect: onAutoLayout, priority: 70,
+      node: compact
+        ? <IconButton icon="layout" label="Auto layout: arrange left-to-right by data flow" size="sm" data-auto-layout="" onClick={onAutoLayout} />
+        : <Tooltip label="Arrange left-to-right by data flow (one undo step)"><ToolButton icon="layout" onClick={onAutoLayout}>Auto layout</ToolButton></Tooltip>,
+    }] : []),
+    ...(showMaximize ? [{ key: 'maximize', label: graphMaximized ? 'Bring the preview back' : 'Maximize the graph', hint: graphMaximized ? 'Beside the graph again' : 'The picture goes behind it, full size', node: <MaximizeGraphButton />, priority: 60 }] : []),
+    { key: 'sepTools', label: '', divider: true, priority: 50 },
+    ...(onToggleOutline ? [{
+      key: 'outline', label: 'Outline', hint: 'List every node, jump to one, or step through the graph', icon: 'layoutGraph' as const, active: showOutline, onSelect: onToggleOutline, priority: 65,
+      node: <IconButton icon="layoutGraph" size="sm" active={showOutline} data-outline-toggle="" label={showOutline ? 'Hide the outline' : 'Outline: list every node, jump to one, or step through the graph'} onClick={onToggleOutline} />,
+    }] : []),
+    ...(!readOnly ? [
+      { key: 'randomise', label: 'Randomise', hint: 'Click: one undo step. Right-click: what it changes', node: <RandomiseButton />, priority: 50 },
+      { key: 'clear', label: 'Clear the graph', hint: 'To UV and Output (undo brings it back). Right-click for more', node: <ClearGraphButton />, priority: 40 },
+    ] : []),
+  ];
   return (
     <div
       data-graph-overlay=""
@@ -58,46 +106,16 @@ export function CanvasToolbar({ showOutline = false, onToggleOutline, readOnly =
       onContextMenu={e => { e.preventDefault(); e.stopPropagation(); }}
       style={{
         position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 15,
-        display: 'flex', alignItems: 'center', gap: 2, padding: 5, borderRadius: 12, whiteSpace: 'nowrap',
-        maxWidth: 'calc(100% - 16px)', overflowX: 'auto',
+        display: 'flex', alignItems: 'center', padding: 5, borderRadius: 12, whiteSpace: 'nowrap',
+        width: 'max-content', maxWidth: 'calc(100% - 16px)', boxSizing: 'border-box',
         background: tk.bg.panel, boxShadow: tk.shadow.float, font: `12px ${fontFamily.ui}`,
       }}
     >
-      <GraphStatus />
-      {zoom !== undefined && onZoom && (
-        <>
-          <Sep />
-          <IconButton icon="minus" label="Zoom out" size="sm" onClick={() => onZoom(zoom / 1.2)} />
-          <Tooltip label="Reset zoom to 100%">
-            <button type="button" data-zoom-readout="" onClick={onResetZoom}
-              style={{ minWidth: 42, height: 30, border: 0, borderRadius: radius.md, background: 'none', cursor: 'pointer', color: tk.text.secondary, font: `600 12px ${fontFamily.ui}`, fontVariantNumeric: 'tabular-nums' }}
-            >{Math.round(zoom * 100)}%</button>
-          </Tooltip>
-          <IconButton icon="plus" label="Zoom in" size="sm" onClick={() => onZoom(zoom * 1.2)} />
-        </>
-      )}
-      <Sep />
-      {onFit && (compact
-        ? <IconButton icon="fit" label="Fit all nodes in view" shortcut="f" size="sm" data-fit="" onClick={onFit} />
-        : <Tooltip label="Fit all nodes in view" shortcut="f"><ToolButton icon="fit" onClick={onFit}>Fit</ToolButton></Tooltip>)}
-      {!readOnly && onAutoLayout && (compact
-        ? <IconButton icon="layout" label="Auto layout: arrange left-to-right by data flow" size="sm" data-auto-layout="" onClick={onAutoLayout} />
-        : <Tooltip label="Arrange left-to-right by data flow (one undo step)"><ToolButton icon="layout" onClick={onAutoLayout}>Auto layout</ToolButton></Tooltip>)}
-      {!readOnly && <MaximizeGraphButton />}
-      <Sep />
-      {onToggleOutline && (
-        <IconButton icon="layoutGraph" size="sm" active={showOutline} data-outline-toggle=""
-          label={showOutline ? 'Hide the outline' : 'Outline: list every node, jump to one, or step through the graph'} onClick={onToggleOutline} />
-      )}
-      {!readOnly && <RandomiseButton />}
-      {!readOnly && <ClearGraphButton />}
+      {/* The pill is only as wide as what's on it, so the room is the canvas's width less the margins and padding. */}
+      <FitToolbar ariaLabel="Graph tools" moreLabel="More graph tools" items={items}
+        fitTo={bar => { const pill = bar.closest('[data-canvas-toolbar]'); return pill?.parentElement ? { el: pill.parentElement, inset: 16 + 10 } : null; }} />
     </div>
   );
-}
-
-function Sep() {
-  const tk = useTokens();
-  return <span style={{ width: 1, height: 18, margin: '0 4px', background: tk.border.subtle, flex: 'none' }} />;
 }
 
 /**

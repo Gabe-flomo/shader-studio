@@ -60,7 +60,7 @@ describe('Maximize graph: the picture behind the graph', () => {
     const app = src('../../../App.tsx');
     // One preview column, restyled; header and footer only when the picture is not behind.
     expect(app).toContain('pictureBehindStyle(paletteBaseW > 0 ? effectivePaletteW : 0)');
-    expect(app).toContain('{!pictureBehind && <PreviewHeader>');
+    expect(app).toContain('{!pictureBehind && <PreviewHeader items={[');
     expect(app).toContain('{!pictureBehind && <PreviewFooter');
     expect(app).toContain('<NodeGraph redesignToolbar overPicture={pictureBehind} />');
     expect(app).toMatch(/!hosted && !pictureBehind && \(/); // no divider

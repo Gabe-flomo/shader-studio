@@ -6,6 +6,9 @@ import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
 import { Popover } from '../ui/Popover';
 import { Tooltip } from '../ui/Tooltip';
+import { Icon } from '../ui/Icon';
+import { FitToolbar, type FitToolbarItem } from '../ui/FitToolbar';
+import { OverlayButton } from '../PreviewOverlay';
 import { aspectChoices, usePhonePlay, useShownAspect } from '../play/phoneTrim';
 import { timeReadoutRef } from '../../lib/timeTick';
 import { loadShortcutMap } from '../../hooks/useShortcuts';
@@ -20,27 +23,52 @@ import { resetRuntime } from '../../lib/runtimeReset';
 // are ordinary chrome: callers wrap them back in ThemeOverrideContext value={null} so they
 // follow the app's real theme like any other panel header.
 
-export function PreviewHeader({ children }: { children?: ReactNode }) {
+export function PreviewHeader({ children, items }: { children?: ReactNode; items?: readonly FitToolbarItem[] }) {
   const tk = useTokens();
+  const label = <span style={{ whiteSpace: 'nowrap', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: tk.text.faint }}>PREVIEW</span>;
   return (
-    <div style={{ height: 44, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 2, padding: '0 8px 0 18px', background: tk.bg.panel, borderBottom: `1px solid ${tk.border.default}` }}>
-      {/* The label gives way first when the picture's column is narrow (Play, beside the panel). */}
-      <span style={{ flex: '1 1 0', minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: tk.text.faint }}>PREVIEW</span>
-      {children}
+    <div data-preview-header="" style={{ height: 44, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 2, padding: items ? '0 6px 0 18px' : '0 8px 0 18px', background: tk.bg.panel, borderBottom: `1px solid ${tk.border.default}`, minWidth: 0 }}>
+      {items ? (
+        // The tools fold into a "⋯" by priority as the column narrows (docs/toolbars.md); the label goes first.
+        <FitToolbar ariaLabel="Preview tools" moreLabel="More preview tools"
+          items={[{ key: 'label', label: 'Preview', node: label, menu: 'never', priority: 0 }, { key: 'space', label: '', grow: true }, ...items]} />
+      ) : (
+        <>
+          {/* The label gives way first when the column is narrow (the floating preview's title bar). */}
+          <span style={{ flex: '1 1 0', minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: tk.text.faint }}>PREVIEW</span>
+          {children}
+        </>
+      )}
     </div>
   );
+}
+
+/**
+ * The tools every docked preview header shares (Studio, Play, the Code page's Full canvas) as
+ * FitToolbar items with their folding priority (docs/toolbars.md): full screen and the shape stay
+ * longest; the overlay goes into the "⋯" early. Callers add their own (Finish, Stage, Record…).
+ */
+export function previewToolItems({ plainF = false }: { plainF?: boolean } = {}): FitToolbarItem[] {
+  return [
+    { key: 'aspect', label: 'Canvas shape', node: <AspectPicker onPanel compact />, priority: 90 },
+    { key: 'quality', label: 'Preview resolution', node: <PreviewQualityPicker onPanel />, priority: 70 },
+    { key: 'fps', label: 'Frame rate', node: <FrameRatePicker onPanel />, priority: 60 },
+    { key: 'overlay', label: 'Overlay', hint: 'A labelled grid, a point, a size or distances over the picture', node: <OverlayButton />, priority: 35 },
+    { key: 'fullscreen', label: 'Full screen', hint: 'The picture on its own', node: <CanvasFullscreenButton onPanel plainF={plainF} />, priority: 100 },
+  ];
 }
 
 /**
  * The picture's shape, as a row of little frames drawn in each proportion
  * (Free is a dashed one). The same setting as the export dialog's.
  */
-export function AspectPicker({ onPanel = false }: { onPanel?: boolean } = {}) {
+export function AspectPicker({ onPanel = false, compact = false }: { onPanel?: boolean; compact?: boolean } = {}) {
   const tk = useTokens();
   // A phone's Play page offers only Free and 1:1, and shows any other saved shape as Free (play/phoneTrim.ts).
   const phone = usePhonePlay();
   const value = useShownAspect();
   const set = useNodeGraphStore(s => s.setPreviewAspect);
+  if (compact) return <AspectMenu onPanel={onPanel} />;
   return (
     <div role="radiogroup" aria-label="Canvas shape" data-aspect-count={aspectChoices(phone).length} style={{ display: 'flex', alignItems: 'center', gap: 1, marginRight: 6 }}>
       {aspectChoices(phone).map(a => {
@@ -62,6 +90,60 @@ export function AspectPicker({ onPanel = false }: { onPanel?: boolean } = {}) {
         );
       })}
     </div>
+  );
+}
+
+/** A little frame drawn in a shape's proportion (Free is dashed). */
+function AspectGlyph({ ratio, on, onPanel, box = 16 }: { ratio?: number | null; on: boolean; onPanel: boolean; box?: number }) {
+  const tk = useTokens();
+  const r = ratio ?? 1.5, w = r >= 1 ? box : box * r, h = r >= 1 ? box / r : box;
+  return <span style={{ width: Math.round(w), height: Math.round(h), flexShrink: 0, borderRadius: 2, boxSizing: 'border-box', border: `1.5px ${ratio ? 'solid' : 'dashed'} ${on ? tk.accent.base : onPanel ? tk.text.faint : alpha('#ffffff', 0.45)}` }} />;
+}
+
+/**
+ * The canvas shape as one dropdown (docs/toolbars.md): the button shows the current shape and its
+ * name, the list has every shape with what it's for. The preview headers use this; the row of
+ * frames (AspectPicker) stays where there is room for it.
+ */
+function AspectMenu({ onPanel }: { onPanel: boolean }) {
+  const tk = useTokens();
+  const phone = usePhonePlay();
+  const value = useShownAspect();
+  const set = useNodeGraphStore(s => s.setPreviewAspect);
+  const ref = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const choices = aspectChoices(phone);
+  const cur = choices.find(a => a.id === value) ?? choices[0];
+  return (
+    <>
+      <Tooltip label="Canvas shape" description={`${cur.id === 'free' ? 'Free' : cur.label}: ${cur.hint}. The same setting as the export’s.`} placement="bottom">
+        <button ref={ref} type="button" aria-label={`Canvas shape: ${cur.label}`} aria-haspopup="true" aria-expanded={open} data-aspect-menu={cur.id} onClick={() => setOpen(o => !o)}
+          style={{ height: 26, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 6px 0 7px', marginRight: 4, border: 0, borderRadius: radius.md, cursor: 'pointer', whiteSpace: 'nowrap',
+            background: open ? (onPanel ? tk.bg.field : alpha('#ffffff', 0.12)) : 'transparent', color: onPanel ? tk.text.muted : alpha('#ffffff', 0.7), font: `600 11px ${fontFamily.ui}` }}>
+          <span style={{ width: 16, height: 16, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><AspectGlyph ratio={cur.ratio} on onPanel={onPanel} /></span>
+          {cur.id === 'free' ? 'Free' : cur.id}
+          <Icon name="chevD" size={11} />
+        </button>
+      </Tooltip>
+      {open && (
+        <Popover anchorRef={ref} onClose={() => setOpen(false)} width={250} padding={6}>
+          <div role="radiogroup" aria-label="Canvas shape" data-aspect-count={choices.length} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {choices.map(a => {
+              const on = a.id === value;
+              return (
+                <button key={a.id} type="button" role="radio" aria-checked={on} aria-label={`${a.label}: ${a.hint}`} onClick={() => { set(a.id); setOpen(false); }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 32, padding: '3px 10px', border: 0, borderRadius: radius.md, cursor: 'pointer', textAlign: 'left',
+                    background: on ? tk.bg.selected : 'transparent', color: on ? tk.accent.text : tk.text.primary }}>
+                  <span style={{ width: 18, display: 'inline-flex', justifyContent: 'center' }}><AspectGlyph ratio={a.ratio} on={on} onPanel /></span>
+                  <span style={{ font: `${on ? 600 : 500} 12.5px ${fontFamily.ui}`, minWidth: 44 }}>{a.id === 'free' ? 'Free' : a.label}</span>
+                  <span style={{ flex: 1, fontSize: 11.5, color: tk.text.faint }}>{a.hint}</span>
+                </button>
+              );
+            })}
+          </div>
+        </Popover>
+      )}
+    </>
   );
 }
 

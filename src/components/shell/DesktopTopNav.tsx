@@ -122,10 +122,14 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
   return (
     <div
       ref={barRef}
+      data-top-nav=""
       style={{
         height: 56, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12, padding: '0 14px 0 18px',
         background: tk.bg.panel, borderBottom: `1px solid ${tk.border.default}`, color: tk.text.primary,
         font: `12.5px ${fontFamily.ui}`, userSelect: 'none', minWidth: 0,
+        // The last resort, past every fold stage (a browser window narrower than the desktop app's 900px):
+        // the bar scrolls sideways so Record and ⋯ are never cut off (docs/toolbars.md).
+        ...(hideWordmark ? { overflowX: 'auto' as const, overflowY: 'hidden' as const, scrollbarWidth: 'none' as const } : null),
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: hideWordmark || fold.compactBrand ? 'auto' : 250, flexShrink: hideWordmark || fold.compactBrand ? 0 : 1, minWidth: hideWordmark ? undefined : 36, overflow: 'hidden' }}>
@@ -148,7 +152,9 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
         role="tablist"
         aria-label="Pages"
         style={{
-          display: 'flex', gap: 2, padding: 3, borderRadius: 10, background: tk.bg.hover, flexShrink: 1, minWidth: 0,
+          display: 'flex', gap: 2, padding: 3, borderRadius: 10, background: tk.bg.hover, flexShrink: 1,
+          // Once the bar itself scrolls (the last resort), the strip keeps room for the current page; the rest are in "···".
+          minWidth: hideWordmark ? 120 : 0,
           // Always scrollable, not just once `fold.scrollTabs` kicks in: the right cluster
           // (never shrinks below its own content — see below) can still squeeze this strip
           // narrower than its tabs' natural width in between fold stages, and every tab has to

@@ -487,8 +487,8 @@ look at the graph.
 (docs/guided-convert.md): the same converter, but you choose the cuts. Select lines of the shader, make
 them Nodes, Expression Blocks or One function, choose which numbers become sliders, inputs or stay
 fixed, group steps; what isn't converted yet runs as one Custom Function (a "remainder"), so the graph
-draws the shader at every step and the check says Same picture / Differs after each one. The GLSL page's
-**Step by step** button opens a shader there. The shader is fixed while Guided is open; **Edit** goes back
+draws the shader at every step and the check says Same picture / Differs after each one. The Shader tab's
+⋯ → **Convert step by step** opens a shader there. The shader is fixed while Guided is open; **Edit** goes back
 to the automatic page and its editor.
 
 ## Product plan
