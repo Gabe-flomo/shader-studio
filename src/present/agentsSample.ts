@@ -62,12 +62,11 @@ const SLIDE_CONTROLS: Record<string, PlayControl[]> = {
     ctl('drag', 'burst::sbMove::drag', 'Integrate · Drag', 0, 8, 0.05),
     ctl('curl', 'burst::sbCurl::strength', 'Curl noise · Strength', 0, 1.5, 0.01),
   ],
-  agentAnts: [
-    ctl('halfLife', 'antTrail::halfLife', 'Trail · Half-life (s)', 0.2, 10, 0.1),
-    ctl('angle', 'ants::antSense::angle', 'Sense · Angle', 5, 90, 0.5),
-    ctl('turn', 'ants::antSteer::turn', 'Steer · Turn', 0, 90, 0.5),
-    ctl('jitter', 'ants::antSteer::jitter', 'Steer · Jitter', 0, 1, 0.01),
-    ctl('steps', 'ants::stepsPerFrame', 'Steps per frame', 1, 8, 1),
+  agentGalaxy: [
+    ctl('spin', 'galaxy::gxOrbit::spin', 'Orbit and arms · Spin', 0, 2, 0.01),
+    ctl('arms', 'galaxy::gxOrbit::arms', 'Orbit and arms · Arms', 0, 0.4, 0.005),
+    ctl('wind', 'galaxy::gxOrbit::wind', 'Orbit and arms · Wind', 0, 12, 0.1),
+    ctl('steps', 'galaxy::stepsPerFrame', 'Steps per frame', 1, 8, 1),
   ],
 };
 
@@ -135,7 +134,7 @@ export function compileGraph(graph) {
 export async function buildAgentsPresentation(now = Date.now()): Promise<Presentation> {
   const keys = [
     'agentRuleSlime',
-    'slimeMold', 'agentParticles', 'agentCurlSmoke', 'agentSoundBurst', 'agentMultiSlime', 'agentAnts', 'agentBoids', 'agentStrands', 'agentGrowPicture',
+    'slimeMold', 'agentParticles', 'agentCurlSmoke', 'agentSoundBurst', 'agentMultiSlime', 'agentGalaxy', 'agentBoids', 'agentStrands', 'agentGrowPicture',
     'agentsHandBeat',
   ] as const;
   // The sketch as it is; the presets at slide size, with their settings as controls.
@@ -250,17 +249,17 @@ Move over the picture: the mouse pulls and stirs. Try [[control:curl]] at 0 (onl
 
     // 6 ─────────────────────────────────────────────────────────────────────
     step('Each walker can remember', [
-      interactive('agentAnts', `A walker can carry state of its own from step to step. Ants need one thing: **am I carrying food?** That's Agent Output's **Memory**.
+      interactive('agentGalaxy', `A walker can carry state of its own from step to step: Agent Output's **Memory**, numbers it sets and reads back next step. Each star here needs one thing: **the radius of its own orbit**.
 
-Searching ants follow the food smell and lay the home smell; carrying ants follow the home smell and lay the food smell. Each one's **Deposit** is its own, weaker the longer it has walked, so short roads get the freshest smell and win. The rocks are Move's **Obstacle ƒ** (turn back) and the Trail's **Block** (no smell inside).
+On its first step a star remembers how far out it was born; from then on **Orbit and arms** moves it one step round that circle, every step, so the galaxy keeps its shape for ever instead of spreading out or falling in. Without the Memory a star would only know where it is now, and every small error would drift it off its orbit.
 
-Roads are there from the start (the group's **Pre-roll** runs 20 seconds before the first frame), and they keep changing. Shorten [[control:halfLife]] to 0.1 and old detours fade sooner: the roads straighten and find the far pile. Lengthen it and old loops linger. Raise [[control:jitter]] for wider, busier roads; try [[control:angle]] and [[control:turn]] for how sharply ants follow a smell, and [[control:steps]] to speed it all up.`, [
-        ['halfLife', 'Smell half-life (s)'], ['angle', 'Sense · Angle'], ['turn', 'Steer · Turn'], ['jitter', 'Steer · Jitter'], ['steps', 'Steps per frame'],
+The arms are not made of the same stars. The orbit is bent a little in and out by a two-armed spiral ([[control:arms]] how much, [[control:wind]] how tightly it winds) that turns slowly, so stars bunch up where they pass through it: a traffic jam they drive through. [[control:spin]] sets how fast they orbit, nearly the same at every radius, as real galaxies do; [[control:steps]] speeds it all up.`, [
+        ['spin', 'Orbit and arms · Spin'], ['arms', 'Orbit and arms · Arms'], ['wind', 'Orbit and arms · Wind'], ['steps', 'Steps per frame'],
       ]),
       text(`**What a walker can keep:**
 
 - **Species** (1 to 4), from Emit's Species setting, kept for life. Sense's Channels default to +1 for its own kind's trail and −0.5 for the others'.
-- **Memory**: two numbers it sets and reads back next step (the ants' "carrying" and "seconds walked").
+- **Memory**: numbers it sets and reads back next step (a star's orbit radius; an ant's "carrying" and "seconds walked").
 - **Deposit**: how much trail it leaves in each channel, so a rule can decide who marks what.
 - **Colour**: its own colour, shown by Draw agents' **Colour by Agent**.
 

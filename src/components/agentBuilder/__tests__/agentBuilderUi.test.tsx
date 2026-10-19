@@ -233,18 +233,14 @@ function normalizeOld() {
 describe('presets', () => {
   it('a picture card applies its rule set as one undo step; undo takes it back', () => {
     startTrail();
-    expect($$('[data-preset]').map(b => b.getAttribute('data-preset'))).toEqual(['slime', 'veins', 'ants', 'dla']);
+    expect($$('[data-preset]').map(b => b.getAttribute('data-preset'))).toEqual(['slime', 'veins', 'cells', 'dla']);
     click($('[data-preset="veins"]'));
     expect(groupRules(group()!).species[0].rules[0].do[0]).toMatchObject({ kind: 'turn', degrees: 20 });
     expect($('[data-studio-section="turning"] [data-studio-summary]')?.textContent).toBe('20° · wobble 7°');
-    click($('[data-preset="ants"]'));
-    expect(groupRules(group()!).kind).toBe('ants');
-    // The ants are cards now (named memories, phase 4): nothing Advanced.
-    expect($('[data-studio-section="memory"] [data-studio-summary]')?.textContent).toBe('carrying · away');
-    expect($('[data-studio-section="advanced"] [data-studio-summary]')?.textContent).toBe('every rule as lines');
+    click($('[data-preset="cells"]'));
+    expect(groupRules(group()!).sensor.angle).toBe(45);
     act(() => { useNodeGraphStore.getState().undo(); });
     expect(groupRules(group()!).species[0].rules[0].do[0]).toMatchObject({ kind: 'turn', degrees: 20 });
-    expect($('[data-studio-section="memory"] [data-studio-summary]')?.textContent).toBe('none');
     act(() => { useNodeGraphStore.getState().undo(); });
     expect(groupRules(group()!).species[0].rules[0].do[0]).toMatchObject({ kind: 'turn', degrees: 45 });
   });

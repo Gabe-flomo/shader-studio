@@ -45,6 +45,7 @@ import { CELL3_DECL, CELL3_GLOBAL, CELL3SIZE_GLOBAL } from '../nodes/definitions
 import { TC_SPACE_DECL } from '../nodes/definitions/timeCube';
 import { ECHO_CAPTURE_UNIFORM, ECHO_INPUT_GLOBAL, isLegacyEcho } from '../nodes/definitions/echo';
 import { safeMarchLines, safeMarchSteps, stepsHeatmap, warpSafetyOf } from './warpSafety';
+import { voxelAoLines, voxelWalkLines } from './voxelMarch';
 import {
   getKeyframeConfig, generateKeyframeGLSL, isKeyframeBypassed,
   getAxisKeyframeConfig, generateVectorKeyframeGLSL, socketHasVectorKeyframes, VECTOR_AXES,
@@ -3145,39 +3146,10 @@ export class ShaderAssembler {
           const mlVoxels = node.params.voxels === true && !mlSafe && !mlVolumetric && mlHasScene && curved.decl === '';
           const mlVoxelSize = fmtP(node.params.voxelSize, 0.08);
           const S = nodeSlug;
-          const voxelLoop = (): string[] => [
-            accumDecls,
-            `    float ${S}_t   = 0.0;\n`,
-            `    float ${S}_hit = 0.0;\n`,
-            `    int   ${S}_si  = ${mlMaxSteps * 2};\n`,
-            `    float ${S}_vs  = max(${mlVoxelSize}, 0.002);\n`,
-            `    vec3  ${S}_vd  = ${mlRd} + vec3(equal(${mlRd}, vec3(0.0))) * 1e-6;\n`,
-            `    vec3  ${S}_vst = sign(${S}_vd);\n`,
-            `    vec3  ${S}_vdt = ${S}_vs / abs(${S}_vd);\n`,
-            `    vec3  ${S}_vn  = vec3(0.0, 1.0, 0.0);\n`,
-            `    vec3  ${S}_vc  = floor(${mlRo} / ${S}_vs);\n`,
-            `    vec3  ${S}_vtm = ((${S}_vc + max(${S}_vst, 0.0)) * ${S}_vs - ${mlRo}) / ${S}_vd;\n`,
-            `    for (int ${S}_i = 0; ${S}_i < ${mlMaxSteps * 2}; ${S}_i++) {\n`,
-            // The scene at this cell's centre: inside, the cell is solid.
-            `        vec3  ${S}_rp_raw = (${S}_vc + 0.5) * ${S}_vs;\n`,
-            `        vec3  ${S}_rp = ${warpPos(`${S}_rp_raw`, `${S}_t`)};\n`,
-            `        float ${S}_d  = ${callScene(`${S}_rp`)};\n`,
-            `        if (${S}_d < 0.0) { ${S}_hit = 1.0; ${S}_si = ${S}_i; break; }\n`,
-            // Far from anything: every cell within d − 1.74 voxels of this centre is empty, so jump ahead.
-            `        if (${S}_d > 2.5 * ${S}_vs) {\n`,
-            `            ${S}_t += ${S}_d - 1.75 * ${S}_vs;\n`,
-            `            ${S}_vc = floor((${mlRo} + ${mlRd} * ${S}_t) / ${S}_vs);\n`,
-            `            ${S}_vtm = ((${S}_vc + max(${S}_vst, 0.0)) * ${S}_vs - ${mlRo}) / ${S}_vd;\n`,
-            `        } else if (${S}_vtm.x < ${S}_vtm.y && ${S}_vtm.x < ${S}_vtm.z) {\n`,
-            `            ${S}_t = ${S}_vtm.x; ${S}_vc.x += ${S}_vst.x; ${S}_vtm.x += ${S}_vdt.x; ${S}_vn = vec3(-${S}_vst.x, 0.0, 0.0);\n`,
-            `        } else if (${S}_vtm.y < ${S}_vtm.z) {\n`,
-            `            ${S}_t = ${S}_vtm.y; ${S}_vc.y += ${S}_vst.y; ${S}_vtm.y += ${S}_vdt.y; ${S}_vn = vec3(0.0, -${S}_vst.y, 0.0);\n`,
-            `        } else {\n`,
-            `            ${S}_t = ${S}_vtm.z; ${S}_vc.z += ${S}_vst.z; ${S}_vtm.z += ${S}_vdt.z; ${S}_vn = vec3(0.0, 0.0, -${S}_vst.z);\n`,
-            `        }\n`,
-            `        if (${S}_t > ${mlMaxDist}) { ${S}_si = ${S}_i; break; }\n`,
-            `    }\n`,
-          ];
+          const voxelLoop = (): string[] => voxelWalkLines({
+            prefix: S, ro: mlRo, rd: mlRd, steps: mlMaxSteps * 2, maxDist: mlMaxDist, size: mlVoxelSize, prelude: accumDecls,
+            warp: (centre, t) => warpPos(centre, t), sample: callScene,
+          });
           const marchLoopLines = mlVoxels ? voxelLoop() : mlSafe ? safeLoop() : mlVolumetric ? [
             // Volumetric mode: no hit detection, runs all steps.
             // If scene connected: step by max(sdf, passthrough). If not: step by passthrough (pure density).
@@ -3944,7 +3916,15 @@ export class ShaderAssembler {
           const giSafe = giSafety !== 'off' && (!mlVolumetric || mlHasScene);
           const giSafeSteps = giSafe ? safeMarchSteps(giSafety, mlMaxSteps) : mlMaxSteps;
           const giDiv = giSafe ? ` / ${nodeSlug}_lip` : '';
-          const giMarchLoopLines = giSafe ? safeMarchLines({
+          // Voxels (docs/march-voxels.md), as on the March Loop: the camera ray walks the cube grid, and so do the
+          // shadow, bounce and reflection rays, so shadows and reflections are cubes too; AO counts the solid cells
+          // round each face. Same limits as the March Loop (not with Volumetric, Space curvature or Warp safety).
+          const giVox = node.params.voxels === true && !giSafe && !mlVolumetric && mlHasScene && curved.decl === '';
+          const giVoxSize = fmtP(node.params.voxelSize, 0.08);
+          const giMarchLoopLines = giVox ? voxelWalkLines({
+            prefix: nodeSlug, ro: mlRo, rd: mlRd, steps: mlMaxSteps * 2, maxDist: mlMaxDist, size: giVoxSize, prelude: accumDecls,
+            warp: (centre, t) => warpPos(centre, t), sample: callScene,
+          }) : giSafe ? safeMarchLines({
             S: nodeSlug, safety: giSafety as Exclude<typeof giSafety, 'off'>, maxSteps: mlMaxSteps, stepScale: mlStepScale,
             maxStep: fmtP(node.params.maxStep, 0.5), volumetric: mlVolumetric, passthrough: mlPassthrough,
             at: t => curved.at(t), stepFactor: t => curved.stepFactor(t), end: curved.end,
@@ -3982,6 +3962,9 @@ export class ShaderAssembler {
             `    }\n`,
           ];
 
+          const giShSt = Math.max(4, Math.min(48, Number(node.params.shadowSteps) || 24));
+          const giGiSt = Math.max(4, Math.min(48, Number(node.params.giSteps) || 16));
+          const giSpSt = Math.max(4, Math.min(48, Number(node.params.specSteps) || 24));
           // Build GI lighting or fall back to basic diffuse when no scene or volumetric
           const giLightingLines = mlHasScene && !mlVolumetric ? [
             `    vec3  ${nodeSlug}_alb     = ${albedoVar};\n`,
@@ -3992,33 +3975,41 @@ export class ShaderAssembler {
             `    vec3  ${nodeSlug}_skyTopC = ${skyTopVar};\n`,
             `    vec3  ${nodeSlug}_skyBotC = ${skyBotVar};\n`,
             `    const int ${nodeSlug}_aoSt    = ${Math.max(3, Math.min(12, Number(node.params.aoSteps) || 5))};\n`,
-            `    const int ${nodeSlug}_shSt    = ${Math.max(4, Math.min(48, Number(node.params.shadowSteps) || 24))};\n`,
-            `    const int ${nodeSlug}_giSt    = ${Math.max(4, Math.min(48, Number(node.params.giSteps) || 16))};\n`,
-            `    const int ${nodeSlug}_spSt    = ${Math.max(4, Math.min(48, Number(node.params.specSteps) || 24))};\n`,
+            `    const int ${nodeSlug}_shSt    = ${giShSt};\n`,
+            `    const int ${nodeSlug}_giSt    = ${giGiSt};\n`,
+            `    const int ${nodeSlug}_spSt    = ${giSpSt};\n`,
             `    float ${nodeSlug}_giStr   = ${fmtP(node.params.giStrength,   0.4)};\n`,
             `    float ${nodeSlug}_spStr   = ${fmtP(node.params.specStrength, 0.5)};\n`,
-            // AO: march along normal, measure how much geometry occludes the hemisphere
-            `    float ${nodeSlug}_ao      = 0.0;\n`,
-            `    float ${nodeSlug}_aoScl   = 1.0;\n`,
-            `    for (int ${nodeSlug}_aoi = 1; ${nodeSlug}_aoi <= ${nodeSlug}_aoSt; ${nodeSlug}_aoi++) {\n`,
-            `        float ${nodeSlug}_aod = float(${nodeSlug}_aoi) * 0.08;\n`,
-            `        float ${nodeSlug}_aos = ${nodeSlug}_aod - ${callScene(`${nodeSlug}_hp + ${nodeSlug}_n * ${nodeSlug}_aod`)};\n`,
-            `        ${nodeSlug}_ao += ${nodeSlug}_aos * ${nodeSlug}_aoScl;\n`,
-            `        ${nodeSlug}_aoScl *= 0.5;\n`,
-            `    }\n`,
-            `    ${nodeSlug}_ao = clamp(1.0 - 3.0 * ${nodeSlug}_ao, 0.0, 1.0) * ${nodeSlug}_hit;\n`,
-            // Soft shadow: IQ penumbra formula
-            `    float ${nodeSlug}_sha     = 1.0;\n`,
-            `    vec3  ${nodeSlug}_shro    = ${nodeSlug}_hp + ${nodeSlug}_n * 0.002;\n`,
-            `    float ${nodeSlug}_sht     = 0.01;\n`,
-            `    for (int ${nodeSlug}_shi = 0; ${nodeSlug}_shi < ${nodeSlug}_shSt; ${nodeSlug}_shi++) {\n`,
-            `        float ${nodeSlug}_shd = ${callScene(`${nodeSlug}_shro + ${nodeSlug}_ld * ${nodeSlug}_sht`)};\n`,
-            `        if (${nodeSlug}_shd < 0.0001) { ${nodeSlug}_sha = 0.0; break; }\n`,
-            `        ${nodeSlug}_sha = min(${nodeSlug}_sha, 8.0 * ${nodeSlug}_shd / ${nodeSlug}_sht);\n`,
-            `        ${nodeSlug}_sht += ${nodeSlug}_shd${giDiv};\n`,
-            `        if (${nodeSlug}_sht > 8.0) break;\n`,
-            `    }\n`,
-            `    ${nodeSlug}_sha = clamp(${nodeSlug}_sha, 0.0, 1.0);\n`,
+            ...(giVox ? [
+              // Voxels: corner AO from the solid cells round the face; a hard, cube-shaped shadow from a walk to the light.
+              ...voxelAoLines(nodeSlug, `${nodeSlug}_hp`, cell => `(1.0 - step(0.0, ${callScene(`((${cell}) + 0.5) * ${nodeSlug}_vs`)}))`),
+              `    ${nodeSlug}_ao *= ${nodeSlug}_hit;\n`,
+              ...voxelWalkLines({ prefix: `${nodeSlug}_shv`, ro: `(${nodeSlug}_hp + ${nodeSlug}_n * (0.05 * ${nodeSlug}_vs))`, rd: `${nodeSlug}_ld`, steps: giShSt * 4, maxDist: '8.0', size: `${nodeSlug}_vs`, sample: callScene }),
+              `    float ${nodeSlug}_sha     = 1.0 - ${nodeSlug}_shv_hit;\n`,
+            ] : [
+              // AO: march along normal, measure how much geometry occludes the hemisphere
+              `    float ${nodeSlug}_ao      = 0.0;\n`,
+              `    float ${nodeSlug}_aoScl   = 1.0;\n`,
+              `    for (int ${nodeSlug}_aoi = 1; ${nodeSlug}_aoi <= ${nodeSlug}_aoSt; ${nodeSlug}_aoi++) {\n`,
+              `        float ${nodeSlug}_aod = float(${nodeSlug}_aoi) * 0.08;\n`,
+              `        float ${nodeSlug}_aos = ${nodeSlug}_aod - ${callScene(`${nodeSlug}_hp + ${nodeSlug}_n * ${nodeSlug}_aod`)};\n`,
+              `        ${nodeSlug}_ao += ${nodeSlug}_aos * ${nodeSlug}_aoScl;\n`,
+              `        ${nodeSlug}_aoScl *= 0.5;\n`,
+              `    }\n`,
+              `    ${nodeSlug}_ao = clamp(1.0 - 3.0 * ${nodeSlug}_ao, 0.0, 1.0) * ${nodeSlug}_hit;\n`,
+              // Soft shadow: IQ penumbra formula
+              `    float ${nodeSlug}_sha     = 1.0;\n`,
+              `    vec3  ${nodeSlug}_shro    = ${nodeSlug}_hp + ${nodeSlug}_n * 0.002;\n`,
+              `    float ${nodeSlug}_sht     = 0.01;\n`,
+              `    for (int ${nodeSlug}_shi = 0; ${nodeSlug}_shi < ${nodeSlug}_shSt; ${nodeSlug}_shi++) {\n`,
+              `        float ${nodeSlug}_shd = ${callScene(`${nodeSlug}_shro + ${nodeSlug}_ld * ${nodeSlug}_sht`)};\n`,
+              `        if (${nodeSlug}_shd < 0.0001) { ${nodeSlug}_sha = 0.0; break; }\n`,
+              `        ${nodeSlug}_sha = min(${nodeSlug}_sha, 8.0 * ${nodeSlug}_shd / ${nodeSlug}_sht);\n`,
+              `        ${nodeSlug}_sht += ${nodeSlug}_shd${giDiv};\n`,
+              `        if (${nodeSlug}_sht > 8.0) break;\n`,
+              `    }\n`,
+              `    ${nodeSlug}_sha = clamp(${nodeSlug}_sha, 0.0, 1.0);\n`,
+            ]),
             // Sky dome IBL: blend top/bottom by normal Y, gate by AO
             `    float ${nodeSlug}_skyFac  = ${nodeSlug}_n.y * 0.5 + 0.5;\n`,
             `    vec3  ${nodeSlug}_skyC    = mix(${nodeSlug}_skyBotC, ${nodeSlug}_skyTopC, ${nodeSlug}_skyFac);\n`,
@@ -4035,34 +4026,45 @@ export class ShaderAssembler {
             `    vec3  ${nodeSlug}_gtx    = normalize(cross(${nodeSlug}_n, abs(${nodeSlug}_n.y) < 0.9 ? vec3(0.0,1.0,0.0) : vec3(1.0,0.0,0.0)));\n`,
             `    vec3  ${nodeSlug}_gbt    = cross(${nodeSlug}_n, ${nodeSlug}_gtx);\n`,
             `    vec3  ${nodeSlug}_gdir   = ${nodeSlug}_gsinT*(cos(${nodeSlug}_gphi)*${nodeSlug}_gtx + sin(${nodeSlug}_gphi)*${nodeSlug}_gbt) + ${nodeSlug}_gcosT*${nodeSlug}_n;\n`,
-            `    float ${nodeSlug}_gt     = 0.01;\n`,
-            `    float ${nodeSlug}_ghit   = 0.0;\n`,
-            `    for (int ${nodeSlug}_gii = 0; ${nodeSlug}_gii < ${nodeSlug}_giSt; ${nodeSlug}_gii++) {\n`,
-            `        float ${nodeSlug}_gd = ${callScene(`${nodeSlug}_hp + ${nodeSlug}_gdir * ${nodeSlug}_gt + ${nodeSlug}_n * 0.003`)};\n`,
-            `        if (${nodeSlug}_gd < 0.0005) { ${nodeSlug}_ghit = 1.0; break; }\n`,
-            `        ${nodeSlug}_gt += ${nodeSlug}_gd${giDiv};\n`,
-            `        if (${nodeSlug}_gt > 3.0) break;\n`,
-            `    }\n`,
+            ...(giVox ? [
+              ...voxelWalkLines({ prefix: `${nodeSlug}_gv`, ro: `(${nodeSlug}_hp + ${nodeSlug}_n * (0.05 * ${nodeSlug}_vs))`, rd: `${nodeSlug}_gdir`, steps: giGiSt * 2, maxDist: '3.0', size: `${nodeSlug}_vs`, sample: callScene }),
+              `    float ${nodeSlug}_ghit   = ${nodeSlug}_gv_hit;\n`,
+            ] : [
+              `    float ${nodeSlug}_gt     = 0.01;\n`,
+              `    float ${nodeSlug}_ghit   = 0.0;\n`,
+              `    for (int ${nodeSlug}_gii = 0; ${nodeSlug}_gii < ${nodeSlug}_giSt; ${nodeSlug}_gii++) {\n`,
+              `        float ${nodeSlug}_gd = ${callScene(`${nodeSlug}_hp + ${nodeSlug}_gdir * ${nodeSlug}_gt + ${nodeSlug}_n * 0.003`)};\n`,
+              `        if (${nodeSlug}_gd < 0.0005) { ${nodeSlug}_ghit = 1.0; break; }\n`,
+              `        ${nodeSlug}_gt += ${nodeSlug}_gd${giDiv};\n`,
+              `        if (${nodeSlug}_gt > 3.0) break;\n`,
+              `    }\n`,
+            ]),
             `    vec3  ${nodeSlug}_giC    = ${nodeSlug}_ghit > 0.5 ? ${nodeSlug}_alb * 0.35 : ${nodeSlug}_skyC * 0.5;\n`,
             `    float ${nodeSlug}_gcos   = max(0.0, dot(${nodeSlug}_n, ${nodeSlug}_gdir));\n`,
             `    vec3  ${nodeSlug}_gi     = ${nodeSlug}_giC * ${nodeSlug}_gcos * ${nodeSlug}_giStr * ${nodeSlug}_ao;\n`,
             // Specular: reflect primary ray, re-march, Schlick Fresnel blend
             `    vec3  ${nodeSlug}_rv     = reflect(${mlRd}, ${nodeSlug}_n);\n`,
-            `    float ${nodeSlug}_rt     = 0.01;\n`,
-            `    float ${nodeSlug}_rhit   = 0.0;\n`,
-            `    for (int ${nodeSlug}_ri = 0; ${nodeSlug}_ri < ${nodeSlug}_spSt; ${nodeSlug}_ri++) {\n`,
-            `        float ${nodeSlug}_rd2 = ${callScene(`${nodeSlug}_hp + ${nodeSlug}_rv * ${nodeSlug}_rt + ${nodeSlug}_n * 0.003`)};\n`,
-            `        if (${nodeSlug}_rd2 < 0.0005) { ${nodeSlug}_rhit = 1.0; break; }\n`,
-            `        ${nodeSlug}_rt += ${nodeSlug}_rd2${giDiv};\n`,
-            `        if (${nodeSlug}_rt > ${mlMaxDist} * 0.5) break;\n`,
-            `    }\n`,
-            `    vec3  ${nodeSlug}_rhp    = ${nodeSlug}_hp + ${nodeSlug}_rv * ${nodeSlug}_rt;\n`,
-            `    float ${nodeSlug}_re     = 0.001;\n`,
-            `    vec3  ${nodeSlug}_rn     = normalize(vec3(\n`,
-            `        ${callScene(`${nodeSlug}_rhp+vec3(${nodeSlug}_re,0.0,0.0)`)} - ${callScene(`${nodeSlug}_rhp-vec3(${nodeSlug}_re,0.0,0.0)`)},\n`,
-            `        ${callScene(`${nodeSlug}_rhp+vec3(0.0,${nodeSlug}_re,0.0)`)} - ${callScene(`${nodeSlug}_rhp-vec3(0.0,${nodeSlug}_re,0.0)`)},\n`,
-            `        ${callScene(`${nodeSlug}_rhp+vec3(0.0,0.0,${nodeSlug}_re)`)} - ${callScene(`${nodeSlug}_rhp-vec3(0.0,0.0,${nodeSlug}_re)`)}\n`,
-            `    ));\n`,
+            ...(giVox ? [
+              ...voxelWalkLines({ prefix: `${nodeSlug}_rfv`, ro: `(${nodeSlug}_hp + ${nodeSlug}_n * (0.05 * ${nodeSlug}_vs))`, rd: `${nodeSlug}_rv`, steps: giSpSt * 2, maxDist: `${mlMaxDist} * 0.5`, size: `${nodeSlug}_vs`, sample: callScene }),
+              `    float ${nodeSlug}_rhit   = ${nodeSlug}_rfv_hit;\n`,
+              `    vec3  ${nodeSlug}_rn     = ${nodeSlug}_rfv_vn;\n`,
+            ] : [
+              `    float ${nodeSlug}_rt     = 0.01;\n`,
+              `    float ${nodeSlug}_rhit   = 0.0;\n`,
+              `    for (int ${nodeSlug}_ri = 0; ${nodeSlug}_ri < ${nodeSlug}_spSt; ${nodeSlug}_ri++) {\n`,
+              `        float ${nodeSlug}_rd2 = ${callScene(`${nodeSlug}_hp + ${nodeSlug}_rv * ${nodeSlug}_rt + ${nodeSlug}_n * 0.003`)};\n`,
+              `        if (${nodeSlug}_rd2 < 0.0005) { ${nodeSlug}_rhit = 1.0; break; }\n`,
+              `        ${nodeSlug}_rt += ${nodeSlug}_rd2${giDiv};\n`,
+              `        if (${nodeSlug}_rt > ${mlMaxDist} * 0.5) break;\n`,
+              `    }\n`,
+              `    vec3  ${nodeSlug}_rhp    = ${nodeSlug}_hp + ${nodeSlug}_rv * ${nodeSlug}_rt;\n`,
+              `    float ${nodeSlug}_re     = 0.001;\n`,
+              `    vec3  ${nodeSlug}_rn     = normalize(vec3(\n`,
+              `        ${callScene(`${nodeSlug}_rhp+vec3(${nodeSlug}_re,0.0,0.0)`)} - ${callScene(`${nodeSlug}_rhp-vec3(${nodeSlug}_re,0.0,0.0)`)},\n`,
+              `        ${callScene(`${nodeSlug}_rhp+vec3(0.0,${nodeSlug}_re,0.0)`)} - ${callScene(`${nodeSlug}_rhp-vec3(0.0,${nodeSlug}_re,0.0)`)},\n`,
+              `        ${callScene(`${nodeSlug}_rhp+vec3(0.0,0.0,${nodeSlug}_re)`)} - ${callScene(`${nodeSlug}_rhp-vec3(0.0,0.0,${nodeSlug}_re)`)}\n`,
+              `    ));\n`,
+            ]),
             `    float ${nodeSlug}_rdif   = max(0.0, dot(${nodeSlug}_rn, ${nodeSlug}_ld)) * 0.8 + 0.15;\n`,
             `    float ${nodeSlug}_rskyF  = ${nodeSlug}_rn.y * 0.5 + 0.5;\n`,
             `    vec3  ${nodeSlug}_rskyC  = mix(${nodeSlug}_skyBotC, ${nodeSlug}_skyTopC, ${nodeSlug}_rskyF);\n`,
@@ -4088,11 +4090,13 @@ export class ShaderAssembler {
 
           const giMarchCode = [
             ...giMarchLoopLines,
-            `    float ${nodeSlug}_iter      = float(${nodeSlug}_si) / float(${giSafeSteps});\n`,
+            `    float ${nodeSlug}_iter      = float(${nodeSlug}_si) / float(${giVox ? mlMaxSteps * 2 : giSafeSteps});\n`,
             `    float ${nodeSlug}_iterCount = float(${nodeSlug}_si);\n`,
             `    vec3  ${nodeSlug}_hp_raw  = ${curved.at(`${nodeSlug}_t`)};\n`,
             `    vec3  ${nodeSlug}_hp  = ${warpPos(`${nodeSlug}_hp_raw`, `${nodeSlug}_t`)};\n`,
-            ...(mlVolumetric || !mlHasScene ? [
+            ...(giVox ? [
+              `    vec3  ${nodeSlug}_n   = ${nodeSlug}_vn;\n`,
+            ] : mlVolumetric || !mlHasScene ? [
               `    vec3  ${nodeSlug}_n   = vec3(0.0, 1.0, 0.0);\n`,
             ] : [
               `    float ${nodeSlug}_e   = 0.001;\n`,

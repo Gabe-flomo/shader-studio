@@ -46,6 +46,10 @@ export const GRID_RULES_EXAMPLE_INDEX: Record<string, { label: string; descripti
     label: 'Grid sims 10 · Pattern rules: frost (Grid Rules)', play: true,
     description: 'One pattern rule with a count: an empty cell with exactly one frozen cell round it freezes. Arms branch from a few seeds in the middle; Age fade colours them by when they froze. Shows the Patterns editor.',
   },
+  gridRulesLabyrinth: {
+    label: 'Grid sims 12 · Reaction-diffusion: labyrinth (Grid Rules)', play: true,
+    description: 'Gray–Scott reaction–diffusion on a Grid Rules node (Smooth, Reaction, the Labyrinth preset): two chemicals that feed, eat and spread, winding into a maze of stripes like a fingerprint, drawn as a copper etching on dark teal. Play sets Feed and Kill; Feed 0.0367 / Kill 0.0649 turns it into Mitosis, spots that divide.',
+  },
   gridRulesGas: {
     label: 'Grid sims 11 · Block rules: gas (Grid Rules)', play: true,
     description: 'Toffoli and Margolus\'s HPP gas as four block rules turned four ways: particles fly diagonally and bounce off each other at right angles. A ball of gas in the middle spreads into a diamond. Shows the Blocks editor.',

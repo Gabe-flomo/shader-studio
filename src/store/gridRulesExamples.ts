@@ -320,5 +320,27 @@ export function buildGridRulesExamples(): Record<string, ExampleGraph> {
       ctl('brush', 'gas::brushRadius', 'Brush size (cells)', 0.5, 20, 0.5),
     ], `**What it shows.** A Blocks rule with turns: one before → after picture covers four directions.\n\n${HOW}\n\n**Try.** In the editor, switch off the collision rule (rule 2): the particles pass through each other and the diamond stays sharp.`),
   };
+  // 12 · Reaction-diffusion: the labyrinth (Gray–Scott)
+  g.gridRulesLabyrinth = {
+    ...GRID_RULES_EXAMPLE_INDEX.gridRulesLabyrinth, counter: 20,
+    nodes: [
+      grid('rd', 'Labyrinth', {
+        ruleType: 'smooth', ...presetPatch(SMOOTH_PRESETS.maze), board: '0.5', edges: 'wrap', start: 'noise', density: 0.3, steps: 16, brushRadius: 6, brushState: 1, gain: 1.1,
+        color0: [0.006, 0.014, 0.02], color1: [0.03, 0.12, 0.14], color2: [0.72, 0.42, 0.22], color3: [1.0, 0.88, 0.66],
+      }, [
+        'Grid Rules, Smooth, Reaction: Gray–Scott reaction–diffusion with the Labyrinth preset (feed 0.029, kill 0.057). Every cell holds two chemicals, A (red) and B (green). A is fed in everywhere; B eats A to make more of itself (A + 2B → 3B) and slowly dies away; both spread to their neighbours, B half as fast.',
+        'With these two numbers B can neither spread into blobs nor die out: it settles into stripes of one width that wind round each other, a maze. The board starts as noise on a ½-size board, 16 steps a frame, so the stripes untangle within seconds and keep slowly straightening.',
+        'The colours ramp B: dark teal where there is none, through copper to pale gold along a stripe\'s spine, so the maze reads like a lit etching.',
+      ]),
+      out(['rd', 'color']),
+    ],
+    play: play([
+      toggle('reset', 'rd::reset', 'Start again'),
+      ctl('feed', 'rd::feed', 'Feed', 0.01, 0.1, 0.0005),
+      ctl('kill', 'rd::kill', 'Kill', 0.04, 0.075, 0.0005),
+      ctl('brush', 'rd::brushRadius', 'Brush size (cells)', 0.5, 30, 0.5),
+      toggle('paint', 'rd::paint', 'Paint without the button'),
+    ], `**What it shows.** Gray–Scott reaction–diffusion (Pearson, 1993): two chemicals that feed, eat and spread. Two numbers, Feed and Kill, choose the pattern; these wind it into a labyrinth of stripes, the pattern on a fish's skin or a fingerprint.\n\n${HOW}\n\n**Try.** Feed 0.0367 / Kill 0.0649 is Mitosis (the editor's preset): the stripes break into spots that grow and divide like cells. Feed 0.0545 / Kill 0.062 grows coral; 0.078 / 0.061 wriggling worms. Hold the mouse button to scribble new B into the maze and watch it heal round it.`),
+  };
   return g;
 }

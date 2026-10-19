@@ -150,7 +150,11 @@ export const ORBIT_PRESETS: readonly BuilderPreset[] = [
     set: () => base({ kind: 'swarm', species: [kindOne('Moths', 0.5, [1, 0.95, 0.7], [always({ kind: 'orbit', target: 'mouse', distance: 0.2, degrees: 7 }, { kind: 'wander', degrees: 10 })])] }) },
 ];
 
-/** A kind's presets strip. */
+/**
+ * A kind's presets (the strip shows the ones builders/stripPresets.ts names). Ants with food is no longer on any strip
+ * (2026-10-19, with the ants examples; the user: they looked terrible) but stays here: it is the Ants kind's only rule
+ * set, which Surprise varies, and builderPreset() still finds it for a saved builder state.
+ */
 export function presetsFor(kind: WalkerKind): readonly BuilderPreset[] {
   switch (kind) {
     case 'particles': return PARTICLE_PRESETS;

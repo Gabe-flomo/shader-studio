@@ -2,7 +2,7 @@
 /**
  * The Agent Builder's Memory section, drawn (docs/agent-builder.md "Memory"): add a level that
  * fades, refill it from what it smells, write it as an expression (checked inline), speed × energy,
- * a memory in "only when", the viewport lens, and the ants preset as cards.
+ * a memory in "only when" and the viewport lens.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -31,8 +31,6 @@ afterEach(() => { for (const m of mounted.splice(0)) { act(() => m.root.unmount(
 const $ = (sel: string) => document.body.querySelector(sel);
 const $$ = (sel: string) => [...document.body.querySelectorAll(sel)];
 const click = (el: Element | null) => { expect(el).toBeTruthy(); act(() => { (el as HTMLElement).click(); }); };
-/** Open a folded card (cards past a section's first start folded: agentBuilder/cardFolds.ts). */
-const unfold = (key: string) => { const b = document.body.querySelector(`[data-card-fold="${key}"]`); if (b?.getAttribute('aria-expanded') === 'false') click(b); };
 const menuItem = (text: string) => $$('[role="menuitem"]').find(b => b.textContent?.startsWith(text)) ?? null;
 const group = () => useNodeGraphStore.getState().nodes.find(n => n.type === 'agentsGroup');
 const type = (el: Element | null, value: string) => {
@@ -118,17 +116,6 @@ describe('the Memory section', () => {
     expect(r.when).toEqual([{ kind: 'mem', memory: 'm1', cmp: '>', value: 0.5 }]);
   });
 
-  it('the ants preset is cards: two Senses, Head for and Turn round, memories with their cards, nothing Advanced', () => {
-    startTrail();
-    click($('[data-preset="ants"]'));
-    expect($('[data-studio-section="advanced"] [data-studio-summary]')?.textContent).toBe('every rule as lines');
-    click($('[data-studio-section="senses"]'));
-    expect($$('[data-card-slot]').map(x => x.getAttribute('data-card-slot'))).toEqual(['senses#1']);
-    unfold('senses#1');
-    expect($$('[data-only-when-chip]').map(x => x.textContent)).toEqual(expect.arrayContaining([expect.stringContaining('carrying is off'), expect.stringContaining('carrying is on')]));
-    click($('[data-studio-section="memory"]'));
-    expect($$('[data-memory]').map(x => x.getAttribute('data-memory'))).toEqual(['carrying', 'away']);
-    expect($$('[data-memory="carrying"] [data-card]')).toHaveLength(2);
-    expect($('[data-memory-colour] [role="radio"][aria-checked="true"]')?.textContent).toBe('carrying');
-  });
+  // The ants preset was retired from the strip (2026-10-19, with the ants examples); its cards are covered by
+  // agentBuilder/__tests__/memory.test.ts (antsWithMemories).
 });

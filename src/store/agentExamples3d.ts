@@ -21,6 +21,7 @@ import type { ExampleGraph } from './exampleIndex';
 import { n } from './graphBuilder';
 import { agentsGroup, expr, groupInput, note, withOutputs } from './agentExampleKit';
 import { DRAW_3D_INPUTS } from '../nodes/definitions/agents';
+import { backdrop as cinemaBackdrop, cinemaFinish } from './cinemaLook';
 
 type PortType = GraphNode['inputs'][string]['type'];
 
@@ -698,16 +699,79 @@ export function cubeStorm3dNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
 
 export const AGENT_3D_EXAMPLE_KEYS = Object.keys(AGENT_3D_EXAMPLE_INDEX);
 
+/**
+ * The showpiece finish for the listed 3D examples (cinemaLook.ts; the user's note: less glow, more cinematic): the
+ * example's Draw agents restyled (`params`, a new note), drawn over a dark graded backdrop unless something is
+ * already wired into its Background, and its Output replaced by Tone Map → Vignette → Grain → Output.
+ * The starters and tests keep the plain graphs (the *Nodes functions).
+ */
+function showpiece(nodes: GraphNode[], drawId: string, outId: string, params: Record<string, unknown>, lines: string[],
+  bg?: { inner: [number, number, number]; outer: [number, number, number]; text: string }): GraphNode[] {
+  const out = nodes.find(nd => nd.id === outId)!;
+  const { x, y } = out.position;
+  const kept = nodes.filter(nd => nd.id !== outId).map(nd => {
+    if (nd.id !== drawId) return nd;
+    const restyled = { ...nd, params: { ...nd.params, ...params, ...note(lines) } };
+    return bg ? { ...restyled, inputs: { ...restyled.inputs, over: { ...restyled.inputs.over, connection: { nodeId: `${drawId}Bg`, outputKey: 'color' } } } } : restyled;
+  });
+  return [
+    // A replaced backdrop goes, with the UV node that fed it.
+    ...kept.filter(nd => !(bg && ((nd.type === 'gradient' && nd.id.endsWith('Back')) || (nd.type === 'uv' && nd.id.endsWith('Uv'))))),
+    ...(bg ? [
+      n('uv', 'uv', x - 420, y + 420, { ...note(['UV: where each pixel is, for the backdrop and the grain.']) }),
+      cinemaBackdrop(`${drawId}Bg`, x, y + 420, ['uv', 'uv'], bg.inner, bg.outer, bg.text),
+    ] : [n('uv', 'uv', x - 420, y + 420, { ...note(['UV: where each pixel is, for the grain.']) })]),
+    n('time', 't', x - 420, y + 560, { ...note(['Time: moves the grain.']) }),
+    ...cinemaFinish([drawId, 'color'], { x, y }),
+  ];
+}
+
 export function buildAgent3dExamples(): Record<string, ExampleGraph> {
   return {
-    agent3dSlime: { ...AGENT_3D_EXAMPLE_INDEX.agent3dSlime, counter: 40, nodes: slime3dNodes(0, 200) },
+    agent3dSlime: { ...AGENT_3D_EXAMPLE_INDEX.agent3dSlime, counter: 40, nodes: showpiece(slime3dNodes(0, 200), 's3Draw', 's3Output', {
+      style: 'points', colorA: [1.0, 0.52, 0.16], colorB: [0.16, 0.46, 1.0], size: 1.3, brightness: 1.6, glow: 0.12,
+      camDist: 2.5, camAngle: 15, camElevation: 12, rotSpeed: 4, focus: 1.0, blur: 0.55, maxBlur: 10,
+    }, [
+      'Draw agents in 3D: every walker as a small soft dot, coloured by heading (amber one way, blue the other), seen through a camera 2.5 from the middle, inside the edge of the box, circling at 4° a second.',
+      'The camera is in the network, not outside a box of it: near tubes pass close and blur, far ones recede into the dark. Blur 0.55 with Focus 1 keeps the middle sharp and turns the near and far walkers into soft haze, which is what gives the depth.',
+      'Points with a faint glow (0.12) and a modest Brightness: the tubes are drawn by their walkers, and crowded ones stay below white instead of melting into a glare.',
+      'Try: Distance 3.8 to step back out and see the whole box; Blur 0 for everything sharp; Flatten 1 for an isometric view.',
+    ], { inner: [0.02, 0.03, 0.055], outer: [0.002, 0.003, 0.008], text: 'Gradient (Radial): the backdrop, deep blue-grey in the middle to black at the edges, into Draw agents\' Background.' }) },
     agent3dFlock: { ...AGENT_3D_EXAMPLE_INDEX.agent3dFlock, counter: 40, nodes: flock3dNodes(0, 200) },
-    agent3dTorus: { ...AGENT_3D_EXAMPLE_INDEX.agent3dTorus, counter: 40, nodes: torus3dNodes(0, 1000) },
-    agent3dGalaxy: { ...AGENT_3D_EXAMPLE_INDEX.agent3dGalaxy, counter: 40, nodes: galaxy3dNodes(0, 200) },
+    agent3dTorus: { ...AGENT_3D_EXAMPLE_INDEX.agent3dTorus, counter: 40, nodes: showpiece(torus3dNodes(0, 1000).map(nd => (nd.id !== 'tsBase' ? nd : { ...nd, params: { ...nd.params, color: [0.1, 0.11, 0.14], ...note(['Color Picker: the torus\'s colour, a dark gunmetal: the sun picks out its top and the swarm\'s pale streams stand out against it, instead of a pale grey ring stealing the light.']) } })), 'tsDraw', 'tsOutput', {
+      style: 'points', size: 1.2, brightness: 1.25, glow: 0.12, blur: 0.4,
+    }, [
+      'Draw agents in 3D through the scene\'s camera: Camera from and Camera ray are the March Camera\'s, so the swarm stands in the scene; Depth is the March Loop\'s Distance, so walkers behind the torus are hidden.',
+      'Colour by Speed, fast first, on the Ice palette: the fast ones whipping through the hole pale, the slower ones deep blue. Small dots, a faint glow and a modest Brightness, so the streams through the hole read as threads instead of burning white.',
+      'Blur 0.4: the near and far walkers go soft, the torus stays the sharp centre of the frame.',
+      'Try: unwire Depth to see the walkers behind the torus too.',
+    ]) },
+    agent3dGalaxy: { ...AGENT_3D_EXAMPLE_INDEX.agent3dGalaxy, counter: 40, nodes: showpiece(galaxy3dNodes(0, 200), 'g3Draw', 'g3Output', {
+      style: 'points', size: 1.2, brightness: 0.75, glow: 0.18, blur: 0.45, camDist: 2.4,
+    }, [
+      'Draw agents in 3D: every star a small soft dot in its own colour (Colour by Agent), seen from 38° above the disc by a camera 2.4 away that circles at 4° a second, drifting a little. Blur 0.45 softens the near and far stars, so the disc has depth.',
+      'Brightness 0.75 and a faint glow (0.18): the bulge stays warm instead of a white blot, and the arms are made of separate stars.',
+      'Try: Elevation 85 to look straight down on the spiral; Elevation 3 to see the disc edge-on, a thin line with a bulge; Translate Y 0.3 to fly over it.',
+    ], { inner: [0.025, 0.02, 0.04], outer: [0.002, 0.002, 0.006], text: 'Gradient (Radial): deep space, a faint violet haze in the middle to black at the edges, into Draw agents\' Background.' }) },
     agent3dReverse: { ...AGENT_3D_EXAMPLE_INDEX.agent3dReverse, counter: 40, nodes: reverse3dNodes(0, 200) },
-    agent3dFireflies: { ...AGENT_3D_EXAMPLE_INDEX.agent3dFireflies, counter: 40, nodes: fireflies3dNodes(0, 200) },
+    agent3dFireflies: { ...AGENT_3D_EXAMPLE_INDEX.agent3dFireflies, counter: 40, nodes: showpiece(fireflies3dNodes(0, 200), 'ffDraw', 'ffOutput', {
+      size: 2.4, brightness: 1.6, glow: 0.25,
+    }, [
+      'Draw agents in 3D with depth of field: the camera stands among the fireflies (Distance 1.6), sharp at three quarters of the way to the middle (Focus 0.75), with a strong Blur (2): out-of-focus fireflies spread into big soft discs that keep their light (bokeh), up to Max blur 24 pixels, beyond which they are thinned at random so it costs no fill rate.',
+      'The bokeh does the glowing, so the dots themselves carry only a faint glow (0.25) and a moderate Brightness: the discs stay soft amber instead of white blots, and the sharp ones read as points of light.',
+      'Drift 0.12: the camera slowly circles, bobs and breathes on its own. Colour by Age on the Gold palette: pale when a firefly lights up, deep amber as it fades.',
+      'Try: Blur 0 to see them all sharp; Focus 1.3 to focus behind the swarm.',
+    ], { inner: [0.018, 0.028, 0.026], outer: [0.002, 0.004, 0.005], text: 'Gradient (Radial): a night wood, dark blue-green in the middle to black at the edges, into Draw agents\' Background.' }) },
     agent3dVoxelSlime: { ...AGENT_3D_EXAMPLE_INDEX.agent3dVoxelSlime, counter: 40, nodes: voxelSlime3dNodes(0, 200) },
-    agent3dRodSwarm: { ...AGENT_3D_EXAMPLE_INDEX.agent3dRodSwarm, counter: 40, nodes: rodSwarm3dNodes(0, 200) },
+    agent3dRodSwarm: { ...AGENT_3D_EXAMPLE_INDEX.agent3dRodSwarm, counter: 40, nodes: showpiece(rodSwarm3dNodes(0, 200), 'f3Draw', 'f3Output', {
+      blur: 0.35, focus: 1, maxBlur: 9, ambient: 0.22, rim: 0.65,
+    }, [
+      'Draw agents with Shape Rod: a bird is a solid stick 5 times longer than thick (Rod length), pointing along its flight (Facing: along motion), and longer the faster it flies (Stretch with speed 0.6).',
+      'Max shapes 40960: of the 262,144 birds about one in seven is drawn, spread over the whole flock, so each rod can be seen on its own (all of them pack the flocks solid). Every bird still flies.',
+      'Shading Lit: a key light from above left of the camera, a low Ambient (0.22) so the dark sides stay dark, and a strong Rim (0.65) round each rod\'s outline, so the streams read as round, solid needles.',
+      'Blur 0.35 with Focus 1: rods near the middle of the box are sharp, near and far ones soften, like a real lens on a flock.',
+      'Try: Max shapes 0 to draw every bird; Size 0.01 for thicker rods; Shading Lit + edges for outlined sticks.',
+    ], { inner: [0.06, 0.045, 0.06], outer: [0.006, 0.008, 0.018], text: 'Gradient (Radial): dusk, a muted plum glow in the middle falling to deep blue-black at the edges, into Draw agents\' Background.' }) },
     agent3dCubeStorm: { ...AGENT_3D_EXAMPLE_INDEX.agent3dCubeStorm, counter: 40, nodes: cubeStorm3dNodes(0, 200) },
   };
 }

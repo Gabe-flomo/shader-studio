@@ -166,6 +166,13 @@ exports[`golden outputs: examples > comboGridShapeByWire 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > comboVoxelSpheres 1`] = `
+{
+  "c": "- x120",
+  "vs": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > convertCircle 1`] = `
 {
   "c": "- x120",
@@ -680,6 +687,16 @@ exports[`golden outputs: examples > gridRulesHeat 1`] = `
   "brush": "- x120",
   "cool": "- x120",
   "flares": "- x120",
+  "paint": "- x120",
+  "reset": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > gridRulesLabyrinth 1`] = `
+{
+  "brush": "- x120",
+  "feed": "- x120",
+  "kill": "- x120",
   "paint": "- x120",
   "reset": "- x120",
 }
@@ -2485,6 +2502,14 @@ exports[`golden outputs: examples > ttVideoOutline 1`] = `
   "level": "- x120",
   "spacing": "- x120",
   "tint": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > voxelTerrain 1`] = `
+{
+  "c": "- x120",
+  "ls": "- x120",
+  "vs": "- x120",
 }
 `;
 

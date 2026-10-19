@@ -148,6 +148,16 @@ Examples changed: curvedReverse, learn3dCombine and learn3dOrbit (Rounded Box â†
 Hidden (still registered, so a saved graph loads and renders as before): it was too slow for what it gave. No example,
 recipe or builder used it. For light from a shape, use **SDF Glow** (its Point light mode for a lamp with a falloff).
 
+## Voxelize (2026-10-19)
+
+Hidden (still registered, so a saved graph loads and renders as before). There were two voxel systems: the
+**Voxelize** node (snap space to a cube grid inside a Scene Group, then build a shape per cell and step out of empty
+cells by hand) and the **Voxels** setting on the March Loop (the ray walks the cube grid and any scene becomes cubes).
+The loop's Voxels is the one kept, and the GI Lit March Group has it too now (docs/march-voxels.md). The two don't
+draw the same picture, so an old Voxelize graph keeps its node rather than being rewritten. Its examples
+(3D: Voxel Terrain, Combo: Voxelize + Sphere 3D + Random) were rebuilt on the loop's Voxels; for a colour per cube,
+take the cell from Hit Pos and Normal (`floor((pos - normal * 0.5 * size) / size)`), as they do.
+
 ## Shapers â†’ Shaper
 
 Ten shaping curves were ten nodes with the same sockets (x, Shape, sometimes a second Shape, Bipolar). They are one

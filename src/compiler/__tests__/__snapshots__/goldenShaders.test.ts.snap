@@ -100,6 +100,13 @@ exports[`golden shaders: every Play example exports the same bundle > comboGridS
 }
 `;
 
+exports[`golden shaders: every Play example exports the same bundle > comboVoxelSpheres 1`] = `
+{
+  "bundle": "196e3ecfb4882d14416445a8fde2:14317",
+  "missing": [],
+}
+`;
+
 exports[`golden shaders: every Play example exports the same bundle > convertCircle 1`] = `
 {
   "bundle": "0b05b294c527991ad10e9c0a5a59:3288",
@@ -158,21 +165,21 @@ exports[`golden shaders: every Play example exports the same bundle > curveTrace
 
 exports[`golden shaders: every Play example exports the same bundle > curvedHyperbolic 1`] = `
 {
-  "bundle": "1dd8e74e0c1bff0a9482d8d899bf:17856",
+  "bundle": "106870487b7e5117665f9ca10d29:18159",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > curvedReverse 1`] = `
 {
-  "bundle": "1a80c8875f243c05dbc1ec651a70:18484",
+  "bundle": "112d43205ab76907a2c0eaa32559:18787",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > curvedSpherical 1`] = `
 {
-  "bundle": "099ca1e2d3722d0c2b706e7aa045:16765",
+  "bundle": "0218373a6dade1142411f61c13bc:17068",
   "missing": [],
 }
 `;
@@ -389,14 +396,14 @@ exports[`golden shaders: every Play example exports the same bundle > fourDFlatT
 
 exports[`golden shaders: every Play example exports the same bundle > fourDHopfRings 1`] = `
 {
-  "bundle": "10b4a95e1f138510aceda23b58d8:28151",
+  "bundle": "10d0a823e6510311173c95a3e702:27922",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > fourDHypersphereInTesseract 1`] = `
 {
-  "bundle": "1a2cf202d920ff0437c15b878962:23396",
+  "bundle": "142e24d5384d0a08ab6ced1499c6:23580",
   "missing": [],
 }
 `;
@@ -417,7 +424,7 @@ exports[`golden shaders: every Play example exports the same bundle > fourDPlane
 
 exports[`golden shaders: every Play example exports the same bundle > fourDQuatJulia 1`] = `
 {
-  "bundle": "093e2b9a5d2c191da41f71efcd73:21363",
+  "bundle": "00e6421fd18997005fa56dce7bd2:20769",
   "missing": [],
 }
 `;
@@ -431,7 +438,7 @@ exports[`golden shaders: every Play example exports the same bundle > fourDShape
 
 exports[`golden shaders: every Play example exports the same bundle > fourDTesseractProjection 1`] = `
 {
-  "bundle": "1947bbc706bfef169cb7a245f05f:25689",
+  "bundle": "0dd4ea34962f6d0f02174b65f8ae:24440",
   "missing": [],
 }
 `;
@@ -509,6 +516,13 @@ exports[`golden shaders: every Play example exports the same bundle > gridRulesG
 exports[`golden shaders: every Play example exports the same bundle > gridRulesHeat 1`] = `
 {
   "bundle": "05d2c7d5ca8a480a5a559066439d:14277",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > gridRulesLabyrinth 1`] = `
+{
+  "bundle": "011c8e9a7cac56037364f1623d5c:14659",
   "missing": [],
 }
 `;
@@ -1719,14 +1733,14 @@ exports[`golden shaders: every Play example exports the same bundle > playWalls 
 
 exports[`golden shaders: every Play example exports the same bundle > repeatSceneBubbles 1`] = `
 {
-  "bundle": "120f180e85228b027dbeab3b0837:14979",
+  "bundle": "1c01cef292c7a60b5531e4ca6bab:15211",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > repeatSceneCentrepiece 1`] = `
 {
-  "bundle": "02f2af61c8136b12ba7bafcec93b:16499",
+  "bundle": "1209c14f06430e1c828a10924133:16731",
   "missing": [],
 }
 `;
@@ -1811,6 +1825,13 @@ exports[`golden shaders: every Play example exports the same bundle > scriptPict
 exports[`golden shaders: every Play example exports the same bundle > splatDissolvePlay 1`] = `
 {
   "bundle": "008db9de318b2b01409a3eed1880:5035",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > voxelTerrain 1`] = `
+{
+  "bundle": "08d24c52c696ec10a15c8e7ffee5:28825",
   "missing": [],
 }
 `;
@@ -3265,13 +3286,12 @@ exports[`golden shaders: every example compiles as it did > comboVoxelSpheres 1`
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "10cf5d9e0f92c20d6825235b54db:12193",
+  "fragmentShader": "1aa9237161a7f214fadbc579b036:11567",
   "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "107e0a26625d471d8266e3db6b27:646",
-  "paramBindings": "0bd7614c361ba6069e285e2df095:1593",
+  "nodeSlugs": "10b74272bbef6f152e52346d4cf1:452",
+  "paramBindings": "0b6bf2329ae79b167a064082d229:1279",
   "paramUniforms": [
-    "u_p_cellxsizex0_value",
     "u_p_marchcamerx0_aperture",
     "u_p_marchcamerx0_camAngle",
     "u_p_marchcamerx0_camDist",
@@ -3288,24 +3308,23 @@ exports[`golden shaders: every example compiles as it did > comboVoxelSpheres 1`
     "u_p_marchloopgx0_jitter",
     "u_p_marchloopgx0_maxDist",
     "u_p_marchloopgx0_stepScale",
-    "u_p_mulx0xc2_b",
+    "u_p_marchloopgx0_voxelSize",
+    "u_p_palx0_amplitude",
+    "u_p_palx0_anim",
+    "u_p_palx0_freq",
+    "u_p_palx0_offset",
+    "u_p_palx0_phase",
     "u_p_palx0_scale",
     "u_p_palx0_speed",
-    "u_p_randomfromx0xc2_from",
-    "u_p_randomfromx0xc2_seed",
-    "u_p_randomfromx0xc2_to",
-    "u_p_voxelizex2_size",
-    "u_p_voxelxspheresx0xsgxbox3x0_sizeX",
-    "u_p_voxelxspheresx0xsgxbox3x0_sizeY",
-    "u_p_voxelxspheresx0xsgxbox3x0_sizeZ",
-    "u_p_voxelxspheresx0xsgxrandomfromx0_from",
-    "u_p_voxelxspheresx0xsgxrandomfromx0_seed",
-    "u_p_voxelxspheresx0xsgxrandomfromx0_to",
-    "u_p_voxelxspheresx0xsgxsdfintersex0_k",
-    "u_p_voxelxspheresx0xsgxsphx0_radius",
-    "u_p_voxelxspheresx0xsgxvoxelizex0_size",
+    "u_p_palx0_value",
+    "u_p_randomfromx0_from",
+    "u_p_randomfromx0_seed",
+    "u_p_randomfromx0_to",
+    "u_p_vignettex0_radius",
+    "u_p_vignettex0_softness",
+    "u_p_vignettex0_strength",
   ],
-  "paramValues": "13ab74a8fa0f9118d884cfff9124:1171",
+  "paramValues": "0eb41bbd63dd870e2076752fc453:975",
   "passes": null,
   "success": true,
   "textureUniforms": {},
@@ -3911,7 +3930,7 @@ exports[`golden shaders: every example compiles as it did > curvedHyperbolic 1`]
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1b5d30ca20204909fa36fada76b3:14339",
+  "fragmentShader": "1ef0d8c219fdc40fb2d6f51d6970:14641",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "12efe83d6029ae0c74ded0963277:502",
@@ -3964,7 +3983,7 @@ exports[`golden shaders: every example compiles as it did > curvedReverse 1`] = 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "02937a58f861ff12e1e0c4dade06:14628",
+  "fragmentShader": "0d804619de345308cf97a54dcde5:14930",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "05f5be42f2beda08ef5b149988db:511",
@@ -4020,7 +4039,7 @@ exports[`golden shaders: every example compiles as it did > curvedSpherical 1`] 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "13b62296e59dea10e9899115deb5:13491",
+  "fragmentShader": "16317dae5acfe90a81a0f7200237:13793",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "1f02fbfccaf0d312a33df7936693:442",
@@ -5688,13 +5707,14 @@ exports[`golden shaders: every example compiles as it did > fourDHopfRings 1`] =
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1dfbe66174c36619fcd3ff722f8c:22616",
+  "fragmentShader": "01210825d083fd072960447a3e6f:22616",
   "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "1f6f205e6b6b61192e3689ff4636:789",
-  "paramBindings": "1f3a9d1e6c674d0c7ae4df2e73fd:2554",
+  "nodeSlugs": "07f67b5f050ccd0183f7a54dce6d:850",
+  "paramBindings": "1294e5215568bb1d78ebc8de9c3a:2448",
   "paramUniforms": [
     "u_p_addx0_b",
+    "u_p_addx2_b",
     "u_p_hopfxringsx0xsgxcliffordtox0_balance",
     "u_p_hopfxringsx0xsgxcliffordtox0_radius",
     "u_p_hopfxringsx0xsgxcliffordtox0_thickness",
@@ -5732,24 +5752,22 @@ exports[`golden shaders: every example compiles as it did > fourDHopfRings 1`] =
     "u_p_marchloopgx0_jitter",
     "u_p_marchloopgx0_maxDist",
     "u_p_marchloopgx0_stepScale",
-    "u_p_multilightx0_azimuth",
-    "u_p_multilightx0_bgColor",
-    "u_p_multilightx0_bounceB",
-    "u_p_multilightx0_bounceG",
-    "u_p_multilightx0_bounceR",
-    "u_p_multilightx0_elevation",
-    "u_p_multilightx0_skyB",
-    "u_p_multilightx0_skyG",
-    "u_p_multilightx0_skyR",
-    "u_p_multilightx0_sunB",
-    "u_p_multilightx0_sunG",
-    "u_p_multilightx0_sunR",
     "u_p_mulx0_b",
+    "u_p_mulx0xc2_b",
+    "u_p_mulx0xc3_b",
+    "u_p_palx0_amplitude",
+    "u_p_palx0_anim",
+    "u_p_palx0_freq",
+    "u_p_palx0_offset",
+    "u_p_palx0_phase",
+    "u_p_palx0_scale",
+    "u_p_palx0_speed",
+    "u_p_palx0_value",
     "u_p_vignettex0_radius",
     "u_p_vignettex0_softness",
     "u_p_vignettex0_strength",
   ],
-  "paramValues": "0aa609fb8f6bf70cbc5a898eca4e:2010",
+  "paramValues": "0a1a06e1b752580b95c8c1570988:1909",
   "passes": null,
   "success": true,
   "textureUniforms": {},
@@ -5763,12 +5781,14 @@ exports[`golden shaders: every example compiles as it did > fourDHypersphereInTe
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1054d60218a39b01580af33ea0ba:17728",
+  "fragmentShader": "115d78ca88a5cc149670bc816109:18095",
   "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "1851735af3a0770ed4d83dd6f6c1:801",
-  "paramBindings": "16e1b1e082b4b2178442022ac32c:2772",
+  "nodeSlugs": "1f4f52576281bc0ab70eb7be78e5:893",
+  "paramBindings": "1c3f1ed0608c1f16cd8110f60b50:2691",
   "paramUniforms": [
+    "u_p_addx0_b",
+    "u_p_addx2_b",
     "u_p_hyperspherexinxax0xsgxhyperspherx0_radius",
     "u_p_hyperspherexinxax0xsgxlift4dx0_w",
     "u_p_hyperspherexinxax0xsgxplnx0_height",
@@ -5811,23 +5831,21 @@ exports[`golden shaders: every example compiles as it did > fourDHypersphereInTe
     "u_p_marchloopgx0_jitter",
     "u_p_marchloopgx0_maxDist",
     "u_p_marchloopgx0_stepScale",
-    "u_p_multilightx0_azimuth",
-    "u_p_multilightx0_bgColor",
-    "u_p_multilightx0_bounceB",
-    "u_p_multilightx0_bounceG",
-    "u_p_multilightx0_bounceR",
-    "u_p_multilightx0_elevation",
-    "u_p_multilightx0_skyB",
-    "u_p_multilightx0_skyG",
-    "u_p_multilightx0_skyR",
-    "u_p_multilightx0_sunB",
-    "u_p_multilightx0_sunG",
-    "u_p_multilightx0_sunR",
+    "u_p_mulx0_b",
+    "u_p_mulx0xc2_b",
+    "u_p_palx0_amplitude",
+    "u_p_palx0_anim",
+    "u_p_palx0_freq",
+    "u_p_palx0_offset",
+    "u_p_palx0_phase",
+    "u_p_palx0_scale",
+    "u_p_palx0_speed",
+    "u_p_palx0_value",
     "u_p_vignettex0_radius",
     "u_p_vignettex0_softness",
     "u_p_vignettex0_strength",
   ],
-  "paramValues": "0889c5b13f7f1d1848e1a5766008:2213",
+  "paramValues": "097eac3dfd5edc1cb90eae070e85:2125",
   "passes": null,
   "success": true,
   "textureUniforms": {},
@@ -5973,12 +5991,13 @@ exports[`golden shaders: every example compiles as it did > fourDQuatJulia 1`] =
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "0afe080fea742200912dcde4b822:15727",
+  "fragmentShader": "1953c5de7bb10719d773f4fc68a7:15376",
   "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "0aba1432fef9671409182f8135f1:547",
-  "paramBindings": "1e405e6efa7549108509829af11b:2710",
+  "nodeSlugs": "13b27711dfd8550511260eabb740:570",
+  "paramBindings": "09dd1f17afbc6e0d33aaa1459853:2600",
   "paramUniforms": [
+    "u_p_addx0_b",
     "u_p_lfox0_amplitude",
     "u_p_lfox0_freq",
     "u_p_lfox0_offset",
@@ -6003,18 +6022,16 @@ exports[`golden shaders: every example compiles as it did > fourDQuatJulia 1`] =
     "u_p_marchloopgx0_jitter",
     "u_p_marchloopgx0_maxDist",
     "u_p_marchloopgx0_stepScale",
-    "u_p_multilightx0_azimuth",
-    "u_p_multilightx0_bgColor",
-    "u_p_multilightx0_bounceB",
-    "u_p_multilightx0_bounceG",
-    "u_p_multilightx0_bounceR",
-    "u_p_multilightx0_elevation",
-    "u_p_multilightx0_skyB",
-    "u_p_multilightx0_skyG",
-    "u_p_multilightx0_skyR",
-    "u_p_multilightx0_sunB",
-    "u_p_multilightx0_sunG",
-    "u_p_multilightx0_sunR",
+    "u_p_mulx0_b",
+    "u_p_mulx0xc2_b",
+    "u_p_palx0_amplitude",
+    "u_p_palx0_anim",
+    "u_p_palx0_freq",
+    "u_p_palx0_offset",
+    "u_p_palx0_phase",
+    "u_p_palx0_scale",
+    "u_p_palx0_speed",
+    "u_p_palx0_value",
     "u_p_quaternionxjuliax0xsgxlift4dx0_w",
     "u_p_quaternionxjuliax0xsgxquatjuliasx0_cw",
     "u_p_quaternionxjuliax0xsgxquatjuliasx0_cx",
@@ -6038,7 +6055,7 @@ exports[`golden shaders: every example compiles as it did > fourDQuatJulia 1`] =
     "u_p_vignettex0_softness",
     "u_p_vignettex0_strength",
   ],
-  "paramValues": "0f7bcba4c8fd691dec6136f3b17a:2178",
+  "paramValues": "1e364b58d85701143e63d12dcddb:2072",
   "passes": null,
   "success": true,
   "textureUniforms": {},
@@ -6346,11 +6363,11 @@ exports[`golden shaders: every example compiles as it did > fourDTesseractProjec
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1efdd2b6a5d20f07fb1072bbdc26:21396",
+  "fragmentShader": "052127bfc99353084729026f5c81:20445",
   "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "1c664608f04ec91c1896880eb0e4:461",
-  "paramBindings": "16855e7e514fd711773060f1244b:1887",
+  "nodeSlugs": "1fc054cebc9762101c96ae5047dd:450",
+  "paramBindings": "17b4e0c9a462ca01aaa3d6d27e9b:1749",
   "paramUniforms": [
     "u_p_addx0_b",
     "u_p_marchcamerx0_aperture",
@@ -6369,18 +6386,16 @@ exports[`golden shaders: every example compiles as it did > fourDTesseractProjec
     "u_p_marchloopgx0_jitter",
     "u_p_marchloopgx0_maxDist",
     "u_p_marchloopgx0_stepScale",
-    "u_p_multilightx0_azimuth",
-    "u_p_multilightx0_bgColor",
-    "u_p_multilightx0_bounceB",
-    "u_p_multilightx0_bounceG",
-    "u_p_multilightx0_bounceR",
-    "u_p_multilightx0_elevation",
-    "u_p_multilightx0_skyB",
-    "u_p_multilightx0_skyG",
-    "u_p_multilightx0_skyR",
-    "u_p_multilightx0_sunB",
-    "u_p_multilightx0_sunG",
-    "u_p_multilightx0_sunR",
+    "u_p_mulx0_b",
+    "u_p_mulx0xc2_b",
+    "u_p_palx0_amplitude",
+    "u_p_palx0_anim",
+    "u_p_palx0_freq",
+    "u_p_palx0_offset",
+    "u_p_palx0_phase",
+    "u_p_palx0_scale",
+    "u_p_palx0_speed",
+    "u_p_palx0_value",
     "u_p_tesseractxprojecx0xsgxwireframe4x0_angle1",
     "u_p_tesseractxprojecx0xsgxwireframe4x0_angle2",
     "u_p_tesseractxprojecx0xsgxwireframe4x0_camDist",
@@ -6393,7 +6408,7 @@ exports[`golden shaders: every example compiles as it did > fourDTesseractProjec
     "u_p_vignettex0_softness",
     "u_p_vignettex0_strength",
   ],
-  "paramValues": "1298464f12a9161d271419d15fcb:1477",
+  "paramValues": "1e2d14d99525d0176f660d2d7421:1351",
   "passes": null,
   "success": true,
   "textureUniforms": {},
@@ -6682,7 +6697,7 @@ exports[`golden shaders: every example compiles as it did > giSphereGround 1`] =
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "17c1603f2ed19b1fbc0fe13337ac:13228",
+  "fragmentShader": "0e6361d82a1dbd0cdbbc6799e519:13616",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "055c8bb1dfc8030bc16f779ca780:344",
@@ -6721,7 +6736,7 @@ exports[`golden shaders: every example compiles as it did > glassMetaballs 1`] =
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "0844ba8d123c6809c0d2ac75ad2b:17182",
+  "fragmentShader": "0f6fd469779b720e899b00660253:17858",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "17fcec8b31820c0dfed492714f78:515",
@@ -9110,6 +9125,186 @@ void main() {
       "scale": 0.25,
       "slug": "heat_rules_cells_0",
       "wrap": "clamp",
+    },
+  ],
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > gridRulesLabyrinth 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "13d43cffd6b38315f8aabe34f792:4122",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "1efc6bdfbb166f056ef25011a319:105",
+  "paramBindings": "0b06abd5e214a0039ffb23d7811c:1023",
+  "paramUniforms": [
+    "u_p_labyrinthx0xc2_brushRadius",
+    "u_p_labyrinthx0xc2_brushState",
+    "u_p_labyrinthx0xc2_color0",
+    "u_p_labyrinthx0xc2_color1",
+    "u_p_labyrinthx0xc2_color2",
+    "u_p_labyrinthx0xc2_color3",
+    "u_p_labyrinthx0xc2_damping",
+    "u_p_labyrinthx0xc2_decay",
+    "u_p_labyrinthx0xc2_density",
+    "u_p_labyrinthx0xc2_diffA",
+    "u_p_labyrinthx0xc2_diffB",
+    "u_p_labyrinthx0xc2_feed",
+    "u_p_labyrinthx0xc2_gain",
+    "u_p_labyrinthx0xc2_kill",
+    "u_p_labyrinthx0xc2_knobA",
+    "u_p_labyrinthx0xc2_knobB",
+    "u_p_labyrinthx0xc2_knobC",
+    "u_p_labyrinthx0xc2_knobD",
+    "u_p_labyrinthx0xc2_paint",
+    "u_p_labyrinthx0xc2_rate",
+    "u_p_labyrinthx0xc2_reset",
+    "u_p_labyrinthx0xc2_seed",
+    "u_p_labyrinthx0xc2_spread",
+    "u_p_labyrinthx0xc2_waveSpeed",
+  ],
+  "paramValues": "119d336411a18417600839b779e4:859",
+  "passes": [
+    {
+      "filter": "nearest",
+      "format": "half",
+      "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_labyrinthx0xc2_spread;
+uniform float u_p_labyrinthx0xc2_decay;
+uniform float u_p_labyrinthx0xc2_waveSpeed;
+uniform float u_p_labyrinthx0xc2_damping;
+uniform float u_p_labyrinthx0xc2_feed;
+uniform float u_p_labyrinthx0xc2_kill;
+uniform float u_p_labyrinthx0xc2_diffA;
+uniform float u_p_labyrinthx0xc2_diffB;
+uniform float u_p_labyrinthx0xc2_knobA;
+uniform float u_p_labyrinthx0xc2_knobB;
+uniform float u_p_labyrinthx0xc2_knobC;
+uniform float u_p_labyrinthx0xc2_knobD;
+uniform float u_p_labyrinthx0xc2_rate;
+uniform float u_p_labyrinthx0xc2_reset;
+uniform float u_p_labyrinthx0xc2_density;
+uniform float u_p_labyrinthx0xc2_seed;
+uniform float u_p_labyrinthx0xc2_paint;
+uniform float u_p_labyrinthx0xc2_brushRadius;
+uniform float u_p_labyrinthx0xc2_brushState;
+uniform float u_p_labyrinthx0xc2_gain;
+uniform vec3 u_p_labyrinthx0xc2_color0;
+uniform vec3 u_p_labyrinthx0xc2_color1;
+uniform vec3 u_p_labyrinthx0xc2_color2;
+uniform vec3 u_p_labyrinthx0xc2_color3;
+uniform sampler2D u_pass_labyrinth_cells_0;
+uniform vec2 u_pass_labyrinth_cells_0_px;
+uniform sampler2D u_passprev_labyrinth_cells_0;
+uniform vec2 u_passprev_labyrinth_cells_0_px;
+uniform vec2 u_passiter_labyrinth_cells_0;
+uniform float u_mousebtn;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+float grHash(vec3 p) {
+    vec3 p3 = fract(p * 0.1031);
+    p3 = p3 + dot(p3, vec3(p3.z, p3.y, p3.x) + 31.32);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // Grid Rules, Smooth, Reaction: Gray–Scott reaction–diffusion with the Labyrinth preset (feed 0.029, kill 0.057). Every cell holds two chemicals, A (red) and B (green). A is fed in everywhere; B eats A to make more of itself (A + 2B → 3B) and slowly dies away; both spread to their neighbours, B half as fast.
+    // With these two numbers B can neither spread into blobs nor die out: it settles into stripes of one width that wind round each other, a maze. The board starts as noise on a ½-size board, 16 steps a frame, so the stripes untangle within seconds and keep slowly straightening.
+    // The colours ramp B: dark teal where there is none, through copper to pale gold along a stripe's spine, so the maze reads like a lit etching.
+    vec2 labyrinth_0_c2_res = u_resolution;
+    vec2 labyrinth_0_c2_cell = floor(gl_FragCoord.xy);
+    vec4 labyrinth_0_c2_me = texture2D(u_passprev_labyrinth_cells_0, (labyrinth_0_c2_cell + vec2(0.0) + 0.5) / labyrinth_0_c2_res);
+    float labyrinth_0_c2_fresh = (abs(labyrinth_0_c2_me.a - 74.0) > 0.5 || u_p_labyrinthx0xc2_reset > 0.5) ? 1.0 : 0.0;
+    float labyrinth_0_c2_tick = 1.0;
+    float labyrinth_0_c2_phase = 0.0;
+    float labyrinth_0_c2_h = grHash(vec3(labyrinth_0_c2_cell, mod(floor(u_time * 60.0), 997.0) + u_p_labyrinthx0xc2_seed * 1013.0 + 1.0));
+    vec2 labyrinth_0_c2_m = u_mouse * 0.5;
+    float labyrinth_0_c2_in = (length(labyrinth_0_c2_cell + 0.5 - labyrinth_0_c2_m) < u_p_labyrinthx0xc2_brushRadius ? 1.0 : 0.0) * max(step(0.5, u_mousebtn), step(0.5, u_p_labyrinthx0xc2_paint));
+    float labyrinth_0_c2_u = labyrinth_0_c2_me.r;
+    float labyrinth_0_c2_v = labyrinth_0_c2_me.g;
+    vec4 labyrinth_0_c2_rN = texture2D(u_passprev_labyrinth_cells_0, (labyrinth_0_c2_cell + vec2(0.0, 1.0) + 0.5) / labyrinth_0_c2_res);
+    vec4 labyrinth_0_c2_rNE = texture2D(u_passprev_labyrinth_cells_0, (labyrinth_0_c2_cell + vec2(1.0, 1.0) + 0.5) / labyrinth_0_c2_res);
+    vec4 labyrinth_0_c2_rE = texture2D(u_passprev_labyrinth_cells_0, (labyrinth_0_c2_cell + vec2(1.0, 0.0) + 0.5) / labyrinth_0_c2_res);
+    vec4 labyrinth_0_c2_rSE = texture2D(u_passprev_labyrinth_cells_0, (labyrinth_0_c2_cell + vec2(1.0, -1.0) + 0.5) / labyrinth_0_c2_res);
+    vec4 labyrinth_0_c2_rS = texture2D(u_passprev_labyrinth_cells_0, (labyrinth_0_c2_cell + vec2(0.0, -1.0) + 0.5) / labyrinth_0_c2_res);
+    vec4 labyrinth_0_c2_rSW = texture2D(u_passprev_labyrinth_cells_0, (labyrinth_0_c2_cell + vec2(-1.0, -1.0) + 0.5) / labyrinth_0_c2_res);
+    vec4 labyrinth_0_c2_rW = texture2D(u_passprev_labyrinth_cells_0, (labyrinth_0_c2_cell + vec2(-1.0, 0.0) + 0.5) / labyrinth_0_c2_res);
+    vec4 labyrinth_0_c2_rNW = texture2D(u_passprev_labyrinth_cells_0, (labyrinth_0_c2_cell + vec2(-1.0, 1.0) + 0.5) / labyrinth_0_c2_res);
+    float labyrinth_0_c2_edgeU = labyrinth_0_c2_rN.r + labyrinth_0_c2_rE.r + labyrinth_0_c2_rS.r + labyrinth_0_c2_rW.r;
+    float labyrinth_0_c2_edgeV = labyrinth_0_c2_rN.g + labyrinth_0_c2_rE.g + labyrinth_0_c2_rS.g + labyrinth_0_c2_rW.g;
+    float labyrinth_0_c2_cornU = labyrinth_0_c2_rNE.r + labyrinth_0_c2_rSE.r + labyrinth_0_c2_rSW.r + labyrinth_0_c2_rNW.r;
+    float labyrinth_0_c2_cornV = labyrinth_0_c2_rNE.g + labyrinth_0_c2_rSE.g + labyrinth_0_c2_rSW.g + labyrinth_0_c2_rNW.g;
+    float labyrinth_0_c2_lapU = 0.2 * labyrinth_0_c2_edgeU + 0.05 * labyrinth_0_c2_cornU - labyrinth_0_c2_u;
+    float labyrinth_0_c2_lapV = 0.2 * labyrinth_0_c2_edgeV + 0.05 * labyrinth_0_c2_cornV - labyrinth_0_c2_v;
+    float labyrinth_0_c2_nu = labyrinth_0_c2_u;
+    float labyrinth_0_c2_nv = labyrinth_0_c2_v;
+    float labyrinth_0_c2_A = 1.0 - labyrinth_0_c2_u;
+    float labyrinth_0_c2_abb = labyrinth_0_c2_A * labyrinth_0_c2_v * labyrinth_0_c2_v;
+    labyrinth_0_c2_nu = 1.0 - clamp(labyrinth_0_c2_A - u_p_labyrinthx0xc2_diffA * labyrinth_0_c2_lapU - labyrinth_0_c2_abb + u_p_labyrinthx0xc2_feed * (1.0 - labyrinth_0_c2_A), 0.0, 1.0);
+    labyrinth_0_c2_nv = clamp(labyrinth_0_c2_v + u_p_labyrinthx0xc2_diffB * labyrinth_0_c2_lapV + labyrinth_0_c2_abb - (u_p_labyrinthx0xc2_kill + u_p_labyrinthx0xc2_feed) * labyrinth_0_c2_v, 0.0, 1.0);
+    if (labyrinth_0_c2_tick < 0.5) { labyrinth_0_c2_nu = labyrinth_0_c2_u; labyrinth_0_c2_nv = labyrinth_0_c2_v; }
+    if (labyrinth_0_c2_fresh > 0.5) { labyrinth_0_c2_nu = 0.0; labyrinth_0_c2_nv = (grHash(vec3(floor(labyrinth_0_c2_cell / 6.0), mod(floor(u_time * 60.0), 997.0) + u_p_labyrinthx0xc2_seed * 1013.0 + 3.0)) < u_p_labyrinthx0xc2_density * 0.04 ? 1.0 : 0.0); }
+    if (labyrinth_0_c2_in > 0.5) labyrinth_0_c2_nv = clamp(u_p_labyrinthx0xc2_brushState, 0.0, 1.0);
+    vec3 labyrinth_0_c2_out = vec3(labyrinth_0_c2_nu, labyrinth_0_c2_nv, labyrinth_0_c2_phase);
+    float labyrinth_0_c2_outA = 74.0;
+    gl_FragColor = vec4(labyrinth_0_c2_out, labyrinth_0_c2_outA);
+}",
+      "label": "Labyrinth cells",
+      "live": true,
+      "nodeId": "rd__cells",
+      "nodeIds": [
+        "rd__step",
+        "rd",
+      ],
+      "previous": true,
+      "reads": [],
+      "readsPrevious": [
+        "labyrinth_cells_0",
+      ],
+      "repeat": 16,
+      "scale": 0.5,
+      "slug": "labyrinth_cells_0",
+      "wrap": "repeat",
     },
   ],
   "success": true,
@@ -12781,7 +12976,7 @@ exports[`golden shaders: every example compiles as it did > litStillLife 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1bf3e36a225e3816d4867bd8d86b:14483",
+  "fragmentShader": "19dee063cab5f0080f77d648cf02:15600",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "17c37e2a80ebd6029a05923aa6ed:555",
@@ -14314,7 +14509,7 @@ exports[`golden shaders: every example compiles as it did > particleChladniSand 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "111c4d933cdc920ab1c339f661a0:8493",
+  "fragmentShader": "1297c50b2379760a46d838a8540e:11714",
   "isStateful": false,
   "liveUniforms": {
     "u_aud_audiosourc_0_b1_v": "audio::b1_v",
@@ -14326,8 +14521,8 @@ exports[`golden shaders: every example compiles as it did > particleChladniSand 
     "u_aud_audiosourc_0_level": "audio::level",
     "u_aud_audiosourc_0_time": "audio::time",
   },
-  "nodeSlugs": "08cc2d32b7010516da5cc91b003c:88",
-  "paramBindings": "06508d052eebd20dc943fb1c50a4:2375",
+  "nodeSlugs": "1edc52a15ebe1515dbd1f11ac527:204",
+  "paramBindings": "1aa71aa758a64708d0d2f506bf86:2754",
   "paramUniforms": [
     "u_p_gpuparticlx0_attract",
     "u_p_gpuparticlx0_blur",
@@ -14383,8 +14578,17 @@ exports[`golden shaders: every example compiles as it did > particleChladniSand 
     "u_p_gpuparticlx0_wave",
     "u_p_gpuparticlx0_waveSpeed",
     "u_p_gpuparticlx0_wind",
+    "u_p_gradx0_color_a",
+    "u_p_gradx0_color_b",
+    "u_p_gradx0_t_offset",
+    "u_p_grainx0_amount",
+    "u_p_grainx0_scale",
+    "u_p_grainx0_seed",
+    "u_p_vignettex0_radius",
+    "u_p_vignettex0_softness",
+    "u_p_vignettex0_strength",
   ],
-  "paramValues": "13694a489fa3cc0079e3f9226865:1742",
+  "paramValues": "0df09b206bbcdf1658fad8ed6384:2024",
   "passes": null,
   "success": true,
   "textureUniforms": {
@@ -14642,11 +14846,11 @@ exports[`golden shaders: every example compiles as it did > particleFlowDrift 1`
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "0e254e4d6ae74e1568400443526d:7815",
+  "fragmentShader": "05770448fa0b5c1001bc42f3f66d:11188",
   "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "07518c2c38f05f1318fe5be7c682:107",
-  "paramBindings": "149fa0e38ef2d601fcbccbf76b72:2803",
+  "nodeSlugs": "0ce19f46f97eed08b447c7f9c057:194",
+  "paramBindings": "0c1a2250fd5f521ecb7b247f17bc:3182",
   "paramUniforms": [
     "u_p_fbmx0_gain",
     "u_p_fbmx0_lacunarity",
@@ -14707,8 +14911,17 @@ exports[`golden shaders: every example compiles as it did > particleFlowDrift 1`
     "u_p_gpuparticlx0_wave",
     "u_p_gpuparticlx0_waveSpeed",
     "u_p_gpuparticlx0_wind",
+    "u_p_gradx0_color_a",
+    "u_p_gradx0_color_b",
+    "u_p_gradx0_t_offset",
+    "u_p_grainx0_amount",
+    "u_p_grainx0_scale",
+    "u_p_grainx0_seed",
+    "u_p_vignettex0_radius",
+    "u_p_vignettex0_softness",
+    "u_p_vignettex0_strength",
   ],
-  "paramValues": "066d130d109a911f72959ec57556:1872",
+  "paramValues": "0899447ff74af1184bf7f9603b4a:2158",
   "passes": null,
   "success": true,
   "textureUniforms": {
@@ -14806,11 +15019,11 @@ exports[`golden shaders: every example compiles as it did > particleGalaxy 1`] =
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "0f9d6328aa4fec034df8a168d6fa:4967",
+  "fragmentShader": "1cc5aad42d50f207bac347acea75:7226",
   "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "1338c1e896f5ac0e4a2401d4c7d3:101",
-  "paramBindings": "04c1ce89df79cf1ec30223c95be7:1176",
+  "nodeSlugs": "198b8c45f23fe1184e12b0209670:169",
+  "paramBindings": "1354f8f3cd348f0bff759ae61eb5:1433",
   "paramUniforms": [
     "u_p_fbmx0_gain",
     "u_p_fbmx0_lacunarity",
@@ -14833,6 +15046,9 @@ exports[`golden shaders: every example compiles as it did > particleGalaxy 1`] =
     "u_p_gpuparticlx0_spread",
     "u_p_gpuparticlx0_swirl",
     "u_p_gpuparticlx0_turbulence",
+    "u_p_grainx0_amount",
+    "u_p_grainx0_scale",
+    "u_p_grainx0_seed",
     "u_p_palx0_amplitude",
     "u_p_palx0_anim",
     "u_p_palx0_freq",
@@ -14841,8 +15057,11 @@ exports[`golden shaders: every example compiles as it did > particleGalaxy 1`] =
     "u_p_palx0_scale",
     "u_p_palx0_speed",
     "u_p_palx0_value",
+    "u_p_vignettex0_radius",
+    "u_p_vignettex0_softness",
+    "u_p_vignettex0_strength",
   ],
-  "paramValues": "11173a186e321115c115665031d6:887",
+  "paramValues": "1e8d47f2a1bcee0829fda3e55d4e:1067",
   "passes": null,
   "success": true,
   "textureUniforms": {
@@ -15121,11 +15340,11 @@ exports[`golden shaders: every example compiles as it did > particleStarOutline 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1a82c4902cfae01cfd035bad26d8:8848",
+  "fragmentShader": "0810b2f03d34b109121bb737f9e3:12129",
   "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "1e4e98f54c16f102e9f42925fe4b:98",
-  "paramBindings": "18a6d12d58083e0f20451a393352:2529",
+  "nodeSlugs": "157d6fc9a3da9b1d01b8623fa4f1:197",
+  "paramBindings": "06dbf550b507251c68c6eef2b585:2899",
   "paramUniforms": [
     "u_p_gpuparticlx0_attract",
     "u_p_gpuparticlx0_blur",
@@ -15181,11 +15400,20 @@ exports[`golden shaders: every example compiles as it did > particleStarOutline 
     "u_p_gpuparticlx0_wave",
     "u_p_gpuparticlx0_waveSpeed",
     "u_p_gpuparticlx0_wind",
+    "u_p_gradx0_color_a",
+    "u_p_gradx0_color_b",
+    "u_p_gradx0_t_offset",
+    "u_p_grainx0_amount",
+    "u_p_grainx0_scale",
+    "u_p_grainx0_seed",
     "u_p_shapex0_m_pts",
     "u_p_shapex0_n_pts",
     "u_p_shapex0_r",
+    "u_p_vignettex0_radius",
+    "u_p_vignettex0_softness",
+    "u_p_vignettex0_strength",
   ],
-  "paramValues": "176d7ebd87457210e2e58049c678:1818",
+  "paramValues": "00cd8ae720cc48164b8cad784849:2100",
   "passes": null,
   "success": true,
   "textureUniforms": {
@@ -15372,11 +15600,11 @@ exports[`golden shaders: every example compiles as it did > particlesRoundShape 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "067a1b6dca001907182ecf8c3cf0:8926",
+  "fragmentShader": "1bd516357e9e64009e201ee1c798:12428",
   "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "1a80e77153437e11d246abc97764:121",
-  "paramBindings": "0d9050effd4b511f51eb11771fee:2756",
+  "nodeSlugs": "1ac1a84040fa111d3ea4d786785e:205",
+  "paramBindings": "04bb6bff3271e9068c6660e15379:3169",
   "paramUniforms": [
     "u_p_circx0_posX",
     "u_p_circx0_posY",
@@ -15386,6 +15614,7 @@ exports[`golden shaders: every example compiles as it did > particlesRoundShape 
     "u_p_fbmx0_octaves",
     "u_p_fbmx0_scale",
     "u_p_fbmx0_time_scale",
+    "u_p_fillx0_fillColor",
     "u_p_fillx0_strokeWidth",
     "u_p_gpuparticlx0_attract",
     "u_p_gpuparticlx0_blur",
@@ -15441,8 +15670,17 @@ exports[`golden shaders: every example compiles as it did > particlesRoundShape 
     "u_p_gpuparticlx0_wave",
     "u_p_gpuparticlx0_waveSpeed",
     "u_p_gpuparticlx0_wind",
+    "u_p_gradx0_color_a",
+    "u_p_gradx0_color_b",
+    "u_p_gradx0_t_offset",
+    "u_p_grainx0_amount",
+    "u_p_grainx0_scale",
+    "u_p_grainx0_seed",
+    "u_p_vignettex0_radius",
+    "u_p_vignettex0_softness",
+    "u_p_vignettex0_strength",
   ],
-  "paramValues": "0475a3b5aa01230b42aa16078133:1973",
+  "paramValues": "1e7d41727e98f70a3fdb675501a9:2308",
   "passes": null,
   "success": true,
   "textureUniforms": {
@@ -18141,7 +18379,7 @@ exports[`golden shaders: every example compiles as it did > repeatSceneBubbles 1
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "0ccef66ed95baf0d8dbdd2d9ed06:12082",
+  "fragmentShader": "0090981dbdeebf1ffaafd018b4a5:12313",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "056145ca34ca8813a5221723fdc3:611",
@@ -18189,7 +18427,7 @@ exports[`golden shaders: every example compiles as it did > repeatSceneCentrepie
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1092cbf98fa99d0be53fc7bfa1b3:13416",
+  "fragmentShader": "0103dac185b62903228e1c5b7643:13647",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "074e80b87f2c0913e7042c93104a:740",
@@ -19264,13 +19502,23 @@ exports[`golden shaders: every example compiles as it did > voxelTerrain 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "0ceecc252c5c0b12beb1f14b1ef9:10962",
+  "fragmentShader": "1884b46b1bcc580adba4ed998b27:25604",
   "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "1bfbf11298c0d70a0300db23d7bf:581",
-  "paramBindings": "0daf9f66ebc8cb18948a8d5407b7:1200",
+  "nodeSlugs": "106b899bd15cff0c93945b623290:406",
+  "paramBindings": "01e4761ff4b8a01c8d0c55a54186:1400",
   "paramUniforms": [
-    "u_p_cellxsizex0_value",
+    "u_p_gilitmarchx0_albedo",
+    "u_p_gilitmarchx0_bg",
+    "u_p_gilitmarchx0_giStrength",
+    "u_p_gilitmarchx0_jitter",
+    "u_p_gilitmarchx0_lightStrength",
+    "u_p_gilitmarchx0_maxDist",
+    "u_p_gilitmarchx0_metallic",
+    "u_p_gilitmarchx0_roughness",
+    "u_p_gilitmarchx0_specStrength",
+    "u_p_gilitmarchx0_stepScale",
+    "u_p_gilitmarchx0_voxelSize",
     "u_p_marchcamerx0_aperture",
     "u_p_marchcamerx0_camAngle",
     "u_p_marchcamerx0_camDist",
@@ -19282,22 +19530,19 @@ exports[`golden shaders: every example compiles as it did > voxelTerrain 1`] = `
     "u_p_marchcamerx0_targetX",
     "u_p_marchcamerx0_targetY",
     "u_p_marchcamerx0_targetZ",
-    "u_p_marchloopgx0_albedo",
-    "u_p_marchloopgx0_bg",
-    "u_p_marchloopgx0_jitter",
-    "u_p_marchloopgx0_maxDist",
-    "u_p_marchloopgx0_stepScale",
-    "u_p_mixx0_t",
-    "u_p_mulx0xc2_b",
+    "u_p_palx0_amplitude",
+    "u_p_palx0_anim",
+    "u_p_palx0_freq",
+    "u_p_palx0_offset",
+    "u_p_palx0_phase",
     "u_p_palx0_scale",
     "u_p_palx0_speed",
-    "u_p_voxelizex2_size",
-    "u_p_voxelxterrainx0xsgxbox3x0_sizeX",
-    "u_p_voxelxterrainx0xsgxbox3x0_sizeY",
-    "u_p_voxelxterrainx0xsgxbox3x0_sizeZ",
-    "u_p_voxelxterrainx0xsgxvoxelizex0_size",
+    "u_p_palx0_value",
+    "u_p_vignettex0_radius",
+    "u_p_vignettex0_softness",
+    "u_p_vignettex0_strength",
   ],
-  "paramValues": "02a276db088fee04cc5cbe5a6958:875",
+  "paramValues": "16784252759a7409c9bcba470dcb:1078",
   "passes": null,
   "success": true,
   "textureUniforms": {},
