@@ -229,7 +229,7 @@ Examples changed: gridLavaLamp (Vec2 Const → Constant), colorStopsCycle (Vec2 
 The definitions' categories changed with the rows (so search's category word and the card colour follow); the
 structure map keeps each node's stage (Luminance stays a number).
 
-- **Particles** (the one node of its own row) is in the **Agents** row, in a Particles group under Start here; the
+- **Particles** (the one node of its own row) is in the **Agents** row, under Start here (since 2026-10-19 in Start here itself, with the Agents group and Grid Rules: no one-node groups, [node-browser.md](node-browser.md)); the
   one-node Particles row is gone on desktop and phone. Its search aliases are unchanged.
 
 ## Search

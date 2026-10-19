@@ -4,7 +4,7 @@
 turning one read into something useful (a mask, a direction, an outline, a fading trail) used to
 take an Expression Block. The **Texture tools** are purpose-named nodes for the common moves in
 the passes guide's sections 1.8 ("Getting information out of a texture") and 1.9 ("Shaping what
-comes out"). They sit in the node browser under **Color & Post → Texture tools**, next to Passes.
+comes out"). They sit in the node browser under **Effects → Texture tools**, with the Pass itself (Pass and time).
 
 Code: `src/nodes/definitions/textureTools.ts` (nodes and the JS mirror of their maths),
 `src/nodes/recipes/textureRecipes.ts` (starter offers), `src/store/textureToolExamples.ts`
