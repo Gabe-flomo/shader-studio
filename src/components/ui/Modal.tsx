@@ -23,7 +23,7 @@ let nextModalId = 1;
  * its buttons stack.
  */
 export function Modal({
-  title, subtitle, icon, iconColor, headerActions, footer, onClose, width = 480, height, children, closeOnScrim = true,
+  title, subtitle, icon, iconColor, headerActions, footer, onClose, onEscape, width = 480, height, children, closeOnScrim = true,
 }: {
   title: ReactNode;
   subtitle?: ReactNode;
@@ -33,6 +33,8 @@ export function Modal({
   headerActions?: ReactNode;
   footer?: ReactNode;
   onClose: () => void;
+  /** Esc asks this first: true when it handled the key (something in the window stopped), and the window stays open. */
+  onEscape?: () => boolean;
   width?: number;
   height?: number;
   children: ReactNode;
@@ -41,7 +43,8 @@ export function Modal({
   const tk = useTokens();
   const panelRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
-  useEffect(() => { onCloseRef.current = onClose; });
+  const onEscapeRef = useRef(onEscape);
+  useEffect(() => { onCloseRef.current = onClose; onEscapeRef.current = onEscape; });
 
   // Captured during the first render, before any child's autoFocus moves focus into the panel.
   const [opener] = useState(() => (typeof document !== 'undefined' ? document.activeElement as HTMLElement | null : null));
@@ -58,6 +61,7 @@ export function Modal({
       // A field with its own open popup (autocomplete) handles Esc itself
       if (e.key === 'Escape' && openModals[openModals.length - 1] === modalId && !(e.target as HTMLElement | null)?.closest?.('[data-captures-escape]')) {
         e.stopPropagation();
+        if (onEscapeRef.current?.()) return;
         onCloseRef.current();
       }
     };

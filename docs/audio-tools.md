@@ -73,6 +73,7 @@ The card shows a small live spectrum (bass on the left, log frequency) with your
     with a light that blinks on each;
   - or both. Under it is the band's **scope** (below), and **Fine-tune**, folded, with a one-line summary of anything
     changed from the preset (open or folded is remembered for each band on this device).
+  - **Listen** (at the end of the line): hear what the band hears and when it fires. See *Listen* below.
 
 Every band becomes an **output on the Audio Source**, named after it: *Bass* for its value, *Kick (trigger)* for its
 hits. Wire *Kick (trigger)* straight into an Envelope's Gate for a pulse on every kick. Removing a band (or switching
@@ -82,6 +83,32 @@ Moving a band or the trim, Sensitivity and every Fine-tune setting change the pi
 adding, removing or renaming a band recompiles (its outputs change).
 
 If you hear nothing, click anywhere in the app: browsers only start sound after a click.
+
+### Listen: hear the band and its hits
+**▶ Listen** on a band's line plays the source through the band's filters (the very biquads Solo uses, so it sounds
+like Solo) and a short click (a clean 1.3 kHz blip, 14 ms) on every hit the band fires. Under the line a **Band ↔
+Clicks** slider mixes them: 0 only the band, 1 only the clicks, the middle both at full (default ½; remembered for each
+band on this device).
+
+- **One band at a time**, like Solo: pressing another band's Listen switches to it; pressing it again, **Esc** (the
+  window stays open) or closing the window stops it. Solo or Hear hovered take the sound back (Listen stops).
+- **A paused source plays** while it listens, and is paused again when it stops. A File that played to its end starts
+  again.
+- **Files**: each click is put on the audio clock ahead of time, from the hits the file analysed ahead holds, where
+  playback reaches each one (plus Sync offset): it lands on its sample, round the loop and inside the trim too. A seek,
+  Restart, a new trim or new settings take back the clicks not played yet and schedule again. While the file is still
+  being analysed the clicks follow the live detector.
+- **Mic, Video, Live** (a Live track: desktop app): a click as each hit the live detector finds is queued to fire,
+  timed to when its trigger fires (as near as the speakers allow). A Video's own sound goes quiet while it listens:
+  only the band plays.
+- **The Mic**: the band's own sound in the speakers can feed back into the mic, so it starts at **clicks only**
+  (*Band audio off for the mic to avoid feedback — use headphones to turn it up*). The mic's mix is remembered apart
+  from the other tabs'.
+- **What you see**: while a File's band listens, its scope shows the page of the trim around playback (up to 4
+  seconds) with a **playhead** running across it, and each hit tick flashes full height as its click plays; the Send
+  hits light blinks with it. Live, the scope scrolls as usual with a *now* line at its right edge and the newest hits
+  lit.
+- Listen is an editor tool: exported web pages don't have it.
 
 ### What to catch, and Sensitivity
 **What to catch** is the band's preset. Each sets the band and how hits are found in it:

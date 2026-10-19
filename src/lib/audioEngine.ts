@@ -483,6 +483,19 @@ class AudioEngine {
     return Number.isFinite(v) && v > 0 && v < 1 ? v : 0;
   }
 
+  /**
+   * How a playing track maps the render clock to the song (null while stopped): song time `u = t − startedAt`, from
+   * `startOff` on; inside `win` until its end, then round it again while `loop` (positionAt's sums). What a band's
+   * Listen schedules its clicks with (lib/audioTools/listen.ts hitClockTimes).
+   */
+  playInfo(nodeId: string): { token: number; startedAt: number; startOff: number; win: { start: number; end: number }; loop: boolean } | null {
+    const st = this.nodes.get(nodeId);
+    if (!st?.isPlaying) return null;
+    const dur = st.buffer.duration;
+    const w = st.win && st.win.end > st.win.start ? st.win : { start: 0, end: dur, loop: st.source?.loop ?? true };
+    return { token: st.startedAt, startedAt: st.startedAt, startOff: st.startOff, win: { start: w.start, end: w.end }, loop: w.loop };
+  }
+
   /** Changes on every start (or seek) of a track: a new run of its position. */
   playToken(nodeId: string): number {
     const st = this.nodes.get(nodeId);

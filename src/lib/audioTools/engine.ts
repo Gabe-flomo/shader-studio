@@ -53,8 +53,9 @@ import { audioHearing, collectAudioNodes, findNodeDeep } from './graphWalk';
 import { acBuild, acNewRun, acStepEffect, acTextureSize, type AcEffect, type AcRun, type AcSpec } from '../../play/kit/audioChain.js';
 import { learnFromRing, learnFromSamples, newLearnListener, type AudioSoundSpec, type LearnListener, type LearnResult } from './learn';
 import { bandsOf, newBandRun, trimWindow, type AudioBandSpec, type BandRun } from './bands';
-import { bandSections, sectionsFor, webAudioQ } from './bandFilter';
+import { bandSections, sectionsFor, webAudioQ, type BiquadSection } from './bandFilter';
 import { AheadAnalysis } from './ahead';
+import { ClickScheduler, listenMix, liveClickTime, type ListenPlay } from './listen';
 import {
   AT_DET_LAG, AT_SCOPE_DB_FLOOR, atApplyGain, atCurveAt, atCurveMax, atDetConfig, atDetLevel, atEventsHeard, atEventsIn, atHeardSpan,
   atNewListener, atStepListener, atStepSource,
@@ -191,6 +192,60 @@ export interface BandView {
   perPass: number | null;
   recent: number;
   recentSeconds: number;
+}
+
+/** A band listening (engine.listenBand): its clicks, and a Mic's / Video's / Live track's sound through its filters. */
+interface Listening {
+  id: string;
+  bandId: string;
+  mix: number;
+  ctx: AudioContext;
+  clickOut: GainNode;
+  unplugClicks: () => void;
+  clicks: ClickScheduler;
+  chain: { from: AudioNode; filters: BiquadFilterNode[]; out: GainNode; unplug: () => void; key: string } | null;
+  /** The band's range and shape its filters were last set to. */
+  spec: string;
+  timer: ReturnType<typeof setInterval> | null;
+  /** Its clicks come from the file analysed ahead now (the live queue is ignored). */
+  ahead: boolean;
+}
+
+/** What the window draws while a band listens (engine.listenView). */
+export type ListenView = {
+  nodeId: string; bandId: string; mix: number;
+  /** Render times of the clicks put on the clock lately. */
+  clicks: readonly number[];
+} & (
+  | { mode: 'live' }
+  | { mode: 'ahead'; pos: number; win: { start: number; end: number }; hop: number; odf: Float32Array; edb: Float32Array; line: Float32Array; gate: Float32Array; times: ArrayLike<number> }
+);
+
+/** Biquads for a band's sections, in a chain. */
+function buildBandFilters(ctx: BaseAudioContext, sections: BiquadSection[]): BiquadFilterNode[] {
+  const filters = sections.map(sec => {
+    const f = ctx.createBiquadFilter();
+    f.type = sec.type;
+    f.frequency.value = sec.freq;
+    f.Q.value = webAudioQ(sec);
+    return f;
+  });
+  for (let i = 1; i < filters.length; i++) filters[i - 1].connect(filters[i]);
+  return filters;
+}
+
+/** Move a band's biquads to new sections (a glide, so a drag doesn't zip). */
+function glideBandFilters(filters: BiquadFilterNode[], sections: BiquadSection[], t: number): void {
+  filters.forEach((f, i) => {
+    const sec = sections[i] ?? sections[0];
+    f.frequency.setTargetAtTime(sec.freq, t, 0.03);
+    f.Q.setTargetAtTime(webAudioQ(sec), t, 0.03);
+  });
+}
+
+/** A gain moved without a zip. */
+function setGain(p: AudioParam, v: number, t: number): void {
+  if (typeof p.setTargetAtTime === 'function') p.setTargetAtTime(v, t, 0.015); else p.value = v;
 }
 
 /** Bins in the card's spectrum. */
@@ -615,6 +670,7 @@ class AudioToolsEngine implements InputSource {
       // a File's band hits come from the file analysed ahead, as it is heard.
       const ext = this.aheadHits(s);
       atStepSource(s, s.bands, s.sounds, s.freq, s.sampleRate, nowMs / 1000, dt, (ch, v) => write(`${id}::${ch}`, v), { wave: s.wave, delay: this.liveDelay(s), ext, liveInput: isLiveInputKind(s.kind) });
+      if (this.listening?.id === id) { this.listenLive(s, nowMs / 1000); this.pumpListen(); }
       this.setDry(id, s, this.dryMuted.has(id));
     }
     for (const [id, f] of this.effects) this.runEffect(id, f, dt, write);
@@ -752,56 +808,213 @@ class AudioToolsEngine implements InputSource {
   }
 
   // ── Hear what you hover (the Audio Source window's spectrum) ─────────────────────────────────────────────
-  private audition: { id: string; key: string; filters: BiquadFilterNode[]; unplug: () => void } | null = null;
+  private audition: { id: string; key: string; owner: 'hear' | 'listen'; filters: BiquadFilterNode[]; out: GainNode; unplug: () => void } | null = null;
 
   /**
    * Play only lo–hi Hz of a File source (a band-pass between its sound and the speakers), for the window's
-   * "Hear hovered" switch and a band's Solo. False when it can't: not a loaded file, or its own sound is already
-   * routed elsewhere (an effect after it is what's heard). Moving the band only glides the filter.
+   * "Hear hovered" switch, a band's Solo and its Listen. False when it can't: not a loaded file, or its own sound is
+   * already routed elsewhere (an effect after it is what's heard). Moving the band only glides the filter.
    *
    * `shape` and `slope` (the band's, lib/audioTools/bands.ts) pick the biquads (lib/audioTools/bandFilter.ts, the
    * same sums the window draws the band's curve with): Band is band-passes whose −3 dB points are lo and hi, Low cut
    * a Butterworth high-pass at lo, High cut a low-pass at hi, one section per 12 dB/oct. Unset: one band-pass.
+   * `owner`: Hear hovered and Solo ('hear', the default) take the sound from a band's Listen (which then stops).
    */
-  auditionBand(id: string, lo: number, hi: number, o: { shape?: 'band' | 'lowcut' | 'highcut'; slope?: number } = {}): boolean {
+  auditionBand(id: string, lo: number, hi: number, o: { shape?: 'band' | 'lowcut' | 'highcut'; slope?: number; owner?: 'hear' | 'listen' } = {}): boolean {
     const s = this.sources.get(id);
     if (!s || s.kind !== 'file' || !s.loaded || this.diverted.has(id)) return false;
+    const owner = o.owner ?? 'hear';
+    if (owner === 'hear' && this.listening) this.stopListen();
     const shape = o.shape ?? 'band', slope = o.slope ?? 12;
     const key = `${shape}:${sectionsFor(slope)}`;
-    if (this.audition && (this.audition.id !== id || this.audition.key !== key)) this.stopAudition();
+    if (this.audition && (this.audition.id !== id || this.audition.key !== key || this.audition.owner !== owner)) this.stopAudition(this.audition.owner);
     let ctx: AudioContext;
     try { ctx = audioEngine.context(); } catch { return false; }
     const sections = bandSections({ lo, hi, shape, slope }, ctx.sampleRate);
     if (!this.audition) {
-      const filters = sections.map(sec => {
-        const f = ctx.createBiquadFilter();
-        f.type = sec.type;
-        f.frequency.value = sec.freq;
-        f.Q.value = webAudioQ(sec);
-        return f;
-      });
-      for (let i = 1; i < filters.length; i++) filters[i - 1].connect(filters[i]);
+      const filters = buildBandFilters(ctx, sections);
+      const out = ctx.createGain();
+      filters[filters.length - 1].connect(out);
       audioFxHost.divert(ctx, trackChainId(id), filters[0]);
-      this.audition = { id, key, filters, unplug: audioEngine.connectOutside(filters[filters.length - 1]) };
+      this.audition = { id, key, owner, filters, out, unplug: audioEngine.connectOutside(out) };
     } else {
-      const t = ctx.currentTime;
-      this.audition.filters.forEach((f, i) => {
-        const sec = sections[i] ?? sections[0];
-        f.frequency.setTargetAtTime(sec.freq, t, 0.03);
-        f.Q.setTargetAtTime(webAudioQ(sec), t, 0.03);
-      });
+      glideBandFilters(this.audition.filters, sections, ctx.currentTime);
     }
     return true;
   }
 
-  /** Back to the whole sound. */
-  stopAudition(): void {
+  /** Back to the whole sound (only the `owner`'s audition: Hear hovered / Solo stopping leaves a Listen be). */
+  stopAudition(owner: 'hear' | 'listen' = 'hear'): void {
     const a = this.audition;
-    if (!a) return;
+    if (!a || a.owner !== owner) return;
     this.audition = null;
     try { audioFxHost.divert(audioEngine.context(), trackChainId(a.id), null); } catch { /* no context */ }
     a.unplug();
     for (const f of a.filters) try { f.disconnect(); } catch { /* gone */ }
+    try { a.out.disconnect(); } catch { /* gone */ }
+  }
+
+  // ── Listen: a band's sound and a click on each of its hits (lib/audioTools/listen.ts) ────────────────────
+  private listening: Listening | null = null;
+
+  /** The band listening now. */
+  listeningTo(): { nodeId: string; bandId: string } | null {
+    return this.listening ? { nodeId: this.listening.id, bandId: this.listening.bandId } : null;
+  }
+
+  /**
+   * Listen to a band of a source (stopping any other): its sound through the band's filters (a File's as Solo plays
+   * it; a Video's, Mic's or Live track's through the same biquads) at the mix's band gain, and a click on every hit
+   * at its clicks gain. A File's hits come from the file analysed ahead, put on the audio clock against playback; the
+   * rest (and a File still being analysed) click as the live detector queues each one. False without such a band.
+   */
+  listenBand(id: string, bandId: string, mix: number): boolean {
+    const s = this.sources.get(id);
+    if (!s || !s.bands.some(b => b.id === bandId)) return false;
+    this.stopListen();
+    this.stopAudition('hear');
+    let ctx: AudioContext;
+    try { ctx = audioEngine.context(); } catch { return false; }
+    const clickOut = ctx.createGain();
+    clickOut.gain.value = listenMix(mix).clicks;
+    const L: Listening = {
+      id, bandId, mix, ctx, clickOut, unplugClicks: audioEngine.connectOutside(clickOut), clicks: new ClickScheduler(ctx, clickOut),
+      chain: null, spec: '', timer: null, ahead: false,
+    };
+    this.listening = L;
+    if (ctx.state === 'suspended') void ctx.resume().catch(() => {});
+    this.pumpListen();
+    L.timer = setInterval(() => this.pumpListen(), 25);
+    this.changed();
+    return true;
+  }
+
+  /** The Band ↔ Clicks mix (0 band only … 1 clicks only). */
+  setListenMix(mix: number): void {
+    const L = this.listening;
+    if (!L) return;
+    L.mix = mix;
+    const g = listenMix(mix);
+    setGain(L.clickOut.gain, g.clicks, L.ctx.currentTime);
+    if (L.chain) setGain(L.chain.out.gain, g.band, L.chain.out.context.currentTime);
+    else if (this.audition?.owner === 'listen') setGain(this.audition.out.gain, g.band, L.ctx.currentTime);
+  }
+
+  /** Stop the band listening: its clicks not played yet are taken back, the sound is whole again. */
+  stopListen(): void {
+    const L = this.listening;
+    if (!L) return;
+    this.listening = null;
+    if (L.timer) clearInterval(L.timer);
+    L.clicks.dispose();
+    L.unplugClicks();
+    try { L.clickOut.disconnect(); } catch { /* gone */ }
+    this.dropListenChain(L);
+    this.stopAudition('listen');
+    const s = this.sources.get(L.id), run = s?.runs.get(L.bandId);
+    if (run) delete run.hit.queued;
+    if (s) this.setDry(L.id, s, this.dryMuted.has(L.id));
+    this.changed();
+  }
+
+  /**
+   * What the window draws while a band listens: a File analysed ahead gives where playback is heard (`pos`, Sync
+   * offset taken off, as its triggers read it), the trim, and the band's curves and hits; otherwise `live`.
+   */
+  listenView(): ListenView | null {
+    const L = this.listening, s = L ? this.sources.get(L.id) : undefined;
+    const b = L && s ? s.bands.find(x => x.id === L.bandId) : undefined;
+    if (!L || !s || !b) return null;
+    const base = { nodeId: L.id, bandId: L.bandId, mix: L.mix, clicks: L.clicks.log };
+    if (s.kind === 'file' && s.ahead && b.trigger && audioEngine.isPlaying(L.id)) {
+      const cfg = atDetConfig(b), ev = s.ahead.events(cfg, { character: cfg.character, charAt: cfg.charAt }), c = s.ahead.curves(cfg);
+      if (ev && c) {
+        const offset = num(s.node.params.syncOffset, 0) / 1000;
+        const pos = audioEngine.positionAt(L.id, audioEngine.heardTime() - offset) ?? 0;
+        const win = trimWindow(audioEngine.duration(L.id), s.node.params.trimIn, s.node.params.trimOut);
+        return { ...base, mode: 'ahead', pos, win, hop: s.ahead.hopSeconds, odf: c.odf, edb: c.edb, line: ev.line, gate: ev.gate, times: ev.times };
+      }
+    }
+    return { ...base, mode: 'live' };
+  }
+
+  /** Every 25 ms while a band listens (and each frame): its sound's route, and a File's clicks put on the clock ahead. */
+  private pumpListen(): void {
+    const L = this.listening;
+    if (!L) return;
+    const s = this.sources.get(L.id), b = s?.bands.find(x => x.id === L.bandId);
+    if (!s || !b) { this.stopListen(); return; }
+    const band = listenMix(L.mix).band;
+    const shape = b.shape ?? 'band', key = `${shape}:${sectionsFor(b.slope)}`, spec = `${b.lo}|${b.hi}|${key}`;
+    if (s.kind === 'file') {
+      // A File: through the audition, as Solo plays it (Hear hovered or Solo taking it stops the Listen).
+      this.dropListenChain(L);
+      if (s.loaded && (spec !== L.spec || this.audition?.owner !== 'listen' || this.audition.id !== L.id)) {
+        const had = this.audition?.owner === 'listen';
+        if (this.auditionBand(L.id, b.lo, b.hi, { shape: b.shape, slope: b.slope, owner: 'listen' }) && this.audition) {
+          if (!had) this.audition.out.gain.value = band;
+          L.spec = spec;
+        }
+      }
+    } else {
+      // Mic, Video, Live: their sound through the band's own biquads.
+      const from = s.node.params.playing === false ? null
+        : s.kind === 'mic' ? liveAudio.tapNode() : s.kind === 'video' ? s.videoIn : s.kind === 'send' ? this.sendUpstream(s) : null;
+      if (L.chain && (L.chain.from !== from || L.chain.key !== key)) this.dropListenChain(L);
+      if (from && !L.chain) {
+        const ctx = from.context as AudioContext;
+        const filters = buildBandFilters(ctx, bandSections({ lo: b.lo, hi: b.hi, shape: b.shape, slope: b.slope }, ctx.sampleRate)), out = ctx.createGain();
+        out.gain.value = band;
+        from.connect(filters[0]);
+        filters[filters.length - 1].connect(out);
+        // In the songs' context, through the master volume; the Mic's own context, straight to its speakers.
+        let unplug: () => void;
+        if (ctx === L.ctx) unplug = audioEngine.connectOutside(out);
+        else { out.connect(ctx.destination); unplug = () => { try { out.disconnect(ctx.destination); } catch { /* gone */ } }; }
+        L.chain = { from, filters, out, unplug, key };
+        L.spec = spec;
+        // A Video's own sound goes quiet: only the band is heard.
+        this.setDry(L.id, s, this.dryMuted.has(L.id));
+      } else if (L.chain && spec !== L.spec) {
+        const ctx = L.chain.out.context;
+        glideBandFilters(L.chain.filters, bandSections({ lo: b.lo, hi: b.hi, shape: b.shape, slope: b.slope }, ctx.sampleRate), ctx.currentTime);
+        L.spec = spec;
+      }
+    }
+    // A File analysed ahead: its hits on the audio clock.
+    let times: ArrayLike<number> | null = null, play: ListenPlay | null = null;
+    if (s.kind === 'file' && s.loaded && s.ahead && b.trigger) {
+      const cfg = atDetConfig(b);
+      times = s.ahead.events(cfg, { character: cfg.character, charAt: cfg.charAt })?.times ?? null;
+      play = times ? audioEngine.playInfo(L.id) : null;
+    }
+    L.ahead = !!(times && play);
+    L.clicks.pump(L.ctx.currentTime, play, times, num(s.node.params.syncOffset, 0) / 1000);
+  }
+
+  /** After a source's frame: the live hits the listening band queued, each clicked as near when it fires as can be. */
+  private listenLive(s: SourceSlot, nowSec: number): void {
+    const L = this.listening;
+    if (!L || L.id !== s.node.id) return;
+    const run = s.runs.get(L.bandId);
+    if (!run) return;
+    const q = run.hit.queued;
+    if (!q) { run.hit.queued = []; return; }
+    if (!q.length) return;
+    const lat = audioEngine.outputLatency(), now = L.ctx.currentTime;
+    if (!L.ahead) for (const p of q) L.clicks.clickAt(liveClickTime(p, nowSec, now, lat));
+    q.length = 0;
+  }
+
+  private dropListenChain(L: Listening): void {
+    const c = L.chain;
+    if (!c) return;
+    L.chain = null;
+    L.spec = '';
+    c.unplug();
+    try { c.from.disconnect(c.filters[0]); } catch { /* gone */ }
+    for (const f of c.filters) try { f.disconnect(); } catch { /* gone */ }
+    try { c.out.disconnect(); } catch { /* gone */ }
   }
 
   /** A gain to nowhere in a context: a diverted chain goes there (its analyser still reads it). */
@@ -814,7 +1027,9 @@ class AudioToolsEngine implements InputSource {
   /** Quiet a source's own sound (an effect after it is heard) or let it play again. */
   private setDry(id: string, s: SourceSlot, mute: boolean): void {
     // A Video's sound: off when an effect is heard instead, else its Volume (0 while Muted).
-    if (s.videoOut) s.videoOut.gain.value = mute || s.node.params.muted === true ? 0 : volumeOf(s.node.params);
+    // While one of its bands Listens, only the band is heard.
+    const listened = !!(this.listening?.id === id && this.listening.chain);
+    if (s.videoOut) s.videoOut.gain.value = mute || listened || s.node.params.muted === true ? 0 : volumeOf(s.node.params);
     // A file's chain goes to a sink instead of the mix (its analyser, which the effects take, still reads it).
     if (mute && s.kind === 'file' && s.loaded && !this.diverted.has(id) && !audioFxHost.isDiverted(trackChainId(id))) {
       const ctx = audioEngine.context();
