@@ -29,7 +29,7 @@ import { InputsBoard } from './inputs/InputsBoard';
 import { SwingStrip } from './inputs/SwingStrip';
 import { SourceDragHandle } from './inputs/SourceDragHandle';
 import { SourceGroups } from './inputs/SourceGroups';
-import { mappingFoldKey, mappingRangeText, sourceFoldKey, type SourceItem } from './mappingGroups';
+import { driverCardFor, driverFoldKeys, mappingFoldKey, mappingRangeText, sourceFoldKey, type SourceItem } from './mappingGroups';
 import { dropOutcome } from './inputs/sourceDrag';
 import { controlSwing, type Swing } from '../../play/controlSwing';
 import { DetailWindow } from './detail/DetailWindow';
@@ -412,8 +412,11 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   // A phone page that isn't a whole section (Actions, Signals, Background, MIDI file, Pad grid) shows on its own.
   const phoneOwn = !!phonePage && OWN_PAGES.has(phonePage);
   const shown: PlayTab | null = compact ? (phoneOwn ? null : tab) : sideView.tab;
+  const phoneSourceCount = play.mappings.length + (play.sources?.length ?? 0) + (play.pairMappings?.length ?? 0);
   const nullLayers = useMemo(() => play.layers.filter(l => l.kind === 'null').map(l => ({ id: l.id, label: l.label })), [play.layers]);
   const [notesEditing, setNotesEditing] = useState(false);
+  // Phones: Suggest controls opens from the Controls ⋯ (there's no button for it in the header).
+  const [suggestOpen, setSuggestOpen] = useState(false);
   // Links in the notes: what they can point at, and going there.
   const noteTargets = useMemo(() => ({ layers: play.layers.map(l => ({ id: l.id, label: l.label })), controls: play.controls.map(c => ({ id: c.id, label: c.label })) }), [play.layers, play.controls]);
   const revealLayer = usePlayUi(s => s.reveal);
@@ -518,31 +521,49 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   // The setup's actions (Open, Import, Export, website, Clear) sit in the panel's ⋯ when the panel is out; else here.
   const controlsMoreItems = (close: () => void): MenuItem[] => [
     { label: play.notes || play.source ? 'Edit notes…' : 'Add notes…', icon: 'comment', disabled: notesEditing, hint: 'What this setup shows, how to play it, and where it comes from', onSelect: () => { close(); setNotesEditing(true); } },
+    // Phones: the header keeps only Add control and ⋯, so Suggest is here (Play audit P20).
+    ...(compact ? [{ label: 'Suggest controls…', icon: 'spark' as const, hint: 'The settings that change the picture most, to add as controls', onSelect: () => { close(); setSuggestOpen(true); } }] : []),
     // Phones have no preview bar, so Stage is here.
     ...(compact ? [{ label: 'Stage', icon: 'play' as const, hint: 'The picture and its controls on their own, as people will play with it', onSelect: () => { close(); useStage.getState().open('full'); } }] : []),
     ...(setupInPanel ? [] : [{ heading: 'Play setup' } as MenuItem, ...playSetupItems({ close, anchor: pageMoreRef.current, sheet: compact })]),
   ];
   const controlsHeader = <PanelHeader
-    title="Controls"
-    scroll={compact}
-    hint={play.controls.length === 0 ? undefined : `${play.controls.length}`}
+    // Phones: the Controls / Sources switch above already says it, with the count.
+    title={compact ? '' : 'Controls'}
+    hint={play.controls.length === 0 || compact ? undefined : `${play.controls.length}`}
     after={hasNotes && !notesEditing ? <IconButton icon="info" size="sm" data-notes-toggle="" active={notesOpen} label={notesOpen ? 'Fold the notes away' : 'Notes: what this setup shows and how to play it'} onClick={() => foldNotes(!notesOpen)} /> : undefined}
     extra={(
       <>
-        {/* A phone slides this row sideways: Add control and Suggest come first there, in sight. */}
-        {compact && addControlButtonEl}
-        {compact && <SuggestControlsButton compact={compact} />}
         {/* Load, Import, Export, Record and Stage live in the top bar and the preview bar; the setup's own
-            actions in the panel's ⋯ (playSetupMenu.tsx). Here: Suggest and Add control, then ⋯ (Notes…). */}
+            actions in the panel's ⋯ (playSetupMenu.tsx). Here: Suggest and Add control, then ⋯ (Notes…).
+            A phone keeps only "+ Control" and ⋯, both 44px, with Suggest in the ⋯ (Play audit P20). */}
         {!compact && <SuggestControlsButton compact={compact} />}
-        {!compact && addControlButtonEl}
+        {addControlButtonEl}
         <span ref={pageMoreRef} style={{ display: 'inline-flex' }}>
-          <IconButton icon="more" label="More: notes, and the setup" onClick={() => { const r = pageMoreRef.current?.getBoundingClientRect(); setPageMore(r ? { x: r.right - 220, y: r.bottom + 4 } : null); }} />
+          <IconButton icon="more" label="More: notes, and the setup" style={compact ? PHONE_TARGET : undefined} onClick={() => { const r = pageMoreRef.current?.getBoundingClientRect(); setPageMore(r ? { x: r.right - 220, y: r.bottom + 4 } : null); }} />
         </span>
+        {compact && <SuggestControlsButton open={suggestOpen} onOpenChange={setSuggestOpen} anchorRef={pageMoreRef} />}
         {pageMore && <Menu x={pageMore.x} y={pageMore.y} minWidth={220} title="Controls" onClose={() => setPageMore(null)} items={controlsMoreItems(() => setPageMore(null))} />}
       </>
     )}
   />;
+  // Phones: the canvas shape and the background sit at the top of the Layers page (Play audit P20).
+  // The canvas row wraps instead of running off the edge (Full screen and the guides were past 390px).
+  const phoneLayersTop = compact ? (
+    <>
+      {notesCard}
+      <div data-phone-canvas-row="" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px 8px', padding: '6px 12px' }}>
+        <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Canvas</span>
+        <AspectPicker onPanel />
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <PreviewQualityPicker onPanel /><FrameRatePicker onPanel />
+          <CanvasFullscreenButton onPanel plainF />
+          <GuidesToggle onPanel />
+        </span>
+      </div>
+      {backgroundsOk ? <BackgroundRow play={play} onChange={update} /> : <LockedBackground />}
+    </>
+  ) : null;
   // Pairs: right-click a slider (or its ⋯) to pair it with another, or with its X/Y partner as a position.
   const resolveGraphTarget = (target: string) => {
     const c = candidates.find(x => x.target === target && x.kind === 'float');
@@ -632,6 +653,28 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   };
   /** What drives a control, in words: its mappings, and the record's sources routed onto it. */
   const drivenLabels = (id: string) => [...play.mappings.filter(m => m.enabled && m.controlId === id).map(m => mappingLabel(m, play)), ...routesInto(play, id).filter(x => !x.mapping).map(x => `${x.label}${x.mode === 'add' ? ' (add)' : ''}`)];
+  /**
+   * Phones: a control's "driven by" chip opens what drives it in Sources (Play audit P20): the
+   * Sources side of the switch, its group and card unfolded, scrolled to and flashed.
+   */
+  const openDriver = (controlId: string) => {
+    const d = driverCardFor(play, controlId);
+    if (!d) { openDetail('control', controlId); return; }
+    usePlayUi.getState().toggleFoldMany(driverFoldKeys(d), false);
+    setTab('mappings');
+    const sel = d.kind === 'mapping' ? `[data-mapping-id="${CSS.escape(d.id)}"]` : `[data-source-card="${CSS.escape(d.id)}"]`;
+    // After the Sources side renders.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const el = rootRef.current?.querySelector<HTMLElement>(sel);
+      if (!el) return;
+      el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      const was = el.style.outline;
+      el.style.outline = `2px solid ${tk.accent.base}`;
+      window.setTimeout(() => { el.style.outline = was; }, 1200);
+    }));
+  };
+  // Mapping on a phone: the controls are what to tap, so a Map started in Sources goes back to them.
+  useEffect(() => { if (compact && mapSrc && usePlayUi.getState().tab === 'mappings') setTab('controls'); }, [compact, mapSrc, setTab]);
   /** The swing ring: where its sources can move it, from its own slider value (Add routes swing around it). */
   const swingOf = (c: PlayControl) => { const v = readControlValue(nodes, c.target, play); return controlSwing(play, c.id, typeof v === 'number' ? v : c.min); };
   // A control's card (a pair's shows once, where its A is). `board`: the Controls board's trace slot and isolate.
@@ -707,6 +750,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       trace={board?.trace}
       onName={board?.onIsolate}
       isolated={board?.isolated}
+      onChip={compact ? () => openDriver(c.id) : undefined}
     />
     </ContextMenuArea>
     </LinkableControl>
@@ -724,20 +768,8 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   };
   const renderControls = (inPanel: boolean) => (
     <div style={{ flex: 1, minHeight: play.notes && !compact && !inPanel ? 110 : 0, overflowY: 'auto', padding: inPanel ? '8px 16px 16px' : '6px 12px 12px' }}>
-      {compact && (
-        // Phones: everything scrolls together under the picture, notes first.
-        <div style={{ margin: '0 -12px 6px' }}>
-          {notesCard}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', overflowX: 'auto' }}>
-            <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Canvas</span>
-            <AspectPicker onPanel />
-            <PreviewQualityPicker onPanel /><FrameRatePicker onPanel />
-            <CanvasFullscreenButton onPanel plainF />
-            <GuidesToggle onPanel />
-          </div>
-          {backgroundsOk ? <BackgroundRow play={play} onChange={update} /> : <LockedBackground />}
-        </div>
-      )}
+      {/* Phones: the notes scroll with the controls. The canvas shape and the background are on the Layers page (Play audit P20). */}
+      {compact && notesCard && <div style={{ margin: '0 -12px 6px' }}>{notesCard}</div>}
       {lockedParts.length > 0 && (
         <button type="button" onClick={() => openProSheet('play.layers')} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', margin: '4px 0 8px', padding: '8px 10px', border: 0, borderRadius: radius.md, cursor: 'pointer', background: alpha(tk.accent.base, 0.08), color: tk.text.secondary, font: `11.5px/1.45 ${fontFamily.ui}`, textAlign: 'left' }}>
           <ProBadge />
@@ -912,10 +944,11 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       {/* Phones: a page of its own, picked from the bottom row's sheet. */}
       {phoneOwn && <div data-phone-page={phonePage} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>{renderPage(phonePage!, false, true)}</div>}
       {!compact && notesCard}
+      {shown === 'layers' && !layersOk && compact && <div style={{ flexShrink: 0 }}>{phoneLayersTop}</div>}
       {shown === 'layers' && !layersOk && <LockedLayers play={play} />}
       {shown === 'layers' && layersOk && (
         <LayersPanel
-          top={compact ? notesCard : undefined}
+          top={compact ? phoneLayersTop : undefined}
           play={play}
           touch={compact}
           extras={!compact}
@@ -926,6 +959,15 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       )}
       {shown === 'engine' && <AudioEnginePanel play={play} onChange={update} touch={compact} />}
       {shown === 'finish' && (finishOk ? <FinishPanel play={play} onChange={update} touch={compact} /> : <LockedFinish play={play} />)}
+      {/* Phones: Controls and Sources (the mappings) on one page, a switch between them (Play audit P20). */}
+      {compact && !phoneOwn && (tab === 'controls' || tab === 'mappings') && (
+        <div data-phone-inputs="" style={{ flexShrink: 0, padding: '8px 12px 6px', background: tk.bg.panel }}>
+          <Segmented fill ariaLabel="Controls or sources" value={tab} onChange={v => setTab(v)} options={[
+            { value: 'controls' as const, label: `Controls${play.controls.length ? ` · ${play.controls.length}` : ''}` },
+            { value: 'mappings' as const, label: `Sources${phoneSourceCount ? ` · ${phoneSourceCount}` : ''}`, title: 'What drives the controls: MIDI, keys, the mouse, audio, hands, a MIDI file, a pad grid' },
+          ]} />
+        </div>
+      )}
       {shown === 'controls' && controlsHeader}
       {canvasRow && !compact && (
         <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', borderBottom: `1px solid ${tk.border.subtle}`, background: tk.bg.panel, overflowX: 'auto' }}>
@@ -940,7 +982,8 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       {shown === 'controls' && <div style={{ padding: '0 12px', flexShrink: 0 }}><MapModeBar /></div>}
       {shown === 'controls' && renderControls(false)}
 
-      {(compact ? tab === 'mappings' && !phoneOwn : sideView.drawer) && renderMappings(false, compact)}
+      {/* Phones keep the MIDI file and the pad grid in Sources (no pages of their own in the bottom row). */}
+      {(compact ? tab === 'mappings' && !phoneOwn : sideView.drawer) && renderMappings(false)}
       {compact && <PlayRailBar />}
       {bigPanel}
       <DetailWindow play={play} onChange={update} renderSource={id => <DetailSource id={id} play={play} update={update} audioNodes={audioNodes} nullLayers={nullLayers} layerRefs={layerRefs} />} />
@@ -952,6 +995,8 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
 }
 
 const DRAWER_HEIGHT_KEY = 'shader-studio:play:drawerHeight';
+/** A phone's touch target in the Controls header: 44px each way (Play audit P20). */
+const PHONE_TARGET = { width: 44, height: 44 } as const;
 /** Pages that aren't a whole sidebar section: a phone shows them in place of its tab's section. */
 const OWN_PAGES: ReadonlySet<RailPage> = new Set<RailPage>(['signals', 'background', 'midi-file', 'pad-grid']);
 /** The split view's big panel lays cards out in as many columns as fit. */
@@ -997,7 +1042,7 @@ function PanelHeader({ title, hint, after, extra, onClick, chevron, scroll = fal
       }}
     >
       {chevron && <Icon name={chevron === 'up' ? 'chevU' : 'chevD'} size={14} style={{ color: tk.text.faint }} />}
-      <span style={{ font: `650 13px ${fontFamily.ui}`, ...(scroll ? { flexShrink: 0 } : null) }}>{title}</span>
+      {title && <span style={{ font: `650 13px ${fontFamily.ui}`, ...(scroll ? { flexShrink: 0 } : null) }}>{title}</span>}
       {hint && <span style={{ color: tk.text.faint, font: `500 11.5px ${fontFamily.mono}`, ...(scroll ? { flexShrink: 0 } : null) }}>{hint}</span>}
       {after && <span onClick={e => e.stopPropagation()} style={{ display: 'inline-flex', flexShrink: 0, marginLeft: -4 }}>{after}</span>}
       <span style={{ flex: 1 }} />
@@ -1032,7 +1077,7 @@ function EmptyState({ title, body }: { title: string; body: string }) {
 interface LayerCandidates { id: string; label: string; props: Array<{ key: string; label: string; hint?: string; min: number; max: number; step?: number }>; actions: ActionKind[] }
 
 function AddControlButton({ candidates, layers, finish, sound, layerById, taken, onAdd, onAddFinish, onAddSound, onAddAction, onAddNull, compact = false }: {
-  /** Phones: the button is an icon, so the header's row of tools fits. */
+  /** Phones: a 44px "+ Control" (the header holds only it and ⋯). */
   compact?: boolean;
   candidates: PlayCandidate[];
   layers: LayerCandidates[];
@@ -1120,7 +1165,7 @@ function AddControlButton({ candidates, layers, finish, sound, layerById, taken,
   return (
     <span ref={anchor} style={{ display: 'inline-flex' }}>
       {compact
-        ? <IconButton icon="plus" label="Add control" active={open} onClick={() => setOpen(o => !o)} disabled={nothing} />
+        ? <Button icon="plus" title="Add control" aria-label="Add control" aria-expanded={open} onClick={() => setOpen(o => !o)} disabled={nothing} style={{ height: PHONE_TARGET.height, padding: '0 14px' }}>Control</Button>
         : <Button size="sm" icon="plus" onClick={() => setOpen(o => !o)} disabled={nothing}>Add control</Button>}
       {open && (
         <Popover anchorRef={anchor} onClose={close} align="end" width={320} padding={8}>
@@ -1210,7 +1255,7 @@ function LivePairCard({ liveOn, ...props }: Omit<ComponentProps<typeof PairCard>
   return <PairCard {...props} live={[la, lb]} />;
 }
 
-function ControlRow({ control, index, count, exists, fate, onRelink, help, source, value, liveOn, drivenBy, touch, onChange, onRename, onRange, onMove, onRemove, removeLabel = 'Remove from panel', onMap, onNull, onAmount, trace, onName, isolated = false, swing }: {
+function ControlRow({ control, index, count, exists, fate, onRelink, help, source, value, liveOn, drivenBy, touch, onChange, onRename, onRange, onMove, onRemove, removeLabel = 'Remove from panel', onMap, onNull, onAmount, trace, onName, isolated = false, swing, onChip }: {
   control: PlayControl;
   index: number;
   count: number;
@@ -1247,12 +1292,14 @@ function ControlRow({ control, index, count, exists, fate, onRelink, help, sourc
   isolated?: boolean;
   /** The part of its range its sources can move it across (play/controlSwing.ts), shaded under the slider. */
   swing?: Swing | null;
+  /** What the "driven by" chip does instead of opening the details window (phones: open the mapping in Sources). */
+  onChip?: () => void;
 }) {
   const tk = useTokens();
   const [hover, setHover] = useState(false);
-  // A narrow card folds the hover tools into ⋯.
+  // A narrow card folds the hover tools into ⋯; so does a phone's, so the name has the room (Play audit P20).
   const headRef = useRef<HTMLDivElement>(null);
-  const tight = useNarrow(headRef, 260);
+  const tight = useNarrow(headRef, 260) || touch;
   const [toolsMenu, setToolsMenu] = useState<{ x: number; y: number } | null>(null);
   const [details, setDetails] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -1278,7 +1325,7 @@ function ControlRow({ control, index, count, exists, fate, onRelink, help, sourc
           draggable
           onDragStart={e => { e.dataTransfer.setData(NOTE_REF_TYPE, noteRef('control', control.id)); e.dataTransfer.setData('text/plain', noteRef('control', control.id)); e.dataTransfer.effectAllowed = 'copy'; }}
           title="Drag onto the notes to link this control"
-          style={{ display: 'inline-flex', color: tk.text.faint, cursor: 'grab', marginLeft: -4, visibility: hover || touch ? 'visible' : 'hidden' }}
+          style={{ display: touch ? 'none' : 'inline-flex', color: tk.text.faint, cursor: 'grab', marginLeft: -4, visibility: hover ? 'visible' : 'hidden' }}
         ><Icon name="grip" size={12} /></span>
         {editing ? (
           <Field autoFocus value={draft} onChange={e => setDraft(e.target.value)} onBlur={commitLabel} onKeyDown={e => { if (e.key === 'Enter') commitLabel(); if (e.key === 'Escape') { setDraft(control.label); setEditing(false); } }} height={26} style={{ flex: 1 }} />
@@ -1289,7 +1336,12 @@ function ControlRow({ control, index, count, exists, fate, onRelink, help, sourc
             aria-pressed={onName ? isolated : undefined}
             onClick={() => { if (onName) { onName(); return; } setDraft(control.label); setEditing(true); }}
             onDoubleClick={onName ? () => { setDraft(control.label); setEditing(true); } : undefined}
-            style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'none', padding: 0, cursor: onName ? 'pointer' : 'text', color: isolated ? tk.accent.text : tk.text.primary, font: `600 12.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+            data-control-name=""
+            style={{
+              flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'none', padding: 0, cursor: onName ? 'pointer' : 'text', color: isolated ? tk.accent.text : tk.text.primary, font: `600 12.5px ${fontFamily.ui}`, overflow: 'hidden',
+              // A phone wraps a long name onto a second line rather than cutting it to "Radiu…".
+              ...(touch ? { whiteSpace: 'normal', overflowWrap: 'anywhere', lineHeight: 1.25, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' } : { textOverflow: 'ellipsis', whiteSpace: 'nowrap' }),
+            }}
           >{control.label}</button>
         )}
         {(help.hint || help.comment) && (
@@ -1303,7 +1355,7 @@ function ControlRow({ control, index, count, exists, fate, onRelink, help, sourc
           </Tooltip>
         )}
         {driven && (
-          <button type="button" data-driven-chip="" title={`${drivenBy.join(', ')}: open its details`} onClick={() => openDetail('control', control.id)} style={{ height: 20, padding: '0 7px', border: 0, borderRadius: 6, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, background: alpha(tk.accent.base, 0.12), color: tk.accent.text, font: `600 10.5px ${fontFamily.ui}`, whiteSpace: 'nowrap', minWidth: 0, flexShrink: 1, maxWidth: '50%' }}>
+          <button type="button" data-driven-chip="" title={`${drivenBy.join(', ')}: ${onChip ? 'open the mapping' : 'open its details'}`} onClick={onChip ?? (() => openDetail('control', control.id))} style={{ height: 20, padding: '0 7px', border: 0, borderRadius: 6, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, background: alpha(tk.accent.base, 0.12), color: tk.accent.text, font: `600 10.5px ${fontFamily.ui}`, whiteSpace: 'nowrap', minWidth: 0, flexShrink: 1, maxWidth: touch ? '40%' : '50%', ...(touch ? { height: 28 } : null) }}>
             <Icon name="bidir" size={11} /><span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{drivenBy[0]}{drivenBy.length > 1 ? ` +${drivenBy.length - 1}` : ''}</span>
           </button>
         )}
@@ -1911,7 +1963,7 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
 
   if (collapsed) {
     return (
-      <div style={{ ...frame, padding: '4px 10px 6px 8px' }}>
+      <div data-mapping-id={m.id} style={{ ...frame, padding: '4px 10px 6px 8px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 26 }}>
           {chevron}
           <button type="button" onClick={onToggle} title="Expand" style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, border: 0, background: 'none', padding: 0, cursor: 'pointer', color: tk.text.primary, font: `500 12px ${fontFamily.ui}`, textAlign: 'left' }}>
@@ -1939,7 +1991,7 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
   if (m.increment) {
     const inc = m.increment as PlayIncrement;
     return (
-      <div style={{ ...frame, padding: '8px 10px' }}>
+      <div data-mapping-id={m.id} style={{ ...frame, padding: '8px 10px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {chevron}
           <span style={{ ...labelStyle, width: 40 }}>Kind</span>
@@ -1983,7 +2035,7 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
   }
 
   return (
-    <div style={{ ...frame, padding: '8px 10px' }}>
+    <div data-mapping-id={m.id} style={{ ...frame, padding: '8px 10px' }}>
       {/* Source row: Solo and Learn stay; Map, details and Remove fold into ⋯ when the card is narrow */}
       <SourceFields source={m.source} controls={controls} excludeControlId={m.controlId} nullLayers={nullLayers} layerRefs={layerRefs} numStyle={numStyle} onChange={source => onUpdate({ source })} onCaptured={source => onUpdate({ source, smoothMs: 0 })} mappingId={m.id}
         lead={narrow => <>{chevron}{!narrow && <span style={{ ...labelStyle, width: 40 }}>Source</span>}</>}

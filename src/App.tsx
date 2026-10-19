@@ -52,7 +52,7 @@ import { toast, useToastStore } from './components/ui/toastStore';
 import { OPEN_WHATS_NEW, openWhatsNew, takeUpdateAnnouncement, useWhatsNewUnread } from './changelog/releaseNotes';
 import { audioEngine } from './lib/audioEngine';
 import { useBreakpoint, isMobile, isTablet, isDesktop, usePhoneLayout } from './hooks/useBreakpoint';
-import { APP_HEIGHT } from './lib/viewport';
+import { APP_HEIGHT, playStacked, useViewport } from './lib/viewport';
 import { rotateShowsFullscreen, useRotateFullscreen } from './lib/rotateFullscreen';
 import { PhoneFullscreenChrome } from './components/shell/PhoneFullscreen';
 import { SplitHandle } from './components/shell/PhoneSplit';
@@ -644,7 +644,11 @@ function App() {
   const studioSplitLandscape = usePhoneSplit(STUDIO_SPLIT_LANDSCAPE);
   const playSplitLandscape = usePhoneSplit(PLAY_SPLIT_LANDSCAPE);
   const studioSplit = landscape ? studioSplitLandscape : studioSplitPortrait;
-  const playSplit = landscape ? playSplitLandscape : playSplitPortrait;
+  // Play stacks the picture over its panel on a phone, and in a window too narrow for side by side
+  // (a mouse, 390px wide: Play audit P20). Only a phone held sideways puts the picture beside it.
+  const playPhone = useViewport(playStacked);
+  const playLandscape = landscape && mobile;
+  const playSplit = playLandscape ? playSplitLandscape : playSplitPortrait;
   const mobileCanvasVh = studioSplit.vh;
   // Tablet: palette sidebar expanded or icon-only
   const [paletteExpanded, setPaletteExpanded] = useState(false);
@@ -1325,26 +1329,26 @@ function App() {
 
   // Upright: the picture on top, the panel under it. Sideways: the picture on the left, the panel
   // on the right (one tree either way, so turning the phone keeps the canvas, sheets and tabs).
-  if (mobile && page === 'play') {
+  if (playPhone && page === 'play') {
     return (
       <div style={{ width: '100vw', height: APP_HEIGHT, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
         <MobileTopBar page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
         {/* What the desktop graph mounts beside the canvas: the Code Explorer, the Do… bar, the Scene Builder */}
         {codeExplorerOpen && <CodeExplorerDialog />}
         <PhoneOverlays />
-        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: landscape ? 'row' : 'column' }}>
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: playLandscape ? 'row' : 'column' }}>
           <ThemeOverrideContext.Provider value="dark">
             <div style={{
               position: 'relative', flexShrink: 0, background: tk.bg.render, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-              ...(landscape ? { width: `${playSplit.vh}vw`, minWidth: 0 } : { height: splitLength(playSplit.vh) }),
+              ...(playLandscape ? { width: `${playSplit.vh}vw`, minWidth: 0 } : { height: splitLength(playSplit.vh) }),
             }}>
-              <div ref={canvasFrame} style={{ position: 'relative', width: landscape ? '100%' : `min(100vw, ${splitLength(playSplit.vh)})`, height: '100%' }}>
+              <div ref={canvasFrame} style={{ position: 'relative', width: playLandscape ? '100%' : `min(100vw, ${splitLength(playSplit.vh)})`, height: '100%' }}>
                 <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} />
-                <PhoneFullscreenChrome showEnter={landscape} />
+                <PhoneFullscreenChrome showEnter={playLandscape} />
               </div>
             </div>
           </ThemeOverrideContext.Provider>
-          <SplitHandle split={playSplit} label="Resize the picture" vertical={landscape} />
+          <SplitHandle split={playSplit} label="Resize the picture" vertical={playLandscape} />
           <div style={{ flex: 1, minHeight: 0, minWidth: 0, position: 'relative' }}>
             <PlayPage compact />
           </div>

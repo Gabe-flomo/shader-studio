@@ -5,7 +5,7 @@
  * sources and the old mappings together, groupSourceItems). Pure, so the
  * pages and their tests share it.
  */
-import type { PlayMapping, PlaySource, PlaySourceDef } from '../../types/play';
+import type { PlayMapping, PlayRecord, PlaySource, PlaySourceDef } from '../../types/play';
 
 /**
  * Mapping and source cards start folded to one line (the app's collapsed-by-default rule); a card
@@ -109,4 +109,25 @@ export function groupSourceItems(
     if (items.length) out.push({ id: g.id, label: g.label, items });
   }
   return out;
+}
+
+/** What drives a control, as the card to open in the Sources column: a mapping onto it, or a source routed onto it. */
+export interface DriverCard { kind: 'mapping' | 'source'; id: string; group: MappingGroupId }
+
+/**
+ * The card a control's "driven by" chip opens (phones: Play audit P20): its first
+ * enabled mapping, else the first enabled source with an enabled route onto it.
+ * The fold keys to open are `mappingFoldKey`/`sourceFoldKey` and the group's
+ * `sourceGroupFoldKey`. Null when nothing drives it.
+ */
+export function driverCardFor(p: Pick<PlayRecord, 'mappings' | 'sources'>, controlId: string): DriverCard | null {
+  const m = p.mappings.find(x => x.enabled && x.controlId === controlId);
+  if (m) return { kind: 'mapping', id: m.id, group: mappingGroupOf(m) };
+  const s = (p.sources ?? []).find(x => x.enabled && x.outputs.some(o => o.routes.some(r => r.enabled && r.to === controlId)));
+  return s ? { kind: 'source', id: s.id, group: mappingGroupOf(s) } : null;
+}
+
+/** The fold keys that show a driver's card opened: its group's heading and the card itself. */
+export function driverFoldKeys(d: DriverCard): string[] {
+  return [sourceGroupFoldKey(d.group), d.kind === 'mapping' ? mappingFoldKey(d.id) : sourceFoldKey(d.id)];
 }

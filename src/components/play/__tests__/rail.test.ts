@@ -14,7 +14,7 @@ const store = vi.hoisted(() => {
   return m;
 });
 import {
-  RAIL_CATEGORIES, RAIL_CATEGORY_SHORTCUT, RAIL_PAGES, RAIL_PAGE_IDS, categoryBadge, categoryOf, currentRailPage, firstPageOf, isRailPage, mappingsCountOf, pageCount, pageForTab, phonePageShown, stepIndex,
+  RAIL_CATEGORIES, RAIL_CATEGORY_SHORTCUT, RAIL_PAGES, RAIL_PAGE_IDS, categoryBadge, categoryOf, currentRailPage, firstPageOf, isRailPage, mappingsCountOf, pageCount, pageForTab, phonePageShown, phonePagesOf, stepIndex,
 } from '../railPages';
 import { DEFAULT_SPLIT, SPLIT_KEY, goToMappings, goToRailCategory, openLayerInSplit, parseSplitPrefs, railRatioFor, setAreaMeasure, showPageInSplit, shownRatio, usePlaySplit } from '../playSplit';
 import { followReveals } from '../PlaySplitArea';
@@ -114,6 +114,12 @@ describe('categories and pages', () => {
     expect(phonePageShown('controls', 'picture', 'signals')).toBe('controls');
     expect(phonePageShown('mappings', 'picture', '')).toBe('controls');
     expect(phonePageShown('finish', 'sound', 'finish-picture')).toBe('finish-sound');
+  });
+  it('the phone’s bottom row goes straight to Controls and Layers; Sound keeps its sheet (Play audit P20)', () => {
+    expect(phonePagesOf('controls')).toEqual(['controls']);
+    expect(phonePagesOf('layers')).toEqual(['layers']);
+    expect(phonePagesOf('signals')).toEqual(['signals']);
+    expect(phonePagesOf('engine').length).toBeGreaterThan(1);
   });
 
   it('a phone page opens its tab; setTab and reveals go back to the tab’s own', () => {
