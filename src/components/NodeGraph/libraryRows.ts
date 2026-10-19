@@ -56,7 +56,7 @@ const CATEGORY_SECTIONS_RAW: Array<{ label: string; categories: string[] }> = [
   { label: '3D tools',         categories: ['3D Primitives', '3D Transforms', '3D Boolean Ops', '3D Scene', '3D Lighting', 'Loops', '4D Shapes', '4D Space', '4D Projection', 'Splats'] },
   { label: 'Shape operations', categories: ['SDF'] },
   { label: 'Colour',           categories: ['Color', 'Color Grading', 'Combiners'] },
-  { label: 'Effects',          categories: ['Effects', 'Passes', 'Texture tools'] },
+  { label: 'Effects',          categories: ['Effects', 'Texture tools'] },
   { label: 'Agents',           categories: ['Agents', 'Agent presets', 'Particles & Fields'] },
   { label: 'Generators',       categories: ['Noise', 'Fractals', 'Science'] },
   { label: 'Math & Logic',     categories: ['Sources', 'Audio', 'Animation', 'Math', 'Matrix', 'Shapers', 'Conditionals'] },
@@ -93,12 +93,13 @@ export const VIRTUAL_ROWS: Record<string, { from: string; only?: string[]; not?:
   'Agent presets': { from: 'Simulation', only: PRESET_TYPES },
 };
 
-/** The library row a node is listed under. */
+/** The library row a node is listed under (a merged row for a category it shows, e.g. Pass → Texture tools). */
 export function rowOfType(type: string, category: string): string {
   for (const [row, v] of Object.entries(VIRTUAL_ROWS)) {
     if (v.from !== category) continue;
     if (v.only ? v.only.includes(type) : !(v.not ?? []).includes(type)) return row;
   }
+  for (const [row, cats] of Object.entries(MERGED_CATEGORIES)) if (cats.includes(category)) return row;
   return category;
 }
 
@@ -108,9 +109,13 @@ export const CATEGORY_SECTIONS = [...CATEGORY_SECTIONS_RAW]
   .map(sec => ({ ...sec, categories: [...sec.categories].sort((a, b) => byLabel(rowLabel(a), rowLabel(b))) }))
   .sort((a, b) => byLabel(a.label, b.label));
 
-/** Rows that show several node categories as one (the definitions keep their own category). */
+/**
+ * Rows that show several node categories as one (the definitions keep their own category, so a
+ * card keeps its colour). The Pass is a Texture tool: it makes the texture the rest work on.
+ */
 export const MERGED_CATEGORIES: Record<string, string[]> = {
   Effects: ['Effects', 'Post Processing'],
+  'Texture tools': ['Texture tools', 'Passes'],
 };
 
 /** What a library row is for, shown under its title when it's open and as the row's tooltip. */
@@ -134,15 +139,14 @@ export const CATEGORY_INFO: Record<string, string> = {
   'Agent presets': 'Ready-made Agents setups, one click each: slime mold, ants, boids, galaxy, smoke and more. Open the group to change how they behave.',
   '4D': 'Shapes and transforms in four dimensions. Lift to 4D turns a 3D point into a 4D one and the shape is sliced back to 3D; projection nodes show the whole 4D shape at once; 4D Wireframe 2D and Plane Slice 4D go straight to the flat picture.',
   Science: 'Chladni plates: the standing-wave patterns of a vibrating plate (Chladni), and one knob that sweeps their modes (Chladni Mode Frequency).',
-  SDF: 'Work on distances from any shape, 2D or 3D. Combine joins, cuts or overlaps two shapes; Modify grows, hollows or sharpens one; Style turns a distance into colour.',
+  SDF: 'Work on distances from any shape, 2D or 3D. Combine joins, cuts or overlaps two shapes; Modify & fill grows, hollows or sharpens one, or turns a distance into colour.',
   Color: 'Make colour: pick colours, palettes and gradients, turn numbers into colour and back, and blend. Adjusting a colour is in Colour grading.',
   'Color Grading': 'Every adjustment of a finished colour, in one place: brightness and contrast, tone, curves, hue and saturation, inverting, tone mapping and grain.',
   Combiners: 'Put two pictures or colours together: masks, add, alpha blend, three channels into one colour. (Mix is in Math, Blend Modes in Colour.)',
   Effects: 'Finishing touches on the picture: blur, bloom, chromatic shifts, glows and post-processing like vignette, scanlines and pixelation.',
   Simulation: 'Things that remember the last frame: agents (walkers with rules), particles, passes that read their own previous frame, and tools for the textures they make.',
   Particles: 'GPU particles: emit, move and draw thousands of points.',
-  Passes: 'Render part of the graph to a texture with a Pass, to read it back later or in the next frame: feedback, trails, multi-step simulations. What you do with the texture is in Texture tools.',
-  'Texture tools': 'Everything that works on a texture (a Pass, a picture, a video): blur, glow, edges, lens effects, reading it elsewhere, masks and levels, its channels, trails and time, depth and tracking.',
+  'Texture tools': 'Everything that makes or works on a texture (a Pass, a picture, a video): the Pass that renders part of the graph to a texture (feedback, trails, multi-step simulations), then blur, glow, edges, lens effects, reading it elsewhere, masks and levels, its channels, trails and time, depth and tracking.',
   Noise: 'Smooth random patterns (value, Perlin, simplex, fBm, Voronoi) for textures, warps and motion.',
   Fractals: 'Shapes that repeat at every scale: Mandelbrot, Julia, kaleidoscopic folds.',
   Sources: 'Inputs from outside the graph: UV, time, mouse, resolution, video, constants (sound: the Audio row).',
@@ -185,11 +189,10 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
   ],
   '3D Primitives': [
     { label: 'Basic',   types: ['sphereSDF3D', 'boxSDF3D', 'torusSDF3D', 'capsuleSDF3D', 'cylinderSDF3D', 'coneSDF3D', 'planeSDF3D', 'octahedronSDF3D', 'pieceBalls'] },
-    { label: 'Traced',  types: ['curveTrace3D', 'timeCubeShape'] },
+    { label: 'Traced & pictures', types: ['curveTrace3D', 'timeCubeShape', 'pictureCard'] },
     { label: 'Curved',  types: ['ellipsoidSDF3D', 'cappedTorusSDF3D', 'cappedConeSDF3D'] },
     { label: 'Complex', types: ['boxFrameSDF3D', 'linkSDF3D', 'pyramidSDF3D', 'hexPrismSDF3D', 'triPrismSDF3D', 'solidAngleSDF3D', 'sdCross3D'] },
     { label: 'Fields',  types: ['gyroidField', 'schwarzPField'] },
-    { label: 'Pictures', types: ['pictureCard'] },
   ],
   '3D Transforms': [
     { label: 'Move',   types: ['transform', 'rotateAxis3D'] },
@@ -227,39 +230,33 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
     { label: 'Compare',    types: ['minMath', 'max', 'step', 'sign'] },
     { label: 'Geometry',   types: ['length', 'dot', 'crossProduct', 'reflect', 'refractDir'] },
     { label: 'Vec2',       types: ['makeVec2', 'splitVec2', 'transformVec', 'normalizeVec2', 'angleToVec2'] },
-    { label: 'Vec3',       types: ['makeVec3', 'splitVec3'] },
-    { label: 'Vec4',       types: ['makeVec4', 'splitVec4'] },
-    { label: 'Swizzle',    types: ['swizzle'] },
+    { label: 'Vec3 & Vec4', types: ['makeVec3', 'splitVec3', 'makeVec4', 'splitVec4', 'swizzle'] },
     { label: 'Complex',    types: ['complexMul', 'complexPow'] },
     { label: 'Remap',      types: ['remap', 'weightedAverage'] },
   ],
   // The Agents family (docs/agents-plan.md): the inside nodes only go into an open Agents group.
   Agents: [
-    { label: 'Start here', types: ['agentsGroup'] },
-    { label: 'Particles', types: ['gpuParticles'] },
+    // The three whole systems, each one node: the Agents group, GPU Particles and a Grid Rules board.
+    { label: 'Start here', types: ['agentsGroup', 'gpuParticles', 'gridRules'] },
     { label: 'Outside the group', types: ['agentEmit', 'agentDeposit', 'trailField', 'drawAgents'] },
     { label: 'Inside: walkers', types: ['agentSense', 'agentNeighbours', 'agentSteer', 'agentMove', 'agentBySpecies'] },
     { label: 'Inside: forces', types: ['agentGravity', 'agentWind', 'agentCurl', 'agentAttract', 'agentVortex', 'agentFlow', 'agentSoundKick'] },
     { label: 'Inside: moving', types: ['agentIntegrate', 'agentAge', 'agentCollide', 'agentCollideScene', 'agentChladni', 'agentRidePath'] },
-    { label: 'Grids', types: ['gridRules'] },
     { label: 'Inside: rule steps', types: ['agentTurnToward', 'agentFollowTrail', 'agentWander', 'agentOrbit', 'agentAvoidWalls', 'agentApplyForce', 'agentDrag', 'agentSlowInCrowd', 'agentLeaveTrail', 'agentFadeWithAge'] },
   ],
   Effects: [
     { label: 'Lighting', types: ['light', 'glowToColor'] },
-    { label: 'Screen',   types: ['crtMask', 'scanlines', 'vignette', 'echo'] },
+    { label: 'Screen',   types: ['crtMask', 'scanlines', 'vignette', 'echo', 'glitch'] },
     { label: 'Warp',     types: ['gravitationalLens', 'floatWarp'] },
-    { label: 'Glitch',   types: ['glitch'] },
   ],
   // Effects also shows the Post Processing nodes (MERGED_CATEGORIES); anything not listed here goes under More.
   'Color Grading': [
-    { label: 'Tone',  types: ['brightnessContrast', 'liftGammaGain', 'toneCurve', 'shadowsHighlights', 'toneMap'] },
+    { label: 'Tone & film', types: ['brightnessContrast', 'liftGammaGain', 'toneCurve', 'shadowsHighlights', 'toneMap', 'grain'] },
     { label: 'Colour', types: ['hueRotate', 'colorSaturation', 'hueRange', 'invert', 'colorMatrix'] },
-    { label: 'Film',  types: ['grain'] },
   ],
   SDF: [
     { label: 'Combine', types: ['sdfUnion', 'sdfIntersect', 'sdfSubtract'] },
-    { label: 'Modify',  types: ['sdfOffset', 'sdfOnion', 'sdfSharpen'] },
-    { label: 'Style',   types: ['sdfFill'] },
+    { label: 'Modify & fill', types: ['sdfOffset', 'sdfOnion', 'sdfSharpen', 'sdfFill'] },
   ],
   '2D Space': [
     { label: 'Basic',   types: ['transform', 'mirror2D', 'motion2D', 'shear', 'perspective2d', 'fract', 'displace'] },
@@ -274,9 +271,8 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
   Grid: [
     { label: 'Layout',   types: ['gridPattern', 'gridPaint', 'arrayField', 'gridLayout', 'cellPicture', 'pieces'] },
     { label: 'Motion',   types: ['waveRadius', 'animatedCellCenter'] },
-    { label: 'Displace', types: ['neighborDist', 'cellDisplace', 'neighborAttractCircles'] },
+    { label: 'Displace & warp', types: ['neighborDist', 'cellDisplace', 'neighborAttractCircles', 'gridDensityWarp'] },
     { label: 'Filter',   types: ['cellFilter', 'cellPattern', 'neighborOffset2d'] },
-    { label: 'Warp',     types: ['gridDensityWarp'] },
   ],
   // Every node that works on a texture (the "(texture)" ones), in one row (docs/node-retirements.md).
   'Texture tools': [
@@ -284,12 +280,11 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
     { label: 'Read', types: ['sampleTexture', 'readTexture', 'readChannels', 'readNeighbours', 'textureNeighbours', 'showData'] },
     { label: 'Shape the values', types: ['textureMask', 'textureLevels', 'curves', 'threshold', 'textureFlow', 'textureChange', 'distanceShape', 'heightLight'] },
     { label: 'Channels', types: ['channelPick', 'channelShuffle', 'channelColours', 'dataTexture', 'renderTargets'] },
-    { label: 'Time', types: ['textureFeedback', 'cache', 'cacheRead'] },
+    { label: 'Pass and time', types: ['pass', 'textureFeedback', 'cache', 'cacheRead'] },
     { label: 'Look and track', types: ['depth', 'depthMix', 'segment', 'blobTrack', 'analyze', 'opticalFlow'] },
   ],
   Field: [
-    { label: 'Gaussian',  types: ['gaussianField', 'fieldAccumulate'] },
-    { label: 'Noisy SDF', types: ['noisyGridSDF'] },
+    { label: 'Make a field', types: ['gaussianField', 'fieldAccumulate', 'noisyGridSDF'] },
     { label: 'Threshold', types: ['metaballThreshold', 'fieldToLines'] },
   ],
 };

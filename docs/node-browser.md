@@ -44,6 +44,33 @@ Whatever adds nodes puts them **in the part of the canvas you're looking at** (`
 
 ---
 
+## No one-node rows or groups
+
+The rows, their sections and sub-groups live in `src/components/NodeGraph/libraryRows.ts`; the
+desktop Nodes list, the phone's Browse and the node search (Shift+Space) all lay out from it.
+**No row and no labelled sub-group holds a single node**: a lone node joins its most fitting
+neighbour (`src/components/NodeGraph/__tests__/libraryNoSingles.test.ts` enforces it). A node's
+definition keeps its own category (card colour, search's category word); a row can show another
+category's nodes through `MERGED_CATEGORIES`.
+
+The 2026-10-19 tidy:
+
+| Was alone | Now |
+|---|---|
+| Pass (the **Passes** row) | **Texture tools → Pass and time**, with Feedback, Cache and Cache Read. The Passes row is gone. |
+| Noisy Grid SDF (Field → Noisy SDF) | Field → **Make a field** (with the Gaussian nodes) |
+| Grid Density Warp (Grid → Warp) | Grid → **Displace & warp** |
+| Picture Card (3D Shapes → Pictures) | 3D Shapes → **Traced & pictures** |
+| Particles, Grid Rules (Agents → Particles, Grids) | Agents → **Start here**, with the Agents group: the three whole systems |
+| Grain (Colour grading → Film) | Colour grading → **Tone & film** |
+| Glitch (Effects → Glitch) | Effects → **Screen** |
+| Swizzle (Math → Swizzle), and Vec3 / Vec4 | Math → **Vec3 & Vec4** |
+| SDF Fill (SDF → Style) | SDF → **Modify & fill** |
+
+The tables below are older notes; the file above is the layout.
+
+---
+
 ## Categories
 
 ```
@@ -66,7 +93,7 @@ A dedicated **Post Processing** category was added for full-screen compositing e
 - **Scanlines** — CRT-style horizontal lines
 - ~~Sobel Edges~~, ~~Motion Blur~~ — retired 2026-10-17: Edges (texture) and Feedback (texture) do these on a texture, in the same frame ([node-retirements.md](node-retirements.md))
 
-Previously these lived in Effects. **Grain** and **Tone Map** moved to **Color Grading** (Film sub-group and Tone sub-group respectively).
+Previously these lived in Effects. **Grain** and **Tone Map** moved to **Color Grading** (both now in the Tone & film sub-group).
 
 ---
 

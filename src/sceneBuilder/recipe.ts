@@ -497,7 +497,7 @@ class Parser {
       const given = new Set(args.map(a => a.key?.toLowerCase()).filter(Boolean));
       const positional = args.filter(a => !a.key && a.value.kind !== 'word').length;
       def.params.forEach((p, n) => {
-        if (given.has(p.key.toLowerCase()) || positional > n) return;
+        if (p.quiet || given.has(p.key.toLowerCase()) || positional > n) return;
         const v = this.draw(sceneRand(p), `${kind}.${p.key}`, t);
         wp.values[p.key] = v.kind === 'vec' ? v.v : (v as { v: number }).v;
       });

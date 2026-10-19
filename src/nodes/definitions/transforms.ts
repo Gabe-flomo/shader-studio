@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { p, withParamSockets } from './helpers';
+import { p, withParamSockets, phaseParamDefs, phaseOf, PHASE_KEYS } from './helpers';
 
 // ─── Shared GLSL helpers ──────────────────────────────────────────────────────
 
@@ -133,7 +133,7 @@ export const UVWarpNode: NodeDefinition = withParamSockets({
   outputs: {
     output: { type: 'vec2', label: 'UV out' },
   },
-  defaultParams: { kind: 'smooth', strength: 0.1, scale: 4.0, speed: 0.5, falloff: 4.0, cx: 0.0, cy: 0.0 },
+  defaultParams: { kind: 'smooth', strength: 0.1, scale: 4.0, speed: 0.5, falloff: 4.0, cx: 0.0, cy: 0.0, phase: 0, phaseSpeed: 0 },
   paramDefs: {
     kind: { label: 'Kind', type: 'select', hint: 'Smooth: flowing noise. Jitter: blocky, glitchy shifts. Curl: smoke-like swirling flow. Swirl: a twist round a centre.', options: [
       { value: 'smooth', label: 'Smooth' }, { value: 'jitter', label: 'Jitter' }, { value: 'curl', label: 'Curl' }, { value: 'swirl', label: 'Swirl' },
@@ -144,6 +144,7 @@ export const UVWarpNode: NodeDefinition = withParamSockets({
     falloff:  { label: 'Falloff',  type: 'float', min: 0.1,  max: 20.0, step: 0.1, showWhen: { param: 'kind', value: 'swirl' }, hint: 'How quickly the twist fades outward. Higher keeps it tight to the centre.' },
     cx:       { label: 'Center X', type: 'float', min: -1.0, max: 1.0,  step: 0.01, showWhen: { param: 'kind', value: 'swirl' }, hint: 'Horizontal position of the swirl centre.' },
     cy:       { label: 'Center Y', type: 'float', min: -1.0, max: 1.0,  step: 0.01, showWhen: { param: 'kind', value: 'swirl' }, hint: 'Vertical position of the swirl centre.' },
+    ...phaseParamDefs({ speedLabel: 'Phase speed', phaseHint: 'Moves the field along: slides through the noise (Smooth, Jitter, Curl) or turns the twist (Swirl). Wire it, or drive it from Play, to move it.' }),
   },
   glslFunctionsFor: node => [UV_WARP_GLSL_OF[uvWarpKind(node.params.kind)]],
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -151,9 +152,13 @@ export const UVWarpNode: NodeDefinition = withParamSockets({
     const kind    = uvWarpKind(node.params.kind);
     const D       = UV_WARP_DEFAULTS[kind];
     const uv      = inputVars.input || 'vec2(0.0)';
-    const timeVar = inputVars.time  || '0.0';
+    const timeIn  = inputVars.time  || '0.0';
     const str     = inputVars.strength || p(node.params.strength, D.strength);
-    const speed   = p(node.params.speed, D.speed);
+    let speed     = p(node.params.speed, D.speed);
+    // A Phase or Phase speed: the field's time is Time × Speed + phase (Speed 1.0 inside, the same sum).
+    const ph      = phaseOf(node);
+    const timeVar = ph ? `${timeIn} * ${speed} + ${ph}` : timeIn;
+    if (ph) speed = '1.0';
     if (kind === 'swirl') {
       const falloff = p(node.params.falloff, 4.0);
       const cx      = p(node.params.cx, 0.0);
@@ -170,7 +175,7 @@ export const UVWarpNode: NodeDefinition = withParamSockets({
       outputVars: { output: `${id}_output` },
     };
   },
-}, ['scale', 'speed', 'falloff', 'cx', 'cy']);
+}, ['scale', 'speed', 'falloff', 'cx', 'cy', ...PHASE_KEYS]);
 
 // "Displace" — wire any vec2 as the displacement direction, control amount with Strength
 export const DisplaceNode: NodeDefinition = {

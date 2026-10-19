@@ -6,7 +6,7 @@
  * automatically lives in the new geometry.
  */
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { p, withParamSockets } from './helpers';
+import { p, withParamSockets, phaseParamDefs, phaseOf, plusPhase, PHASE_KEYS } from './helpers';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -310,7 +310,7 @@ export const SphericalSpaceNode: NodeDefinition = {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const RippleSpaceNode: NodeDefinition = {
+export const RippleSpaceNode: NodeDefinition = withParamSockets({
   type: 'rippleSpace',
   label: 'Ripple / Wave',
   category: '2D Space', subcategory: 'Warp',
@@ -326,12 +326,13 @@ export const RippleSpaceNode: NodeDefinition = {
   outputs: {
     output: { type: 'vec2', label: 'Rippled UV' },
   },
-  defaultParams: { freqX: 5.0, freqY: 5.0, ampX: 0.1, ampY: 0.1 },
+  defaultParams: { freqX: 5.0, freqY: 5.0, ampX: 0.1, ampY: 0.1, phase: 0, phaseSpeed: 0 },
   paramDefs: {
     freqX: { label: 'Freq X', type: 'float', min: 0.0, max: 20.0, step: 0.1, hint: 'Number of waves across the width. Higher = tighter ripples.' },
     freqY: { label: 'Freq Y', type: 'float', min: 0.0, max: 20.0, step: 0.1, hint: 'Number of waves across the height. Higher = tighter ripples.' },
     ampX:  { label: 'Amp X',  type: 'float', min: 0.0, max: 1.0,  step: 0.01, hint: 'How far pixels shift sideways. 0.1 is a gentle wobble.' },
     ampY:  { label: 'Amp Y',  type: 'float', min: 0.0, max: 1.0,  step: 0.01, hint: 'How far pixels shift up and down. 0.1 is a gentle wobble.' },
+    ...phaseParamDefs({ phaseHint: 'Slides the waves along (6.28 is one whole wave). Wire it, or drive it from Play, to move them.' }),
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id    = node.id;
@@ -340,7 +341,8 @@ export const RippleSpaceNode: NodeDefinition = {
     const fY    = inputVars.freqY || p(node.params.freqY, 5.0);
     const aX    = inputVars.ampX  || p(node.params.ampX, 0.1);
     const aY    = inputVars.ampY  || p(node.params.ampY, 0.1);
-    const t     = inputVars.time  || '0.0';
+    const ph    = phaseOf(node);
+    const t     = inputVars.time ? plusPhase(inputVars.time, ph) : ph ?? '0.0';
     return {
       code: [
         `    vec2 ${id}_output = ${inVar} + vec2(\n`,
@@ -350,7 +352,7 @@ export const RippleSpaceNode: NodeDefinition = {
       outputVars: { output: `${id}_output` },
     };
   },
-};
+}, PHASE_KEYS);
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -828,18 +830,20 @@ export const TurbulenceNode: NodeDefinition = withParamSockets({
   outputs: {
     output: { type: 'vec2', label: 'Warped UV' },
   },
-  defaultParams: { octaves: 6, strength: 0.3, frequency: 1.0, decay: 0.7, rotate: 1.0 },
+  defaultParams: { octaves: 6, strength: 0.3, frequency: 1.0, decay: 0.7, rotate: 1.0, phase: 0, phaseSpeed: 0 },
   paramDefs: {
     octaves:   { label: 'Octaves',   type: 'float', min: 1,   max: 12,   step: 1, compileTime: true,    hint: 'How many sine layers. 6–10 looks like water; each one costs a sin(). Recompiles when changed.' },
     strength:  { label: 'Strength',  type: 'float', min: 0.0, max: 1.0,  step: 0.01, hint: 'Displacement per octave (divided by d). 0.3 ripples, 0.8 melts.' },
     frequency: { label: 'Frequency', type: 'float', min: 0.1, max: 8.0,  step: 0.1,  hint: 'Wave frequency of the first octave. Higher = finer waves.' },
     decay:     { label: 'Decay',     type: 'float', min: 0.3, max: 0.95, step: 0.01, hint: 'd /= Decay each octave: 0.7 doubles the frequency roughly every two octaves.' },
     rotate:    { label: 'Rotate',    type: 'float', min: 0.0, max: 3.14, step: 0.01, hint: 'Radians of rotation per unit d. 0 keeps every octave axis-aligned (streaky); ~1 tangles them.' },
+    ...phaseParamDefs({ phaseHint: 'Slides every wave along at once (6.28 is one whole wave). Wire it, or drive it from Play, to make the waves flow.' }),
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id    = node.id;
     const inVar = inputVars.input    || 'vec2(0.0)';
-    const t     = inputVars.time     || '0.0';
+    const ph    = phaseOf(node);
+    const t     = inputVars.time ? plusPhase(inputVars.time, ph) : ph ?? '0.0';
     const str   = inputVars.strength || p(node.params.strength, 0.3);
     const freq  = p(node.params.frequency, 1.0);
     const decay = p(node.params.decay, 0.7);
@@ -857,7 +861,7 @@ export const TurbulenceNode: NodeDefinition = withParamSockets({
       outputVars: { output: `${id}_output` },
     };
   },
-}, ['frequency', 'decay', 'rotate']);
+}, ['frequency', 'decay', 'rotate', ...PHASE_KEYS]);
 
 // ─── Chaos Layers (Xor, "Efficient Chaos") ──────────────────────────────────
 // mini.gmshaders.com/p/efficient-chaos: a tiled grid of cell points, repeated
