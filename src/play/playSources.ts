@@ -3,7 +3,7 @@
  * <select> offers, conversion to and from the record's PlaySource shape, and
  * short labels. Pure; shared by the Play page and the control rows.
  */
-import type { ActionKind, CondCmp, FireMode, FireSpec, HandGesture, HandRead, HandSide, LfoShape, LiveAudioBand, NoiseType, PlayCurve, PlaySignal, PlaySource, SensorRead, TriggerMode, TriggerSpec, ValueCondition } from '../types/play';
+import type { AbletonRead, ActionKind, CondCmp, FireMode, FireSpec, HandGesture, HandRead, HandSide, LfoShape, LiveAudioBand, NoiseType, PlayCurve, PlaySignal, PlaySource, SensorRead, TriggerMode, TriggerSpec, ValueCondition } from '../types/play';
 import type { PlayFinish } from '../types/playFinish';
 import { finishTargetLabel } from '../types/playFinish';
 import { audioFxChainLabel, audioFxTargetLabel, parseAudioFxTarget, type PlayAudioFx } from '../types/playAudioFx';
@@ -23,11 +23,13 @@ import { parseTrackAnchor } from '../types/playTracking';
 import { agentReadLabel } from '../lib/agentReadings';
 
 export type HandSourceType = `hand:${HandRead}`;
+/** `ableton:<read>`: Ableton Live through the Live connector (a parameter, the beat, the bar, playing). */
+export type AbletonSourceType = `ableton:${AbletonRead}`;
 /** `signals:<read>`: a built-in signal (count, active, share). */
 export type BuiltInSourceType = `signals:${BuiltInSignalRead}`;
 /** `reader:<id>`: one audio reader. */
 export type ReaderSourceType = `reader:${string}`;
-export type SourceType = FaceSourceType | PoseSourceType | 'mouse:x' | 'mouse:y' | 'mouse:down' | 'key' | 'trigger' | 'control' | 'null' | 'sensor' | 'lfo' | 'noise' | 'clock' | 'fn' | 'live' | 'audio' | 'tilt' | 'gamepad' | 'osc' | 'midi:cc' | 'midi:note' | 'midi:velocity' | 'midi:gate' | 'midi:bend' | 'pad' | 'data' | 'captured' | BuiltInSourceType | HandSourceType | ReaderSourceType;
+export type SourceType = FaceSourceType | PoseSourceType | 'mouse:x' | 'mouse:y' | 'mouse:down' | 'key' | 'trigger' | 'control' | 'null' | 'sensor' | 'lfo' | 'noise' | 'clock' | 'fn' | 'live' | 'audio' | 'tilt' | 'gamepad' | 'osc' | 'midi:cc' | 'midi:note' | 'midi:velocity' | 'midi:gate' | 'midi:bend' | 'pad' | 'data' | 'captured' | BuiltInSourceType | HandSourceType | ReaderSourceType | AbletonSourceType;
 /** Not a source: the picker's entry that opens the Audio readers panel. */
 export const OPEN_READERS = 'readers:open';
 
@@ -72,6 +74,10 @@ export const SOURCE_TYPES: { value: SourceType; label: string; group?: string }[
   { value: 'tilt', label: 'Phone tilt' },
   { value: 'gamepad', label: 'Gamepad' },
   { value: 'osc', label: 'OSC (Ableton, TouchOSC…)' },
+  { value: 'ableton:param', label: 'Live parameter', group: 'Ableton Live' },
+  { value: 'ableton:beat', label: 'Live beat (0→1 each beat)', group: 'Ableton Live' },
+  { value: 'ableton:bar', label: 'Live bar (0→1 each bar)', group: 'Ableton Live' },
+  { value: 'ableton:playing', label: 'Live playing', group: 'Ableton Live' },
   { value: 'midi:cc', label: 'MIDI CC' },
   { value: 'midi:note', label: 'MIDI note' },
   { value: 'midi:velocity', label: 'MIDI velocity' },
@@ -181,6 +187,7 @@ export function sourceType(s: PlaySource): SourceType {
   if (s.kind === 'pose') return `pose:${s.read}`;
   if (s.kind === 'reader') return `reader:${s.readerId}`;
   if (s.kind === 'signals') return `signals:${s.read}`;
+  if (s.kind === 'ableton') return `ableton:${s.read}`;
   return s.kind;
 }
 
@@ -191,6 +198,7 @@ export function sourceFromType(t: SourceType, prev: PlaySource, otherControlId =
   if (t.startsWith('pose:')) return trackSource('pose', t.slice(5), prev);
   if (t.startsWith('reader:')) return { kind: 'reader', readerId: t.slice(7) };
   if (t.startsWith('signals:')) return { kind: 'signals', read: t.slice(8) as BuiltInSignalRead };
+  if (t.startsWith('ableton:')) { const read = t.slice(8) as AbletonRead; return { kind: 'ableton', read, key: read === 'param' && prev.kind === 'ableton' ? prev.key : '' }; }
   const channel = prev.kind === 'midi' ? prev.channel : 0;
   // A note range and octave wrapping carry over between note, velocity and gate; locks stay with a CC.
   const range = prev.kind === 'midi' ? { ...(prev.range ? { range: prev.range } : {}), ...(prev.wrap ? { wrap: true } : {}) } : {};
@@ -239,7 +247,7 @@ export function sourceLabel(s: PlaySource, controls: ReadonlyArray<{ id: string;
   if (s.kind === 'live') return `Live ${LIVE_BAND_LABELS[s.band]}`;
   if (s.kind === 'reader') return readerLabel(audioReaderBank.name(s.readerId));
   if (s.kind === 'trigger') return `${s.mode === 'envelope' ? 'Env' : s.mode === 'toggle' ? 'Toggle' : s.mode === 'step' ? 'Step' : 'Random'} · ${triggerLabel(s.trigger, layers)}`;
-  if (s.kind === 'clock') return `${s.bpm} bpm · ${s.beats} beat${s.beats === 1 ? '' : 's'}`;
+  if (s.kind === 'clock') return `${s.follow ? 'Live tempo' : `${s.bpm} bpm`} · ${s.beats} beat${s.beats === 1 ? '' : 's'}`;
   if (s.kind === 'fn') return s.expr ? `ƒ ${s.expr}` : 'Function';
   if (s.kind === 'audio') return `Audio band ${s.band + 1}`;
   if (s.kind === 'tilt') return `Tilt ${s.axis === 'beta' ? 'front/back' : s.axis === 'gamma' ? 'left/right' : 'compass'}`;
@@ -249,6 +257,7 @@ export function sourceLabel(s: PlaySource, controls: ReadonlyArray<{ id: string;
   if (s.kind === 'pad') return padSourceLabel(s);
   if (s.kind === 'captured') return `Set · ${signalName(s.signal)}’s value${s.release === 'back' ? ', then back' : s.release === 'value' ? `, then ${s.rest ?? 0}` : ''}`;
   if (s.kind === 'signals') return builtInSignalLabel(s.read);
+  if (s.kind === 'ableton') return abletonSourceLabel(s);
   const ch = s.channel === 0 ? '' : ` · ch. ${s.channel}`;
   const range = s.wrap ? ` ${noteClassesLabel(s.range)}` : s.range ? ` ${kmNoteName(s.range[0])}–${kmNoteName(s.range[1])}` : '';
   switch (s.signal) {
@@ -258,6 +267,16 @@ export function sourceLabel(s: PlaySource, controls: ReadonlyArray<{ id: string;
     case 'gate': return `Gate${range}${ch}`;
     case 'bend': return `Bend${ch}`;
   }
+}
+
+/** "Live · Frequency (Bass / Auto Filter)", "Live beat", "Live parameter · learn one". */
+export function abletonSourceLabel(s: Extract<PlaySource, { kind: 'ableton' }>): string {
+  if (s.read === 'beat') return 'Live beat';
+  if (s.read === 'bar') return 'Live bar';
+  if (s.read === 'playing') return 'Live playing';
+  if (!s.key) return 'Live parameter · pick one';
+  const i = s.key.lastIndexOf(' / ');
+  return i < 0 ? `Live · ${s.key}` : `Live · ${s.key.slice(i + 3)} (${s.key.slice(0, i)})`;
 }
 
 /** "Signals: count", "Signals: active", "Signals: active share". */
@@ -315,7 +334,12 @@ export function triggerLabel(t: TriggerSpec, layers: ReadonlyArray<{ id: string;
     case 'note': return `${t.note < 0 ? 'Any note' : t.wrap ? `${kmClassName(t.note)} (any octave)` : `${NOTE_NAMES[t.note % 12]}${Math.floor(t.note / 12) - 1}`}${t.channel ? ` · ch. ${t.channel}` : ''}`;
     case 'mouse': return 'Click';
     case 'osc': return `OSC ${t.address}`;
-    case 'beat': return t.unit === 'hz' ? `Pulse @ ${Math.round(pulseHz(t) * 1000) / 1000} Hz` : t.beats === 1 ? `Every beat @ ${t.bpm}` : `Every ${t.beats} beats @ ${t.bpm}`;
+    case 'beat': {
+      const at = t.follow ? '· Live' : `@ ${t.bpm}`;
+      return t.unit === 'hz' && !t.follow ? `Pulse @ ${Math.round(pulseHz(t) * 1000) / 1000} Hz` : t.beats === 1 ? `Every beat ${at}` : `Every ${t.beats} beats ${at}`;
+    }
+    case 'liveClip': return `Live clip ${t.clip ? `“${t.clip}”` : 'any'}${t.track ? ` on ${t.track}` : ''}${t.when === 'playing' ? ' plays' : ''}`;
+    case 'liveScene': return `Live scene ${t.scene ? `“${t.scene}”` : 'any'}`;
     case 'audio': return `${LIVE_BAND_LABELS[t.band]} hit`;
     case 'zone': return t.event === 'click' ? 'Click on shape' : t.event === 'enter' ? 'Pointer enters shape' : `Shape fills to ${Math.round(t.threshold * 100)}%`;
     case 'hand': return `${SIDE_NAMES[t.side]} · ${HAND_GESTURE_LABELS[t.gesture]}`;
@@ -604,6 +628,8 @@ export const TRIGGER_KINDS: { value: TriggerSpec['on']; label: string }[] = [
   { value: 'reader', label: 'Audio reader crosses' },
   { value: 'note', label: 'MIDI note' },
   { value: 'osc', label: 'OSC message' },
+  { value: 'liveClip', label: 'Live clip launches' },
+  { value: 'liveScene', label: 'Live scene launches' },
   { value: 'zone', label: 'Shape (click, enter, fill)' },
   { value: 'hand', label: 'Hand gesture (pinch, fist…)' },
   { value: 'face', label: 'Face gesture (mouth open, blink…)' },
@@ -627,7 +653,9 @@ function triggerOnFromKind(on: TriggerSpec['on'], prev: TriggerSpec, layers: Rea
   switch (on) {
     case 'key': return { on: 'key', code: prev.on === 'key' ? prev.code : 'Space' };
     case 'mouse': return { on: 'mouse' };
-    case 'beat': return { on: 'beat', bpm: prev.on === 'beat' ? prev.bpm : 120, beats: prev.on === 'beat' ? prev.beats : 1 };
+    case 'beat': return { on: 'beat', bpm: prev.on === 'beat' ? prev.bpm : 120, beats: prev.on === 'beat' ? prev.beats : 1, ...(prev.on === 'beat' && prev.follow ? { follow: true } : {}) };
+    case 'liveClip': return prev.on === 'liveClip' ? prev : { on: 'liveClip', track: '', clip: '', when: 'triggered' };
+    case 'liveScene': return prev.on === 'liveScene' ? prev : { on: 'liveScene', scene: '' };
     case 'note': return { on: 'note', channel: 0, note: -1 };
     case 'osc': return { on: 'osc', address: prev.on === 'osc' ? prev.address : '/1/push1' };
     case 'audio': return { on: 'audio', band: prev.on === 'audio' ? prev.band : 'bass', threshold: prev.on === 'audio' ? prev.threshold : 0.6 };

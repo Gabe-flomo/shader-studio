@@ -417,6 +417,10 @@ function TransportBar({ play, arr, touch, narrow }: { play: PlayRecord; arr: Pla
         <TransportButton label={arr.metronome ? 'Metronome on: a click every beat (you hear it; recordings don’t)' : 'Metronome off (a count-in counts silently)'} size={b} active={arr.metronome} onClick={() => setArr(a => ({ ...a, metronome: !a.metronome }))}>
           <Icon name="clock" size={15} />
         </TransportButton>
+        <TransportButton label={arr.followLive ? 'Follow Live on: Ableton Live’s play and stop run the tape, from Live’s playhead (the Live connector)' : 'Follow Live off: the tape runs on its own'} size={b} active={!!arr.followLive}
+          onClick={() => setArr(a => { const n = { ...a }; if (a.followLive) delete n.followLive; else n.followLive = true; return n; })}>
+          <Icon name="link" size={15} />
+        </TransportButton>
         <Select ariaLabel="Count-in" value={String(arr.countIn)} height={b} style={{ flex: '0 1 112px', minWidth: 0 }}
           options={COUNT_INS.map(n => ({ value: String(n), label: n ? `Count-in ${n} bar${n > 1 ? 's' : ''}` : 'No count-in' }))}
           onChange={v => setArr(a => ({ ...a, countIn: Number(v) as CountIn }))} />

@@ -4,18 +4,28 @@
  * signal. Quick rule offers them as chips, the reaction editor as one picker.
  * Pure.
  */
-import { actionsForLayer, CONTROL_NUDGE_ACTION, CONTROL_SET_ACTION, isControlAction, isLookAction, NOTES_ACTION, SIGNAL_ACTION, type ActionKind, type LookActionKind, type PlayLayer, type PlayReaction, type PlayRecord } from '../../../types/play';
+import { actionsForLayer, CONTROL_NUDGE_ACTION, CONTROL_SET_ACTION, isControlAction, isLookAction, LIVE_ACTION, NOTES_ACTION, SIGNAL_ACTION, type LiveDoCmd, type ActionKind, type LookActionKind, type PlayLayer, type PlayReaction, type PlayRecord } from '../../../types/play';
 import { controlActionText, defaultControlValue, settableControls } from '../../../play/controlActions';
 import { FINISH_TARGET_PREFIX, finishHostLabel, finishParamOf, finishParamsOf, finishPropId, type FinishEffect } from '../../../types/playFinish';
 import { notesSummary } from '../../../play/notes';
 import { actionLabel, LOOK_ACTION_LABELS } from '../layers/help';
+import { liveDoText } from '../../../lib/liveActions';
 
-export interface DoChoice { value: string; label: string; layerId: string; do: ActionKind; rackId?: string }
+export interface DoChoice { value: string; label: string; layerId: string; do: ActionKind; rackId?: string; liveCmd?: LiveDoCmd }
 
-export const doValue = (r: Pick<PlayReaction, 'do' | 'layerId' | 'notes'>) => (r.do === SIGNAL_ACTION || isControlAction(r.do) ? r.do : r.do === NOTES_ACTION ? `notes|${r.notes?.rackId ?? ''}` : `${r.layerId}|${r.do}`);
+export const doValue = (r: Pick<PlayReaction, 'do' | 'layerId' | 'notes' | 'live'>) => (r.do === SIGNAL_ACTION || isControlAction(r.do) ? r.do : r.do === NOTES_ACTION ? `notes|${r.notes?.rackId ?? ''}` : r.do === LIVE_ACTION ? `live|${r.live?.cmd ?? 'clip'}` : `${r.layerId}|${r.do}`);
 
-/** Every layer's actions, the preferred layer first, then Send a signal. */
-export function doChoices(play: PlayRecord, preferLayer?: string): DoChoice[] {
+/** Do in Live (the Live connector): what it can do in Ableton Live. */
+export const LIVE_DO_CHOICES: ReadonlyArray<{ cmd: LiveDoCmd; label: string }> = [
+  { cmd: 'clip', label: 'Launch a clip · Live' },
+  { cmd: 'scene', label: 'Launch a scene · Live' },
+  { cmd: 'nextScene', label: 'Launch the next scene · Live' },
+  { cmd: 'stopAll', label: 'Stop all clips · Live' },
+  { cmd: 'tap', label: 'Tap tempo · Live' },
+];
+
+/** Every layer's actions, the preferred layer first, then Send a signal. `live`: Ableton Live is connected (or the setup already talks to it), so its commands are offered. */
+export function doChoices(play: PlayRecord, preferLayer?: string, live = false): DoChoice[] {
   const layers = [...play.layers].reverse();
   const first = layers.findIndex(l => l.id === preferLayer);
   if (first > 0) layers.unshift(...layers.splice(first, 1));
@@ -40,6 +50,8 @@ export function doChoices(play: PlayRecord, preferLayer?: string): DoChoice[] {
     out.push({ value: CONTROL_SET_ACTION, label: 'Set a control', layerId: '', do: CONTROL_SET_ACTION });
     out.push({ value: CONTROL_NUDGE_ACTION, label: 'Nudge a control', layerId: '', do: CONTROL_NUDGE_ACTION });
   }
+  // Ableton Live (the Live connector).
+  if (live) for (const c of LIVE_DO_CHOICES) out.push({ value: `live|${c.cmd}`, label: c.label, layerId: '', do: LIVE_ACTION, liveCmd: c.cmd });
   out.push({ value: SIGNAL_ACTION, label: 'Send a signal', layerId: '', do: SIGNAL_ACTION });
   return out;
 }
@@ -86,6 +98,7 @@ export function defaultAmount(kind: string, l: PlayLayer | undefined): number {
 export function reactionText(r: PlayReaction, play: PlayRecord): string {
   if (r.do === SIGNAL_ACTION) return `Send ${play.signals?.find(s => s.id === r.signal)?.name ?? 'a signal'}`;
   if (isControlAction(r.do)) return controlActionText(r, play);
+  if (r.do === LIVE_ACTION && r.live) return liveDoText(r.live);
   if (r.do === NOTES_ACTION && r.notes) return `Play ${notesSummary(r.notes)} · ${play.audioEngine?.racks.find(x => x.id === r.notes!.rackId)?.name ?? 'a missing rack'}`;
   if (isLookAction(r.do)) {
     const e = lookEffectOf(play, r.layerId);

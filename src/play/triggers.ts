@@ -51,7 +51,9 @@ export function triggerKey(t: TriggerSpec): string {
     case 'note': return `note:${t.channel}:${t.note < 0 ? '*' : t.wrap ? `c${t.note % 12}` : t.note}`;
     case 'mouse': return 'mouse';
     case 'osc': return `osc:${t.address}`;
-    case 'beat': return `beat:${t.bpm}:${t.beats}`;
+    case 'beat': return `beat:${t.bpm}:${t.beats}${t.follow ? ':live' : ''}`;
+    case 'liveClip': return `liveClip:${t.track}|${t.clip}|${t.when}`;
+    case 'liveScene': return `liveScene:${t.scene}`;
     case 'audio': return `audio:${t.band}:${t.threshold}`;
     case 'zone': return t.event === 'fill' ? `zone:${t.layerId}:fill:${t.threshold}` : `zone:${t.layerId}:${t.event}`;
     case 'hand': return `hand:${t.side}:${t.gesture}`;
@@ -62,6 +64,21 @@ export function triggerKey(t: TriggerSpec): string {
     case 'value': return sgValueKey(t);
     case 'signal': return signalKey(t.signal);
   }
+}
+
+/**
+ * Every key a Live clip event presses: the exact track and clip, any clip on the track, the clip
+ * on any track, and any clip at all, for its state (triggered or playing).
+ */
+export function liveClipKeys(track: string, clip: string, state: string): string[] {
+  const keys = [`liveClip:${track}|${clip}|${state}`, `liveClip:${track}||${state}`, `liveClip:||${state}`];
+  if (clip) keys.push(`liveClip:|${clip}|${state}`);
+  return [...new Set(keys)];
+}
+
+/** Every key a Live scene launch presses: the scene by name, and any scene. */
+export function liveSceneKeys(scene: string): string[] {
+  return scene ? [`liveScene:${scene}`, 'liveScene:'] : ['liveScene:'];
 }
 
 /**

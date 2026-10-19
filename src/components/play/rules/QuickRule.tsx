@@ -14,6 +14,7 @@ import { useTokens } from '../../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../../theme/tokens';
 import type { FireSpec, PlayReaction, PlayRecord, TriggerSpec } from '../../../types/play';
 import { NOTES_ACTION, SIGNAL_ACTION, defaultNotes } from '../../../types/play';
+import { liveClient } from '../../../lib/liveClient';
 import { playEngine } from '../../../lib/playEngine';
 import { subjectOf, verbsFor } from '../../../play/signalVerbs';
 import { Button } from '../../ui/Button';
@@ -51,13 +52,13 @@ export function QuickRule({ play, when: given, layerId, onMake, onCancel }: {
   const ctx = labelContext(play);
   const verbs = heard ? verbsFor(heard) : [];
   const v = verbs[Math.min(verb, verbs.length - 1)];
-  const choices = doChoices(play, layerId);
+  const choices = doChoices(play, layerId, liveClient.isConnected());
   const shown = all ? choices : choices.slice(0, CHIPS);
   const make = (c: (typeof choices)[number] | null) => {
     if (!v) return;
     const fire: FireSpec | undefined = v.fire;
     const l = play.layers.find(x => x.id === c?.layerId);
-    onMake(v.trigger, c ? { do: c.do, layerId: c.layerId, amount: defaultAmount(c.do, l), enabled: true, ...lookDefaults(c.do, c.layerId, play), ...controlDefaults(c.do, play), ...(c.do === SIGNAL_ACTION ? { signal: '' } : {}), ...(c.do === NOTES_ACTION && c.rackId ? { notes: defaultNotes(c.rackId) } : {}), ...(fire ? { fire } : {}) } : null);
+    onMake(v.trigger, c ? { do: c.do, layerId: c.layerId, amount: defaultAmount(c.do, l), enabled: true, ...lookDefaults(c.do, c.layerId, play), ...controlDefaults(c.do, play), ...(c.do === SIGNAL_ACTION ? { signal: '' } : {}), ...(c.do === NOTES_ACTION && c.rackId ? { notes: defaultNotes(c.rackId) } : {}), ...(c.liveCmd ? { live: { cmd: c.liveCmd } } : {}), ...(fire ? { fire } : {}) } : null);
   };
   const box: React.CSSProperties = { padding: '12px 14px', borderRadius: radius.card, background: alpha(tk.accent.base, 0.06), boxShadow: `inset 0 0 0 1px ${alpha(tk.accent.base, 0.45)}`, marginBottom: 10 };
   const chip = (on: boolean): React.CSSProperties => ({ height: 28, padding: '0 11px', borderRadius: 14, border: 0, cursor: 'pointer', font: `${on ? 600 : 500} 12px ${fontFamily.ui}`, background: on ? tk.bg.selected : tk.bg.field, color: on ? tk.accent.text : tk.text.primary, boxShadow: on ? `inset 0 0 0 1px ${tk.accent.base}` : 'none' });

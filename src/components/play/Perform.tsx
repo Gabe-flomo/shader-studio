@@ -8,6 +8,7 @@
  * mark, and can't be dragged. Faders and knobs: drag, double-click for the home value (what it
  * was when Perform opened), arrow keys step (Shift: bigger steps).
  */
+import { LiveBeatBadge } from './live/LiveFields';
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { controlExists, readControlValue, targetParts } from '../../play/playControls';
@@ -127,6 +128,8 @@ export function Perform({ onRender, viewInBar = false }: {
   return (
     <div data-perform style={{ display: 'flex', flexDirection: 'column', minHeight: 0, height: '100%', color: TEXT }}>
       <PerformBar strength={strength} onRandomize={doRandomize} onReset={doReset} onRender={onRender} play={play} viewInBar={viewInBar} />
+      {/* Ableton Live (the Live connector): its tempo and beat while it's connected. */}
+      <LiveBeatBadge />
       <PerformGrid size={size} items={items} empty={shown.length === 0} render={item => {
         if (item.kind === 'heading') return <div style={{ alignSelf: 'end', color: MUTED, font: `600 11px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase', padding: '6px 2px 0' }}>{item.label}</div>;
         if (item.kind === 'xy') {

@@ -26,6 +26,10 @@ import { padGrid } from './padGrid';
 import { kmClassUnit, kmNoteUnit } from '../play/kit/midi.js';
 import { audioEngine } from './audioEngine';
 import { oscClient, oscNumber, type OscMessage } from './oscClient';
+import { liveClient } from './liveClient';
+import { liveBeatAt } from './live/tempoFollower';
+import type { LiveEvent } from './live/liveProtocol';
+import { liveClipKeys, liveSceneKeys } from '../play/triggers';
 import { anchorDistance, beatAt, firesWhileHeld, newFireState, newTriggerState, noiseAt, noteKeys, proximityCondition, signalKey, stepFire, stepTrigger, triggerKey, type FireState, type TriggerState } from '../play/triggers';
 import { incAdvance, incFold, incGlide, incGliding, incNew, incRange, incRepeat, incReset, incThreshold, type IncState } from '../play/kit/increment.js';
 import { sgLevelDeps, sgPulseLinks, sgReactions, sgSignalPlan, type SgSignalPlanEntry, sgCondNew, sgCondRewind, sgCondStep, sgLinkClear, sgLinkDue, sgLinkFire, sgLinkNew, sgLinkPlan, sgLogic, type SgLinkPlan, type SgLinkState, type SgLoop, sgBuiltIn, sgBuiltInUnit, sgParseValueRef, sgShapeNew, sgShapeRewind, sgShapeStep, sgShaped, sgSignalOrder, type SgShapeState, sgRunActions, sgScreenPoint, sgSwapNew, sgSwapStep, type SgCondState, type SgSwapState } from '../play/kit/signals.js';
@@ -139,7 +143,17 @@ function sourceAnimates(s: PlaySource, triggerIdle: boolean): boolean {
   return s.kind === 'noise'
     || ((s.kind === 'live' || (s.kind === 'trigger' && s.trigger.on === 'audio')) && liveAudio.isOn())
     || ((s.kind === 'reader' || (s.kind === 'trigger' && s.trigger.on === 'reader')) && audioReaderBank.live())
-    || (s.kind === 'trigger' && (s.trigger.on === 'beat' || !triggerIdle));
+    || (s.kind === 'trigger' && (s.trigger.on === 'beat' || !triggerIdle))
+    // Live's beat moves with Live (even while Playfield's own clock is paused).
+    || ((s.kind === 'ableton' && s.read !== 'param') || (s.kind === 'clock' && !!s.follow)) && liveClient.hasTransport();
+}
+
+/** Does a source or trigger use Ableton Live (so the Live connector should listen)? */
+function sourceUsesLive(s: PlaySource): boolean {
+  return s.kind === 'ableton' || (s.kind === 'clock' && !!s.follow) || (s.kind === 'trigger' && triggerUsesLive(s.trigger));
+}
+function triggerUsesLive(t: TriggerSpec): boolean {
+  return t.on === 'liveClip' || t.on === 'liveScene' || (t.on === 'beat' && !!t.follow);
 }
 
 const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
@@ -297,12 +311,29 @@ class PlayEngine implements InputSource {
   };
   private oscIsBound = false;
 
+  /** Ableton Live (the Live connector): clips and scenes press their trigger keys; values and the transport redraw. */
+  private onLive = (e: LiveEvent) => {
+    if (e.type === 'clip' && e.state === 'triggered' && this.learnTriggerCb) { this.finishLearnTrigger({ on: 'liveClip', track: e.track, clip: e.clip, when: 'triggered' }); return; }
+    if (e.type === 'scene' && this.learnTriggerCb) { this.finishLearnTrigger({ on: 'liveScene', scene: e.name }); return; }
+    if (e.type === 'clip' && e.state !== 'stopped') {
+      for (const k of liveClipKeys(e.track, e.clip, e.state)) { this.press(k); this.release(k); }
+    } else if (e.type === 'scene') {
+      for (const k of liveSceneKeys(e.name)) { this.press(k); this.release(k); }
+    } else if (e.type === 'selectedParam' && this.learnCb) {
+      this.finishLearn({ kind: 'ableton', read: 'param', key: e.param.key });
+      return;
+    }
+    if (this.liveIsBound && (e.type === 'param' || e.type === 'transport')) inputBus.wake();
+  };
+  private liveIsBound = false;
+
   constructor() {
     midiEngine.subscribe((e: MidiEvent) => {
       if (e.kind === 'noteOn') for (const k of this.noteKeys(e.channel, e.note)) this.press(k, e.velocity / 127);
       else if (e.kind === 'noteOff') for (const k of this.noteKeys(e.channel, e.note)) this.release(k);
     });
     oscClient.subscribe(this.onOsc);
+    liveClient.onEvent(this.onLive);
   }
   /** Graph clock at the last tick, for LFOs and the drawer's meters. */
   private time = 0;
@@ -453,6 +484,13 @@ class PlayEngine implements InputSource {
     const condKeys = new Set(this.allTriggers().filter(t => t.on === 'proximity' || t.on === 'value').map(triggerKey));
     for (const [k, st] of [...this.condStates]) if (!condKeys.has(k)) { this.condStates.delete(k); if (st.open) this.release(k); }
     oscClient.setWanted(this.oscIsBound || oscClient.getStatus() === 'connected');
+    // Ableton Live: listen while the setup uses it, and stream the parameters it maps (by key).
+    const liveSrcs = [...srcs, ...(record.pairMappings ?? []).filter(m => m.enabled && m.source.kind === 'value').map(m => (m.source as { source: PlaySource }).source)];
+    this.liveIsBound = liveSrcs.some(sourceUsesLive) || this.allTriggers().some(triggerUsesLive)
+      || (record.signals ?? []).some(sg => (sg.do ?? []).some(r => r.enabled && r.do === 'live'))
+      || !!record.arrangement?.followLive;
+    liveClient.want('record', this.liveIsBound);
+    liveClient.watch(liveSrcs.flatMap(x => (x.kind === 'ableton' && x.read === 'param' && x.key ? [x.key] : [])));
     for (const id of [...this.triggerStates.keys()]) if (!record.mappings.some(m => m.id === id && m.source.kind === 'trigger') && !(record.pairMappings ?? []).some(m => m.id === id && m.source.kind === 'value' && m.source.source.kind === 'trigger')) this.triggerStates.delete(id);
     // Show the new state (a mapping added, removed or disabled) even while the clock is paused.
     inputBus.wake();
@@ -1077,7 +1115,11 @@ class PlayEngine implements InputSource {
 
   /** A trigger's running press count and whether it is held now. */
   private triggerInput(t: TriggerSpec): { presses: number; gate: boolean } {
-    if (t.on === 'beat') { const b = beatAt(t.bpm, t.beats, this.time); return { presses: b.count, gate: b.gate }; }
+    if (t.on === 'beat') {
+      // Follow Live: on Live's beats while it's connected (else Playfield's own clock at `bpm`).
+      const b = t.follow && liveClient.hasTransport() ? liveBeatAt(liveClient.beats(), liveClient.state.follower.tempo, t.beats) : beatAt(t.bpm, t.beats, this.time);
+      return { presses: b.count, gate: b.gate };
+    }
     const key = triggerKey(t);
     return { presses: this.presses.get(key) ?? 0, gate: (this.held.get(key) ?? 0) > 0 };
   }
@@ -1376,7 +1418,17 @@ class PlayEngine implements InputSource {
       case 'lfo':
         return lfoValue(source.shape, this.time * source.rate + source.phase);
       case 'clock':
+        // Follow Live: one cycle every `beats` of Live's beats while it's connected; else Playfield's own clock.
+        if (source.follow && liveClient.hasTransport()) return lfoValue(source.shape, liveClient.beats() / Math.max(0.0625, source.beats));
         return lfoValue(source.shape, this.time * clockRate(source.bpm, source.beats));
+      case 'ableton': {
+        if (source.read === 'param') return source.key ? liveClient.state.unit(source.key) : null;
+        if (!liveClient.hasTransport()) return null;
+        if (source.read === 'playing') return liveClient.state.follower.playing ? 1 : 0;
+        if (source.read === 'bar') return liveClient.barPhase();
+        const b = liveClient.beats();
+        return b - Math.floor(b);
+      }
       case 'fn': {
         const { value } = fnEval(source.expr, { t: this.time, b: this.time * FN_BEAT_HZ });
         return Math.max(0, Math.min(1, (value - source.min) / (source.max - source.min)));

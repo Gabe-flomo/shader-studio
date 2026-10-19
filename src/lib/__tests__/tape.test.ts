@@ -370,3 +370,34 @@ describe('the Arrangement view’s transport: one Play/Pause, a separate Stop', 
     expect(sent.filter(s => s.bytes[0] === 0x90).map(s => s.bytes[1])).toEqual([64]);
   });
 });
+
+describe('Follow Live (the Live connector)', () => {
+  const recordTwoSeconds = () => { tape.record(); runTo(0.5); noteOn('rk1', 60); runTo(1); noteOff('rk1', 60); runTo(2); tape.stop(); };
+
+  it('does nothing while the switch is off', () => {
+    recordTwoSeconds();
+    tape.followLive(true, 0);
+    expect(useTape.getState().phase).toBe('stopped');
+  });
+
+  it('Live playing plays the tape from Live’s playhead (in the tape’s bars, looping); Live stopping stops it', () => {
+    recordTwoSeconds();
+    play = { ...play, arrangement: { ...arr(), followLive: true, bpm: 120 } };
+    timePlaying = [];
+    // Beat 5 at 120 BPM is 2.5 s: round the 2 s loop to 0.5 s.
+    tape.followLive(true, 5);
+    expect(useTape.getState().phase).toBe('playing');
+    expect(tape.position()).toBeCloseTo(0.5, 6);
+    expect(timePlaying).toEqual([true]);
+    tape.followLive(false, 6);
+    expect(useTape.getState().phase).toBe('stopped');
+    expect(timePlaying).toEqual([true, false]);
+  });
+
+  it('without Loop, a playhead past the tape’s end leaves it stopped', () => {
+    recordTwoSeconds();
+    play = { ...play, arrangement: { ...arr(), followLive: true, loop: false, bpm: 120 } };
+    tape.followLive(true, 8);
+    expect(useTape.getState().phase).toBe('stopped');
+  });
+});

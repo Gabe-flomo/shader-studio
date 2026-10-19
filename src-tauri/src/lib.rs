@@ -12,6 +12,7 @@ mod playfile;
 mod workspace;
 mod linked;
 mod osc_listener;
+mod live_connector;
 mod output_window;
 mod recovery;
 mod crash;
@@ -363,6 +364,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .manage(FfmpegState(Mutex::new(None)))
         .manage(OscState(Mutex::new(None)))
+        .manage(live_connector::LiveState::default())
         .manage(midi::MidiState::default())
         .manage(audio_engine::EngineState::default())
         .manage(audio_engine::safety::SafetyState::default())
@@ -378,6 +380,12 @@ pub fn run() {
             stop_ffmpeg_encode,
             osc_start,
             osc_stop,
+            live_connector::live_start,
+            live_connector::live_stop,
+            live_connector::live_send,
+            live_connector::live_connector_status,
+            live_connector::live_connector_install,
+            live_connector::live_reveal_log,
             midi::midi_list,
             midi::midi_open_input,
             midi::midi_close_input,

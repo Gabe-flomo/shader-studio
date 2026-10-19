@@ -392,6 +392,8 @@ export function sgReactions(signals) {
     const a = { id: r.id, trigger, do: r.do, layerId: r.layerId || '', amount: r.amount, enabled: r.enabled !== false };
     if (r.signal !== undefined) a.signal = r.signal;
     if (r.notes) a.notes = r.notes;
+    // Do in Live (lib/liveActions.ts): the command.
+    if (r.live) a.live = r.live;
     // Set or Nudge a control: which one (its value and wrap ride on value and key).
     if (r.control !== undefined) a.control = r.control;
     // A Look action (finish.js fnLookAct): the setting, value and seconds it carries.

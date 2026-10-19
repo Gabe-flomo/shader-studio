@@ -24,6 +24,7 @@ The Engine tab is **one view, laid out like Ableton Live's Arrangement**. The Pe
 
 - **Play/Pause** (one button; **Space** while the engine has focus, unless a rack has the computer keyboard or you're typing): stopped, it plays from the record point; playing, it **pauses where the tape is** (the record point moves there, so the next Play carries on); recording, it stops recording (kept, one undo step) and pauses there; counting in, it cancels. `play/engineView.ts` `transportPlan`, run by `tape.togglePlay()`.
 - **Stop** stops whatever runs (a recording is kept) and goes **back to the start** (`tape.stopToStart()`).
+- **Follow Live** (the link button, docs/connecting-ableton.md, "Live connector"): with Ableton Live connected through the Live connector, Live's play starts the tape from Live's playhead (Live's beats counted at the tape's BPM, round the loop when Loop is on; past the end with Loop off it stays stopped) and runs the page's time; Live's stop stops it (a recording is kept). Only changes count: connecting to a Live that's already playing doesn't start it. Stored as `arrangement.followLive`.
 - **Record** (it records the tracks you **Arm**: the ● on each track), **Loop**, **Metronome**, **Count-in**, **BPM** and **Fade in** as below; the position reads **bar.beat.sixteenth** and time / length. The **MIDI** devices and monitor (the antenna) are at the end. Making a take of the tape moved to the **Takes** section under the arrangement (Play audit P8).
 
 ## Clips

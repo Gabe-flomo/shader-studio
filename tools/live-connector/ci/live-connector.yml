@@ -1,0 +1,39 @@
+name: Live connector (Python)
+
+# The Ableton Live Remote Script (tools/live-connector): its unit tests on the Pythons Live
+# embeds (Live 11 is reported as 3.7, Live 12 runs 3.11), plus the 3.7 syntax check.
+on:
+  pull_request:
+    paths: ['tools/live-connector/**', '.github/workflows/live-connector.yml']
+  push:
+    branches: [main]
+    paths: ['tools/live-connector/**', '.github/workflows/live-connector.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - python: '3.7'
+            os: ubuntu-22.04
+          - python: '3.11'
+            os: ubuntu-latest
+          - python: '3.12'
+            os: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: 3.7 syntax and stdlib check
+        run: python tools/live-connector/check_py37.py tools/live-connector/Playfield
+      - name: Compile every file
+        run: python -m compileall -q tools/live-connector/Playfield
+      - name: Unit tests
+        run: python -m unittest discover -s tools/live-connector/tests -t tools/live-connector -v

@@ -93,6 +93,9 @@ export function parseHandAnchor(ref: string): { side: HandSide; point: number } 
 export const HAND_PINCH_POINT = 21;
 
 export type TriggerSpec = TriggerOn & { fire?: FireSpec };
+/** What an Ableton Live source reads (PlaySource 'ableton'). */
+export type AbletonRead = 'param' | 'beat' | 'bar' | 'playing';
+export const ABLETON_READS: readonly AbletonRead[] = ['param', 'beat', 'bar', 'playing'];
 export type TriggerOn =
   /** A live-audio band crossing `threshold` (0..1) upward: a kick, a snare, a loud moment. */
   | { on: 'audio'; band: LiveAudioBand; threshold: number }
@@ -105,8 +108,19 @@ export type TriggerOn =
   | { on: 'note'; channel: number; note: number; wrap?: boolean }
   | { on: 'mouse' }
   | { on: 'osc'; address: string }
-  /** A pulse on the setup's clock: every `beats` beats at `bpm`. `unit` 'hz' shows it as a rate (bpm / 60 / beats per second); the timing is the same. */
-  | { on: 'beat'; bpm: number; beats: number; unit?: 'hz' }
+  /**
+   * A pulse on the setup's clock: every `beats` beats at `bpm`. `unit` 'hz' shows it as a rate (bpm / 60 / beats per second); the timing is the same.
+   * `follow`: on Ableton Live's beat through the Live connector while it's connected (lib/liveClient.ts), else at `bpm`.
+   */
+  | { on: 'beat'; bpm: number; beats: number; unit?: 'hz'; follow?: boolean }
+  /**
+   * A clip launching in Ableton Live (the Live connector): on a track (its name, '' any) and a
+   * clip (its name, '' any), when it's `triggered` (pressed, before the launch quantisation) or
+   * starts `playing` (on Live's grid).
+   */
+  | { on: 'liveClip'; track: string; clip: string; when: 'triggered' | 'playing' }
+  /** A scene launching in Ableton Live (its name, '' any). */
+  | { on: 'liveScene'; scene: string }
   /**
    * A shape layer: `click` a press on it, `enter` the pointer moving onto it,
    * `fill` particles filling it past `threshold` (0..1, see the sensor source).
@@ -267,6 +281,8 @@ export interface PlayReaction {
   signal?: string;
   /** Play notes: what and how. */
   notes?: NotesSpec;
+  /** Do in Live: what (LIVE_ACTION). */
+  live?: LiveDo;
   /** Set or Nudge a control (ControlActionKind): which control (a PlayControl id). */
   control?: string;
   /** A Look action (LookActionKind): the effect's setting it changes (fxpulse, fxset). Nudge a control: 'wrap' goes round its range instead of stopping at the ends. */
@@ -605,8 +621,14 @@ export type PlaySource =
   | { kind: 'control'; controlId: string }
   /** A free-running oscillator on the graph clock, 0..1. `phase` offsets the cycle (0..1). */
   | { kind: 'lfo'; shape: LfoShape; rate: number; phase: number }
-  /** An oscillator locked to a tempo: one cycle every `beats` beats at `bpm`. */
-  | { kind: 'clock'; shape: LfoShape; bpm: number; beats: number }
+  /** An oscillator locked to a tempo: one cycle every `beats` beats at `bpm`. `follow`: on Ableton Live's beat while the Live connector is connected. */
+  | { kind: 'clock'; shape: LfoShape; bpm: number; beats: number; follow?: boolean }
+  /**
+   * Ableton Live through the Live connector (docs/live-connector-plan.md): a parameter by its
+   * key ("Bass / Auto Filter / Frequency"), 0..1 over its own range; or Live's beat (a 0→1 ramp
+   * each beat), bar (each bar) or playing (1 while Live plays).
+   */
+  | { kind: 'ableton'; read: AbletonRead; key: string }
   /**
    * A one-line formula (`sin(t * 2) * 0.5 + 0.5`) over time, compiled to a
    * closure with no `eval` (src/play/kit/fn.js). `expr` sees `t` (seconds),
@@ -909,7 +931,7 @@ export type LookActionKind = 'mosh' | 'moshreset' | 'fxpulse' | 'fxset' | 'splas
 export const LOOK_ACTION_KINDS: readonly LookActionKind[] = ['mosh', 'moshreset', 'fxpulse', 'fxset', 'splash'];
 export function isLookAction(kind: string): kind is LookActionKind { return (LOOK_ACTION_KINDS as readonly string[]).includes(kind); }
 /** A built-in action, a Look action, or a button a Script layer declares (`script:<key>`). */
-export type ActionKind = BuiltinActionKind | LookActionKind | ControlActionKind | 'signal' | 'notes' | `script:${string}`;
+export type ActionKind = BuiltinActionKind | LookActionKind | ControlActionKind | 'signal' | 'notes' | 'live' | `script:${string}`;
 /**
  * Actions on a control instead of a layer (play/controlActions.ts): the control's own value moves, as
  * if its slider were dragged, so they work with no layers at all. `control` is the control's id.
@@ -925,6 +947,13 @@ export function isControlAction(kind: string): kind is ControlActionKind { retur
 export const SIGNAL_ACTION = 'signal' as const;
 /** The reaction that plays notes on a rack of the Audio engine (its `notes`) instead of doing something to a layer. */
 export const NOTES_ACTION = 'notes' as const;
+/** The reaction that does something in Ableton Live through the Live connector (its `live`; lib/liveActions.ts). */
+export const LIVE_ACTION = 'live' as const;
+/** What a Live reaction does: launch a clip (`track`, `target` the clip) or a scene (`target`), the next scene, stop all clips, tap the tempo. */
+export type LiveDoCmd = 'clip' | 'scene' | 'nextScene' | 'stopAll' | 'tap';
+export const LIVE_DO_CMDS: readonly LiveDoCmd[] = ['clip', 'scene', 'nextScene', 'stopAll', 'tap'];
+/** A Live reaction's command. Names are Live's own (a track, a clip, a scene); "#3" means the third. */
+export interface LiveDo { cmd: LiveDoCmd; track?: string; target?: string }
 
 /** How Play notes plays (play/notes.ts): all at once, strummed, one at a time in turn, or one picked at random. */
 export type NotesPlay = 'chord' | 'strum' | 'arp' | 'random';
@@ -969,6 +998,8 @@ export interface PlayAction {
   signal?: string;
   /** Play notes (a rule's reaction): what and how. */
   notes?: NotesSpec;
+  /** Do in Live (a rule's reaction). */
+  live?: LiveDo;
   /** Set or Nudge a control (a rule's reaction): which control. */
   control?: string;
   /** A Look action's setting, value and seconds, a Splash's point, a control action's value (see PlayReaction). */
@@ -1612,7 +1643,9 @@ function parseTriggerOn(raw: unknown): TriggerOn | null {
     }
     case 'mouse': return { on: 'mouse' };
     case 'osc': { const address = str(t.address); return address && address.startsWith('/') ? { on: 'osc', address } : null; }
-    case 'beat': { const b: TriggerOn = { on: 'beat', bpm: Math.max(1, num(t.bpm, 120)), beats: Math.max(0.0625, num(t.beats, 1)) }; if (t.unit === 'hz') b.unit = 'hz'; return b; }
+    case 'beat': { const b: TriggerOn = { on: 'beat', bpm: Math.max(1, num(t.bpm, 120)), beats: Math.max(0.0625, num(t.beats, 1)) }; if (t.unit === 'hz') b.unit = 'hz'; if (t.follow === true) b.follow = true; return b; }
+    case 'liveClip': return { on: 'liveClip', track: (typeof t.track === 'string' ? t.track : '').slice(0, 120), clip: (typeof t.clip === 'string' ? t.clip : '').slice(0, 120), when: t.when === 'playing' ? 'playing' : 'triggered' };
+    case 'liveScene': return { on: 'liveScene', scene: (typeof t.scene === 'string' ? t.scene : '').slice(0, 120) };
     case 'audio': return { on: 'audio', band: LIVE_BANDS_SET.has(t.band as string) ? (t.band as LiveAudioBand) : 'bass', threshold: Math.max(0.01, Math.min(0.99, num(t.threshold, 0.6))) };
     case 'zone': {
       const layerId = str(t.layerId);
@@ -1780,8 +1813,16 @@ function parseReaction(raw: unknown): PlayReaction | null {
   const a = raw as Record<string, unknown> | null;
   const id = a && str(a.id);
   if (!a || !id) return null;
-  const kind = typeof a.do === 'string' && ((ACTION_KINDS as readonly string[]).includes(a.do) || isLookAction(a.do) || isControlAction(a.do) || scriptActionKey(a.do) || a.do === SIGNAL_ACTION || a.do === NOTES_ACTION) ? (a.do as ActionKind) : null;
+  const kind = typeof a.do === 'string' && ((ACTION_KINDS as readonly string[]).includes(a.do) || isLookAction(a.do) || isControlAction(a.do) || scriptActionKey(a.do) || a.do === SIGNAL_ACTION || a.do === NOTES_ACTION || a.do === LIVE_ACTION) ? (a.do as ActionKind) : null;
   if (!kind) return null;
+  if (kind === LIVE_ACTION) {
+    const live = parseLiveDo(a.live);
+    if (!live) return null;
+    const r: PlayReaction = { id, do: kind, layerId: '', amount: 1, enabled: a.enabled !== false, live };
+    const f = parseFire(a.fire);
+    if (f) r.fire = f;
+    return r;
+  }
   if (isControlAction(kind)) {
     // Set or Nudge a control: which one, and the value (a set) or step (a nudge); a nudge may wrap.
     const control = str(a.control);
@@ -1811,6 +1852,16 @@ function parseReaction(raw: unknown): PlayReaction | null {
     : { id, do: kind, layerId: str(a.layerId) ?? '', amount: Math.max(0, num(a.amount, kind === 'burst' ? 60 : 1)), enabled: a.enabled !== false };
   const fire = parseFire(a.fire);
   if (fire) out.fire = fire;
+  return out;
+}
+
+/** A Live reaction's command, its names trimmed; null when it isn't one. */
+export function parseLiveDo(raw: unknown): LiveDo | null {
+  const o = raw as Record<string, unknown> | null;
+  if (!o || typeof o !== 'object' || !(LIVE_DO_CMDS as readonly string[]).includes(o.cmd as string)) return null;
+  const out: LiveDo = { cmd: o.cmd as LiveDoCmd };
+  if (typeof o.track === 'string' && o.track) out.track = o.track.slice(0, 120);
+  if (typeof o.target === 'string' && o.target) out.target = o.target.slice(0, 120);
   return out;
 }
 
@@ -1895,8 +1946,17 @@ function parseSource(raw: unknown): PlaySource | null {
     }
     case 'lfo':
       return { kind: 'lfo', shape: shape(s.shape), rate: Math.max(0.001, num(s.rate, 0.5)), phase: num(s.phase, 0) };
-    case 'clock':
-      return { kind: 'clock', shape: shape(s.shape), bpm: Math.max(1, num(s.bpm, 120)), beats: Math.max(0.0625, num(s.beats, 4)) };
+    case 'clock': {
+      const c: PlaySource = { kind: 'clock', shape: shape(s.shape), bpm: Math.max(1, num(s.bpm, 120)), beats: Math.max(0.0625, num(s.beats, 4)) };
+      if (s.follow === true) c.follow = true;
+      return c;
+    }
+    case 'ableton': {
+      const read = (ABLETON_READS as readonly string[]).includes(s.read as string) ? (s.read as AbletonRead) : 'param';
+      const key = typeof s.key === 'string' ? s.key.slice(0, 400) : '';
+      // A parameter with no key yet waits for Learn (like a CC with no knob).
+      return { kind: 'ableton', read, key: read === 'param' ? key : '' };
+    }
     case 'fn': {
       const expr = (str(s.expr) ?? '').slice(0, 500);
       const min = num(s.min, -1), max = num(s.max, 1);
@@ -2225,7 +2285,7 @@ export function parsePlayRecordAsSaved(raw: unknown): PlayRecord {
   // A reaction on a missing layer goes, as an action would; a trigger input on something missing goes too.
   for (const s of signals) {
     // A Look action needs its effect ('finish:<effectId>'); a Splash may drop into a Water layer instead.
-    if (s.do) { const d = s.do.filter(x => x.do === SIGNAL_ACTION || x.do === NOTES_ACTION || (isControlAction(x.do) ? keptIds.has(x.control ?? '') : false) || (isLookAction(x.do) ? (x.layerId.startsWith(FINISH_TARGET_PREFIX) && effectIds.has(x.layerId.slice(FINISH_TARGET_PREFIX.length))) || (x.do === 'splash' && waterIds.has(x.layerId)) : layerIds.has(x.layerId))); if (d.length) s.do = d; else delete s.do; }
+    if (s.do) { const d = s.do.filter(x => x.do === SIGNAL_ACTION || x.do === NOTES_ACTION || x.do === LIVE_ACTION || (isControlAction(x.do) ? keptIds.has(x.control ?? '') : false) || (isLookAction(x.do) ? (x.layerId.startsWith(FINISH_TARGET_PREFIX) && effectIds.has(x.layerId.slice(FINISH_TARGET_PREFIX.length))) || (x.do === 'splash' && waterIds.has(x.layerId)) : layerIds.has(x.layerId))); if (d.length) s.do = d; else delete s.do; }
     if (s.inputs) { const k = s.inputs.filter(x => x.kind !== 'trigger' || triggerOk(x.trigger)); if (k.length) s.inputs = k; else delete s.inputs; }
   }
   if (signals.length) out.signals = signals;

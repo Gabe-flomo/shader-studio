@@ -9,6 +9,8 @@
  *   npm run osc-bridge                         # UDP 9000 in, ws://127.0.0.1:9001 out
  *   node tools/osc-bridge.mjs --udp 8000 --ws 9001
  *   node tools/osc-bridge.mjs --test           # send yourself a test message every second
+ *   npm run osc-bridge -- --live               # the Live connector: UDP 11101 in, ws://127.0.0.1:9002,
+ *                                              # and the page's commands back to Live on UDP 11100
  *
  * Ableton Live: add Connection Kit's "OSC Send" (Max for Live), host 127.0.0.1,
  * port 9000, map any knob; its address shows up in Shader Studio's Learn.
@@ -21,9 +23,12 @@ import { decodeOsc, encodeOsc } from '../src/lib/osc/decode.js';
 
 const argv = process.argv.slice(2);
 const opt = (name, fallback) => { const i = argv.indexOf(`--${name}`); return i >= 0 && argv[i + 1] ? Number(argv[i + 1]) : fallback; };
-const UDP_PORT = opt('udp', 9000);
-const WS_PORT = opt('ws', 9001);
-const HOST = argv.includes('--lan') ? '0.0.0.0' : '127.0.0.1';
+// --live: the Live connector (tools/live-connector): receive from its Remote Script and send the page's commands back.
+const LIVE = argv.includes('--live');
+const LIVE_OUT_PORT = 11100;
+const UDP_PORT = opt('udp', LIVE ? 11101 : 9000);
+const WS_PORT = opt('ws', LIVE ? 9002 : 9001);
+const HOST = argv.includes('--lan') && !LIVE ? '0.0.0.0' : '127.0.0.1';
 const verbose = argv.includes('--verbose');
 
 // ── WebSocket server (RFC 6455, text frames out, close/ping in) ─────────────
@@ -55,6 +60,7 @@ server.on('upgrade', (req, socket) => {
     const op = buf[0] & 0x0f;
     if (op === 0x8) { try { socket.end(Buffer.from([0x88, 0])); } catch { /* gone */ } }
     else if (op === 0x9) { try { socket.write(Buffer.from([0x8a, 0])); } catch { /* gone */ } }
+    else if (op === 0x1 && LIVE) for (const text of textFrames(buf)) toLive(text);
   });
   const drop = () => { if (clients.delete(socket)) console.log(`[bridge] tab disconnected (${clients.size})`); };
   socket.on('close', drop);
@@ -64,6 +70,39 @@ server.on('upgrade', (req, socket) => {
 function broadcast(msg) {
   const data = frame(JSON.stringify({ a: msg.address, v: msg.args }));
   for (const c of clients) { try { c.write(data); } catch { clients.delete(c); } }
+}
+
+/** The (masked, small) text frames a tab sent in one chunk. */
+function textFrames(buf) {
+  const out = [];
+  let o = 0;
+  while (o + 2 <= buf.length) {
+    const op = buf[o] & 0x0f;
+    let len = buf[o + 1] & 0x7f, at = o + 2;
+    if (len === 126) { if (at + 2 > buf.length) break; len = buf.readUInt16BE(at); at += 2; }
+    else if (len === 127) break;
+    const masked = (buf[o + 1] & 0x80) !== 0;
+    const mask = masked ? buf.subarray(at, at + 4) : null;
+    if (masked) at += 4;
+    if (at + len > buf.length) break;
+    const payload = Buffer.from(buf.subarray(at, at + len));
+    if (mask) for (let i = 0; i < payload.length; i++) payload[i] ^= mask[i & 3];
+    if (op === 0x1) out.push(payload.toString('utf8'));
+    o = at + len;
+  }
+  return out;
+}
+
+/** A page's command (`{ a, v }`, only /pf/… addresses) to the Live connector. */
+const liveOut = LIVE ? dgram.createSocket('udp4') : null;
+function toLive(text) {
+  try {
+    const d = JSON.parse(text);
+    if (typeof d.a !== 'string' || !d.a.startsWith('/pf/')) return;
+    const args = (Array.isArray(d.v) ? d.v : []).filter(x => typeof x === 'number' || typeof x === 'string' || typeof x === 'boolean' || (x && typeof x === 'object' && Number.isInteger(x.i)));
+    if (verbose) console.log(`[live] → ${d.a} ${JSON.stringify(args)}`);
+    liveOut?.send(encodeOsc(d.a, args), LIVE_OUT_PORT, '127.0.0.1');
+  } catch { /* not ours */ }
 }
 
 // ── UDP OSC in ──────────────────────────────────────────────────────────────
@@ -79,8 +118,9 @@ server.on('error', e => { console.error(`[bridge] WebSocket port ${WS_PORT}: ${e
 
 udp.bind(UDP_PORT, HOST, () => {
   server.listen(WS_PORT, '127.0.0.1', () => {
-    console.log(`Shader Studio OSC bridge`);
-    console.log(`  OSC in:   udp://${HOST}:${UDP_PORT}${HOST === '127.0.0.1' ? '  (add --lan to accept a phone or another computer)' : ''}`);
+    console.log(LIVE ? `Shader Studio OSC bridge: Live connector` : `Shader Studio OSC bridge`);
+    if (LIVE) console.log(`  To Live:  udp://127.0.0.1:${LIVE_OUT_PORT}`);
+    console.log(`  OSC in:   udp://${HOST}:${UDP_PORT}${HOST === '127.0.0.1' && !LIVE ? '  (add --lan to accept a phone or another computer)' : ''}`);
     console.log(`  Browser:  ws://127.0.0.1:${WS_PORT}`);
     console.log(`  Ctrl+C to stop.${verbose ? '' : ' Add --verbose to print every message.'}`);
     if (argv.includes('--test')) {

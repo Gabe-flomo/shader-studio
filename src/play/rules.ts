@@ -190,6 +190,7 @@ export function patchReaction(play: PlayRecord, ruleId: string, reactionId: stri
     if (!n.fire || n.fire.mode === 'once') delete n.fire;
     if (n.do !== SIGNAL_ACTION) delete n.signal;
     if (n.do !== 'notes') delete n.notes;
+    if (n.do !== 'live') delete n.live;
     return n;
   }) }));
 }

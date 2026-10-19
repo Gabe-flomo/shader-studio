@@ -12,6 +12,7 @@ import { playEngine } from './playEngine';
 import { refreshPreviews } from './tapePreview';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { toast } from '../components/ui/toastStore';
+import { liveClient } from './liveClient';
 
 let wired = false;
 
@@ -53,6 +54,17 @@ export function wireTape(): void {
     every: fn => { const id = setInterval(fn, 8); return () => clearInterval(id); },
     onInput: fn => audioEngineHost.onInput(fn),
     recorded: racks => refreshPreviews(useNodeGraphStore.getState().play, racks),
+  });
+  // Follow Live (docs/arrangement.md): Live's play and stop start and stop the tape.
+  let livePlaying: boolean | null = null;
+  liveClient.onEvent(e => {
+    if (e.type !== 'transport') return;
+    const playing = liveClient.state.follower.playing;
+    if (playing === livePlaying) return;
+    const first = livePlaying === null;
+    livePlaying = playing;
+    // Only a change starts or stops it: connecting to a Live that's already playing doesn't.
+    if (!first) tape.followLive(playing, liveClient.state.follower.beatsAt(liveClient.now()));
   });
   // Another setup opened, or the tape undone away: stop cleanly.
   let last = useNodeGraphStore.getState().play;

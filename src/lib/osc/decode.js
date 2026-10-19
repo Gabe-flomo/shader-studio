@@ -65,7 +65,7 @@ export function decodeOsc(data) {
   return out;
 }
 
-/** Encode a message (tests and the bridge's self-test). Supports numbers (as floats), ints via {i}, strings and booleans. */
+/** Encode a message (tests, the bridge and the Live connector). Supports numbers (as floats), ints via {i}, doubles via {d}, strings and booleans. */
 export function encodeOsc(address, args = []) {
   const enc = new TextEncoder();
   const pad = bytes => { const n = (bytes.length + 4) & ~3; const b = new Uint8Array(n); b.set(bytes); return b; };
@@ -75,11 +75,26 @@ export function encodeOsc(address, args = []) {
     if (typeof a === 'boolean') tags += a ? 'T' : 'F';
     else if (typeof a === 'string') { tags += 's'; parts.push(pad(enc.encode(a))); }
     else if (a && typeof a === 'object' && 'i' in a) { tags += 'i'; const b = new Uint8Array(4); new DataView(b.buffer).setInt32(0, a.i); parts.push(b); }
+    else if (a && typeof a === 'object' && 'd' in a) { tags += 'd'; const b = new Uint8Array(8); new DataView(b.buffer).setFloat64(0, a.d); parts.push(b); }
     else { tags += 'f'; const b = new Uint8Array(4); new DataView(b.buffer).setFloat32(0, a); parts.push(b); }
   }
   const all = [pad(enc.encode(address)), pad(enc.encode(tags)), ...parts];
   const out = new Uint8Array(all.reduce((n, p) => n + p.length, 0));
   let o = 0;
   for (const p of all) { out.set(p, o); o += p.length; }
+  return out;
+}
+
+/** Wrap encoded messages in one OSC bundle (time tag "immediately"). */
+export function encodeBundle(messages) {
+  const head = new Uint8Array(16);
+  head.set(new TextEncoder().encode('#bundle'));
+  head[15] = 1;
+  const size = messages.reduce((n, m) => n + 4 + m.length, 16);
+  const out = new Uint8Array(size);
+  out.set(head);
+  const view = new DataView(out.buffer);
+  let o = 16;
+  for (const m of messages) { view.setInt32(o, m.length); out.set(m, o + 4); o += 4 + m.length; }
   return out;
 }

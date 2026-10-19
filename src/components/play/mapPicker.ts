@@ -16,6 +16,10 @@
  * edited like the other sources (inputs/FileSources.tsx). There is one of
  * each, so once the setup has it the item says so and picking it opens it.
  *
+ * Ableton Live (the Live connector, docs/live-connector-plan.md) has its own section after
+ * the kinds: Learn from Live, the "Playfield" rack's macros, the selected device's parameters,
+ * any parameter (picked on its card), Live's beat, bar and playing, and clip and scene launches.
+ *
  * Pure: the page and its tests share it.
  */
 import type { PickerItem, PickerSection } from '../ui/groupedPickerModel';
@@ -33,6 +37,13 @@ export const MAP_MIDI_FILE = 'midiFile';
 /** A Push or Launchpad's pads as a grid shader's cells (the record's one `padGrid`). */
 export const MAP_PAD_GRID = 'padGrid';
 const TYPE = 'type:';
+/** Ableton Live: Learn (click a parameter in Live), a parameter by key, clip and scene triggers, how to connect. */
+export const MAP_LIVE_LEARN = 'live:learn';
+export const MAP_LIVE_CLIP = 'live:clip';
+export const MAP_LIVE_SCENE = 'live:scene';
+export const MAP_LIVE_CONNECT = 'live:connect';
+const LIVE_KEY = 'live:key:';
+export const LIVE_HEADING = 'Ableton Live';
 const RANDOM = 'random:';
 
 /** The kinds, in the order the picker shows them (audit P6), then the rest. */
@@ -47,7 +58,12 @@ export type MapPick =
   | { kind: 'readers' }
   | { kind: 'random'; index: number }
   | { kind: 'signal'; id: string }
-  | { kind: 'type'; type: SourceType };
+  | { kind: 'type'; type: SourceType }
+  | { kind: 'liveLearn' }
+  | { kind: 'liveKey'; key: string }
+  | { kind: 'liveClip' }
+  | { kind: 'liveScene' }
+  | { kind: 'liveConnect' };
 
 export function parseMapPick(v: string): MapPick | null {
   if (v === MAP_LEARN) return { kind: 'learn' };
@@ -55,6 +71,11 @@ export function parseMapPick(v: string): MapPick | null {
   if (v === MAP_NOTES12) return { kind: 'notes12' };
   if (v === MAP_MIDI_FILE) return { kind: 'midiFile' };
   if (v === MAP_PAD_GRID) return { kind: 'padGrid' };
+  if (v === MAP_LIVE_LEARN) return { kind: 'liveLearn' };
+  if (v === MAP_LIVE_CLIP) return { kind: 'liveClip' };
+  if (v === MAP_LIVE_SCENE) return { kind: 'liveScene' };
+  if (v === MAP_LIVE_CONNECT) return { kind: 'liveConnect' };
+  if (v.startsWith(LIVE_KEY)) return v.length > LIVE_KEY.length ? { kind: 'liveKey', key: v.slice(LIVE_KEY.length) } : null;
   if (v.startsWith(RANDOM)) { const i = Number(v.slice(RANDOM.length)); return Number.isInteger(i) && RANDOM_SOURCES[i] ? { kind: 'random', index: i } : null; }
   if (!v.startsWith(TYPE)) return null;
   const t = v.slice(TYPE.length);
@@ -96,6 +117,40 @@ export interface MapPickerFiles {
   midiFileLocked?: boolean;
 }
 
+/** What the picker shows of Ableton Live (from lib/liveClient.ts): the connection, the rack's macros, the selected device. */
+export interface MapPickerLive {
+  connected: boolean;
+  /** "Fake Set · 120 BPM" when connected; else why not ("Waiting for Live…"). */
+  status: string;
+  /** The "Playfield" rack's macros. */
+  rack: ReadonlyArray<{ key: string; name: string; track: string }>;
+  /** The selected device (Live's blue hand) and its first parameters. */
+  selected?: { track: string; device: string; params: ReadonlyArray<{ key: string; name: string }> };
+}
+
+/** How many of the selected device's parameters the picker lists (the rest: on the card's picker). */
+export const LIVE_SELECTED_MAX = 8;
+
+/** The Ableton Live section. */
+export function liveSection(live: MapPickerLive, locked: boolean): PickerSection {
+  const items: PickerItem[] = [];
+  if (!live.connected) items.push({ value: MAP_LIVE_CONNECT, label: 'Connect Ableton Live…', icon: 'link', description: `${live.status}. Install the Live connector, then pick it in Live’s settings`, keywords: 'ableton live connector install' });
+  items.push({ value: MAP_LIVE_LEARN, label: 'Learn from Live', icon: 'spark', description: 'Click a parameter in Live: it’s mapped', keywords: 'ableton live map listen', pro: locked });
+  for (const m of live.rack) items.push({ value: `${LIVE_KEY}${m.key}`, label: m.name, icon: 'sliders', description: `Playfield rack · ${m.track}`, keywords: `ableton macro rack ${m.key}`, pro: locked });
+  if (live.selected) {
+    for (const p of live.selected.params.slice(0, LIVE_SELECTED_MAX)) items.push({ value: `${LIVE_KEY}${p.key}`, label: p.name, icon: 'sliders', description: `Selected device · ${live.selected.device} on ${live.selected.track}`, keywords: `ableton device ${p.key}`, pro: locked });
+  }
+  items.push(
+    { value: `${TYPE}ableton:param`, label: 'Any parameter…', icon: 'link', description: 'Pick any track, device and parameter on its card', keywords: 'ableton browse device knob', pro: locked },
+    { value: `${TYPE}ableton:beat`, label: 'Live beat', icon: 'clock', description: '0 → 1 on each of Live’s beats', keywords: 'ableton tempo bpm', pro: locked },
+    { value: `${TYPE}ableton:bar`, label: 'Live bar', icon: 'clock', description: '0 → 1 on each bar', keywords: 'ableton measure', pro: locked },
+    { value: `${TYPE}ableton:playing`, label: 'Live playing', icon: 'play', description: '1 while Live plays', keywords: 'ableton transport', pro: locked },
+    { value: MAP_LIVE_CLIP, label: 'Clip launches', icon: 'bolt', description: 'An envelope when a clip in Live launches', keywords: 'ableton clip trigger', pro: locked },
+    { value: MAP_LIVE_SCENE, label: 'Scene launches', icon: 'bolt', description: 'An envelope when a scene in Live launches', keywords: 'ableton scene trigger section', pro: locked },
+  );
+  return { heading: `${LIVE_HEADING} · ${live.connected ? live.status : 'not connected'}`, items };
+}
+
 /** The MIDI file and the pad grid as picker items: add one, or open the one the setup has. */
 export function fileKindItems(files: MapPickerFiles, locked: boolean): PickerItem[] {
   return [
@@ -112,7 +167,7 @@ export function fileKindItems(files: MapPickerFiles, locked: boolean): PickerIte
  * The picker's sections. `locked` (Free) marks Pro on the kinds the plan lacks;
  * picking one opens the Pro sheet instead.
  */
-export function mapPickerSections(readers: ReadonlyArray<{ id: string; name: string }>, locked: boolean, signals: ReadonlyArray<{ id: string; name: string }> = [], files: MapPickerFiles = {}): PickerSection[] {
+export function mapPickerSections(readers: ReadonlyArray<{ id: string; name: string }>, locked: boolean, signals: ReadonlyArray<{ id: string; name: string }> = [], files: MapPickerFiles = {}, live?: MapPickerLive): PickerSection[] {
   const typed = sourcePickerSections(readers, locked, signals);
   const byValue = new Map<string, PickerItem>();
   for (const s of typed) for (const it of s.items) byValue.set(it.value, it);
@@ -145,6 +200,11 @@ export function mapPickerSections(readers: ReadonlyArray<{ id: string; name: str
     ] },
     { heading: 'Behaviours', items: [{ value: MAP_BEHAVIOURS, label: 'Behaviours…', icon: 'star', description: 'Ready-made: pulse to the beat, bass shakes it, pinch to burst…', keywords: 'preset ready made rule' }] },
   ];
+  // Ableton Live: its own section (it takes the source types' Live entries).
+  if (live) {
+    out.push(liveSection(live, locked));
+    for (const t of ['ableton:param', 'ableton:beat', 'ableton:bar', 'ableton:playing']) used.add(t);
+  }
   // Everything else, under the source types' own headings (devices, the setup, face, pose).
   for (const s of typed) {
     const rest = s.items.filter(it => !used.has(it.value));

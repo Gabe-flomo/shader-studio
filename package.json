@@ -12,6 +12,8 @@
     "tauri:build": "tauri build",
     "test": "vitest run",
     "osc-bridge": "node tools/osc-bridge.mjs",
+    "fake-live": "node tools/fake-live.mjs",
+    "test:live-script": "python3 tools/live-connector/check_py37.py tools/live-connector/Playfield && python3 -m unittest discover -s tools/live-connector/tests -t tools/live-connector",
     "gate:user": "node tools/gate-user.mjs add",
     "gate:remove": "node tools/gate-user.mjs remove",
     "release:sync": "node tools/release-version.mjs",

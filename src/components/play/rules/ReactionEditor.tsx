@@ -7,7 +7,7 @@
 import { useState } from 'react';
 import { useTokens } from '../../../theme/themeStore';
 import { fontFamily } from '../../../theme/tokens';
-import { CONTROL_NUDGE_ACTION, NOTES_ACTION, SIGNAL_ACTION, defaultNotes, isControlAction, isLookAction, type PlayReaction, type PlayRecord, type TriggerSpec } from '../../../types/play';
+import { CONTROL_NUDGE_ACTION, LIVE_ACTION, NOTES_ACTION, SIGNAL_ACTION, defaultNotes, isControlAction, isLookAction, type PlayReaction, type PlayRecord, type TriggerSpec } from '../../../types/play';
 import { settableControls } from '../../../play/controlActions';
 import { NotesEditor } from './NotesEditor';
 import { padHasSound, padName } from '../../../types/playLayers';
@@ -21,6 +21,8 @@ import { FirePicker } from '../TriggerPicker';
 import { fireOf } from '../../../play/playSources';
 import { controlDefaults, defaultAmount, doChoices, doValue, lookDefaults, lookEffectOf } from './reactionChoices';
 import { finishParamOf, finishParamsOf } from '../../../types/playFinish';
+import { LiveDoFields, useLive } from '../live/LiveFields';
+import { liveClient } from '../../../lib/liveClient';
 
 export function ReactionEditor({ ruleId, r, play, onPatch, onRemove }: {
   ruleId: string;
@@ -32,7 +34,9 @@ export function ReactionEditor({ ruleId, r, play, onPatch, onRemove }: {
   const tk = useTokens();
   const [more, setMore] = useState(false);
   const layer = play.layers.find(l => l.id === r.layerId);
-  const choices = doChoices(play, r.layerId);
+  useLive();
+  // Ableton Live's commands while it's connected (or this reaction already is one).
+  const choices = doChoices(play, r.layerId, liveClient.isConnected() || r.do === LIVE_ACTION);
   const value = doValue(r);
   const options = choices.some(c => c.value === value) ? choices : [{ value, label: 'A missing layer’s action', layerId: '', do: r.do }, ...choices];
   const numStyle: React.CSSProperties = { width: 52, height: 26, borderRadius: 6, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 11.5px ${fontFamily.mono}`, textAlign: 'center' };
@@ -51,8 +55,10 @@ export function ReactionEditor({ ruleId, r, play, onPatch, onRemove }: {
           // Set or Nudge a control keeps its control when switching between them; anything else lets go of it.
           const ctl = isControlAction(c.do) ? (c.do === r.do ? {} : controlDefaults(c.do, play, r.control)) : r.control !== undefined ? { control: undefined } : {};
           onPatch({ do: c.do, layerId: c.layerId, amount: c.do === r.do ? r.amount : defaultAmount(c.do, l), ...look, ...ctl, ...(c.do === SIGNAL_ACTION ? { signal: r.signal ?? play.signals?.find(s => s.id !== ruleId)?.id ?? '' } : {}),
-            ...(c.do === NOTES_ACTION && c.rackId ? { notes: r.notes ? { ...r.notes, rackId: c.rackId } : defaultNotes(c.rackId) } : {}) });
+            ...(c.do === NOTES_ACTION && c.rackId ? { notes: r.notes ? { ...r.notes, rackId: c.rackId } : defaultNotes(c.rackId) } : {}),
+            ...(c.do === LIVE_ACTION && c.liveCmd ? { live: { ...(r.live ?? {}), cmd: c.liveCmd } } : {}) });
         }} />
+        {r.do === LIVE_ACTION && r.live && <LiveDoFields live={r.live} onChange={live => onPatch({ live })} />}
         {r.do === SIGNAL_ACTION && <SignalPicker value={r.signal ?? ''} exclude={ruleId} onChange={signal => onPatch({ signal })} />}
         {isControlAction(r.do) && <ControlFields r={r} play={play} numStyle={numStyle} onPatch={onPatch} />}
         {isLookAction(r.do) && <LookFields r={r} play={play} numStyle={numStyle} onPatch={onPatch} />}

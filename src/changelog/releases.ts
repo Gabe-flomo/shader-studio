@@ -41,9 +41,9 @@ export const RELEASES: Release[] = [
   {
     id: '2026.10.301',
     date: '2026-10-18',
-    title: "Live connector",
+    title: "Housekeeping",
     highlights: [
-      { area: 'Studio', text: "Connect Ableton Live without Max for Live: install the Playfield script, map knobs and rack macros, follow Live's tempo, fire on clip launches." },
+      { area: 'Studio', text: "A rebuild with no changes of its own; the Live connector arrives in 2026.10.302." },
     ],
   },
   {

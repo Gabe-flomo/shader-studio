@@ -1,6 +1,14 @@
 # Live connector: plan
 
-*Plan only (2026-10-18). Nothing here is built yet.*
+*Plan (2026-10-18). **Built** on the `claude/live-connector` branch: phases 1–7 (below, "As built"). Ableton Link is for later.*
+
+## As built
+
+- **The script**: `tools/live-connector/Playfield/` (`__init__.py`, `surface.py` the thin `_Framework.ControlSurface` wrapper and the non-blocking socket polled in `update_display`, `connector.py` the listeners, catalogue, streaming and commands, `model.py` keys and the catalogue, `osc.py`). Python 3.7-safe for Live 11 (`tools/live-connector/check_py37.py` checks it), run on 3.9+ in tests. Tests: `python3 -m unittest discover -s tools/live-connector/tests -t tools/live-connector`, with `tests/fake_live.py` standing in for Live's object model. Messages as drafted below, plus `/pf/ack <command> <ok> <detail>` after each command; `/pf/catalog/param` carries `key track device name min max quantized value items role` (`items` "|"-joined, `role` "rack" for a Playfield rack macro); `/pf/selected/device track device key…`; `/pf/selected/param key track device name value min max display`. Playfield → script: `/pf/ping`, `/pf/catalog/request`, `/pf/watch key…`, `/pf/fire/clip track clip`, `/pf/fire/scene scene`, `/pf/scene/next`, `/pf/stop/all`, `/pf/tap` (an int is an index; the app writes `#3`).
+- **Desktop**: `src-tauri/src/live_connector.rs` (a second `osc_listener` on 11101 → `live-packet` events, `live_send`, `live_connector_status` / `_install` / `live_reveal_log`; the script is compiled in with `include_str!`). **Browser**: `npm run osc-bridge -- --live`.
+- **Client**: `src/lib/liveClient.ts`, `src/lib/live/liveProtocol.ts` (LiveState), `src/lib/live/tempoFollower.ts` (the PLL). Sources `{ kind: 'ableton', read: 'param' | 'beat' | 'bar' | 'playing', key }` (not `'live'`: that kind is the live-audio band), Clock `follow`, Beat trigger `follow`, triggers `liveClip` / `liveScene`, the reaction `do: 'live'` with `live: { cmd, track?, target? }`, and `arrangement.followLive`.
+- **Dev**: `tools/fake-live.mjs` (a fake Live: the same OSC, with `--jitter`, `--loss`, `--tempo`, `--learn-every`), used by the vitest suites and by hand.
+- **Ableton Link** stays open: the follower takes (beats, tempo, playing) samples from anywhere, so a Link source could feed the same follower later.
 
 Today Ableton Live reaches Playfield three ways (docs/connecting-ableton.md): **MIDI** through a
 virtual port (notes and drawn CC, no tempo), **OSC** through Max for Live's Connection Kit plus

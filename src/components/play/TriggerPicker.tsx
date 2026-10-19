@@ -15,7 +15,7 @@ import { FREE_TRIGGER_ONS } from '../../play/planGates';
 import { HAND_ANCHOR_SECTIONS, triggerKindSections } from './sourcePickerSections';
 import { GroupedPicker } from '../ui/GroupedPicker';
 import { sectionsFromOptions } from '../ui/groupedPickerModel';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import type { ActionKind, FireMode, HandGesture, LiveAudioBand, TriggerMode, TriggerSpec } from '../../types/play';
@@ -46,6 +46,8 @@ import { ConditionFields, SignalPicker } from './ConditionFields';
 import type { AudioReader } from '../../types/play';
 import { pulseForHz, pulseHz } from '../../play/triggers';
 import { withNoteWrap } from '../../play/noteClassMap';
+import { LiveTriggerFields } from './live/LiveFields';
+import { liveClient } from '../../lib/liveClient';
 
 export interface TriggerLayerRef { id: string; label: string; kind: string }
 
@@ -64,6 +66,8 @@ export function TriggerPicker({ trigger: t, layers, numStyle, onChange }: {
   // Free: key, click and audio triggers; the rest say Pro and open the Pro sheet (play/planGates.ts).
   const allSources = useCan('play.sources');
   const kinds = useMemo(() => triggerKindSections(!allSources), [allSources]);
+  // A beat following Live shows Live's tempo: re-render as the Live connector changes (only then).
+  useSyncExternalStore(cb => liveClient.onChange(cb), () => (t.on === 'beat' && t.follow ? liveClient.getVersion() : 0), () => 0);
   return (
     <>
       <GroupedPicker ariaLabel="Trigger" value={t.on} sections={kinds} width={290} onChange={v => {
@@ -94,7 +98,16 @@ export function TriggerPicker({ trigger: t, layers, numStyle, onChange }: {
         {hint('threshold')}
         <LiveAudioChip />
       </>}
-      {t.on === 'beat' && <>
+      {t.on === 'beat' && t.follow && <>
+        {hint('every')}
+        <NumberInput value={t.beats} min={0.0625} max={64} step={1} title="Fire every this many of Live’s beats" onCommit={n => onChange({ ...t, beats: Math.max(0.0625, n) })} style={{ ...numStyle, width: 40 }} />
+        {hint(liveClient.hasTransport() ? `beats of Live (${Math.round(liveClient.state.follower.tempo)} BPM)` : `beats of Live (not connected: ${t.bpm} BPM meanwhile)`)}
+      </>}
+      {t.on === 'beat' && <span title="On Ableton Live’s beat through the Live connector; Playfield’s own tempo while Live isn’t connected" style={{ display: 'inline-flex' }}>
+        <Toggle checked={!!t.follow} label="Follow Live" onChange={on => { const n = { ...t }; if (on) { n.follow = true; delete n.unit; } else delete n.follow; onChange(n); }} />
+      </span>}
+      {(t.on === 'liveClip' || t.on === 'liveScene') && <LiveTriggerFields trigger={t} onChange={onChange} />}
+      {t.on === 'beat' && !t.follow && <>
         <Segmented size="sm" ariaLabel="Pulse unit" value={t.unit === 'hz' ? 'hz' : 'bpm'} options={[
           { value: 'bpm', label: 'BPM', title: 'Every so many beats at a tempo' },
           { value: 'hz', label: 'Hz', title: 'So many times a second' },
