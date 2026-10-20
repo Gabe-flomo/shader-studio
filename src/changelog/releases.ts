@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.322',
+    date: '2026-10-20',
+    title: "Texture Lab",
+    highlights: [
+      { area: 'Studio', text: "Texture Lab: run a photo or video through a stack of texture tools (edges, glow, curves, trails, relief) with a before/after divider." },
+      { area: 'Studio', text: "Each tool shows its pass cost; presets Thermal, Ink outline, Motion trails and Relief, plus Surprise me. Done leaves plain nodes." },
+    ],
+  },
+  {
     id: '2026.10.321',
     date: '2026-10-20',
     title: "Combine",
