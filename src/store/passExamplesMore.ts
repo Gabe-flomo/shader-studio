@@ -11,7 +11,7 @@
 import type { ExampleGraph } from './exampleIndex';
 import type { GraphNode } from '../types/nodeGraph';
 import type { PlayRecord } from '../types/play';
-import { ctl, n } from './graphBuilder';
+import { ctl, n, nv } from './graphBuilder';
 import { growPictureNodes } from './agentExamplesP3';
 
 export const PASS_EXAMPLE_INDEX_MORE: Record<string, { label: string; description: string; play: true }> = {
@@ -167,88 +167,53 @@ export function buildPassExamplesMore(): Record<string, ExampleGraph> {
   };
 
   // ── 3 · Feedback trails: lights + (the frame before, zoomed, turned, faded) → Pass → itself ──
+  /** One wandering light: a Motion 2D path → Circle SDF (radius 0, so just the distance to it) → SDF Glow (inverse square). */
+  const lamp = (k: string, y: number, colour: [number, number, number], motion: Record<string, unknown>, sway: Record<string, unknown>, what: string): GraphNode[] => [
+    n('motion2D', `path${k}`, 40, y, { mode: 'orbit', ...motion, ...note(`Motion 2D (Orbit): the ${what} light goes round its own circle (radius ${motion.amount}, ${motion.speed} turns a second).`) }),
+    n('motion2D', `sway${k}`, 300, y, { mode: 'bob', ...sway, ...note(`Motion 2D (Bob), chained after the orbit (its Offset in): a faster sway along a line, added to the circle, so the light loops and wanders instead of going round and round. Its Offset is where the ${what} light is now.`) }, { offset: [`path${k}`, 'offset'] }),
+    n('circleSDF', `at${k}`, 560, y, { radius: 0, ...note(`Circle SDF, radius 0: how far this pixel is from the ${what} light.`) }, { position: ['uv', 'uv'], offset: [`sway${k}`, 'offset'] }),
+    n('light', `glow${k}`, 820, y, { mode: 'invPow', power: 2, brightness: 2500, tint: colour, ...note(`SDF Glow (Bounded inverse power, Power 2): the ${what} light's glow, 1 ÷ (1 + 2500 × distance²): bright at its centre, falling off with the squared distance, times its colour (above 1 in the middle, which the half-float Pass keeps).`) }, { distance: [`at${k}`, 'distance'] }),
+  ];
   graphs.passFeedbackTrails = {
     ...PASS_EXAMPLE_INDEX_MORE.passFeedbackTrails,
     counter: 40,
     nodes: [
-      uvNode(40, 240, 'The lights are drawn at it and the warp below moves it.'),
-      expr('lights', 300, 140, {
-        label: 'Three lights', outputType: 'vec3',
-        inputs: [['uv', 'vec2', ['uv', 'uv']]],
-        lines: [
-          ['vec2 p1', 'vec2(sin(t * 1.3), sin(t * 1.7 + 1.0)) * vec2(0.75, 0.4)'],
-          ['vec2 p2', 'vec2(sin(t * 0.9 + 2.0), cos(t * 1.1)) * vec2(0.6, 0.45)'],
-          ['vec2 p3', 'vec2(cos(t * 1.5 + 4.0), sin(t * 0.8 + 3.0)) * vec2(0.8, 0.35)'],
-          ['vec3 c1', 'vec3(1.0, 0.35, 0.12) * 0.0008 / (dot(uv - p1, uv - p1) + 0.0004)'],
-          ['vec3 c2', 'vec3(0.15, 0.55, 1.0) * 0.0008 / (dot(uv - p2, uv - p2) + 0.0004)'],
-          ['vec3 c3', 'vec3(0.85, 0.2, 1.0) * 0.0008 / (dot(uv - p3, uv - p3) + 0.0004)'],
-        ],
-        result: 'c1 + c2 + c3',
-        note: [
-          'A test picture, not the lesson. What: three small lights that wander the picture on looping paths. They are this frame\'s fresh paint; the trails are what the Pass keeps of them.',
-          't is the clock (the block reads Time itself).',
-          'p1: where the orange light is now (a Lissajous loop).',
-          'p2: where the blue light is now.',
-          'p3: where the violet light is now.',
-          'c1: the orange light\'s glow here: bright at its centre, falling off with the squared distance (above 1 in the middle, which the half-float Pass keeps).',
-          'c2: the blue light\'s glow.',
-          'c3: the violet light\'s glow.',
-          'result: the three added together.',
-        ],
-      }),
-      n('constant', 'swirl', 40, 460, { value: 0.006, label: 'Swirl',
-        ...note('How far the old picture turns each frame, in radians: the trails spiral. A constant (not a slider inside the block) so Play can drive it: see the Swirl control.') }),
-      expr('drift', 300, 420, {
-        label: 'Drift the old picture', outputType: 'vec2',
-        inputs: [['uv', 'vec2', ['uv', 'uv']], ['swirl', 'float', ['swirl', 'value']]],
-        lines: [
-          ['vec2 zoomed', 'uv * 0.993'],
-          ['vec2 turned', 'vec2(zoomed.x * cos(swirl) - zoomed.y * sin(swirl), zoomed.x * sin(swirl) + zoomed.y * cos(swirl))'],
-          ['vec2 wobble', '0.0015 * vec2(sin(uv.y * 9.0 + t), cos(uv.x * 9.0 - t))'],
-        ],
-        result: 'turned + wobble',
-        note: [
-          'What: where to read last frame\'s picture for this pixel. Reading a little nearer the centre, turned a little, makes the old picture grow outwards and spiral each frame: the trails drift instead of sitting still.',
-          'zoomed: this pixel pulled 0.7% towards the centre (reading inwards pushes the picture out).',
-          'turned: that point turned by Swirl (a 2D rotation), so the trails curl.',
-          'wobble: a tiny wavy push that changes with t, so the trails ripple like smoke.',
-          'result: the point to read, wired into Sample (texture)\'s UV.',
-        ],
-      }),
-      n('sampleTexture', 'last', 640, 420, {
+      uvNode(40, 240, 'The lights are drawn at it and the Transform below moves it.'),
+      ...lamp('1', 0, [2, 0.7, 0.24], { speed: 0.21, amount: 0.5, phase: 0 }, { speed: 0.33, amount: 0.3, direction: 20 }, 'orange'),
+      ...lamp('2', 160, [0.3, 1.1, 2], { speed: -0.15, amount: 0.4, phase: 120 }, { speed: 0.27, amount: 0.35, direction: 100 }, 'blue'),
+      ...lamp('3', 320, [1.7, 0.4, 2], { speed: 0.12, amount: 0.55, phase: 240 }, { speed: 0.4, amount: 0.25, direction: -35 }, 'violet'),
+      n('addColor', 'lights12', 820, 80, { ...note('Add Colours: the orange and blue lights together.') }, { a: ['glow1', 'tinted'], b: ['glow2', 'tinted'] }),
+      n('addColor', 'lights', 1060, 160, { ...note('Add Colours: and the violet one. A test picture, not the lesson: three lights that are this frame\'s fresh paint. The trails are what the Pass keeps of them.') }, { a: ['lights12', 'result'], b: ['glow3', 'tinted'] }),
+      n('constant', 'swirl', 40, 560, { value: 0.006, label: 'Swirl',
+        ...note('How far the old picture turns each frame, in radians: the trails spiral. A constant (not a setting on the Transform) so Play can drive it: see the Swirl control.') }),
+      n('transform', 'drift', 300, 560, { dim: '2', scale: 1.007, ...note([
+        'Transform: where to read last frame\'s picture for this pixel. Scale 1.007 reads 0.7% nearer the centre (reading inwards pushes the picture out), and Turn (from Swirl) turns it a little, so each frame the old picture grows outwards and spirals: the trails drift instead of sitting still.',
+      ]) }, { p: ['uv', 'uv'], turn: ['swirl', 'value'] }),
+      n('time', 'time', 300, 760, note('Time: moves the ripple.')),
+      n('rippleSpace', 'ripple', 560, 560, { freqX: 9, freqY: 9, ampX: 0.0015, ampY: 0.0015, ...note('Ripple / Wave: a tiny sine push (0.0015) across and up, moving with Time, so the trails ripple like smoke.') }, { input: ['drift', 'p'], time: ['time', 'time'] }),
+      n('sampleTexture', 'last', 820, 560, {
         ...note('Sample (texture): the Trails pass\'s Previous (its own picture from the frame before), read at the drifted point. This is the loop: what the pass drew last frame comes back here.') },
-        { texture: ['trails', 'previous'], uv: ['drift', 'result'] }),
-      n('constant', 'keep', 640, 620, { value: 0.975, label: 'Keep',
+        { texture: ['trails', 'previous'], uv: ['ripple', 'output'] }),
+      n('constant', 'keep', 820, 760, { value: 0.975, label: 'Keep',
         ...note('How much of last frame\'s picture is kept each frame: 0.975 fades a lone trail to 1% in about 3 seconds at 60 frames a second. A constant so Play can drive it: see the Keep control. (Feedback (texture) does this whole loop in one node, with its tail in seconds at any frame rate.)') }),
-      expr('feed', 900, 260, {
-        label: 'Fade and add', outputType: 'vec3',
-        inputs: [['last', 'vec3', ['last', 'color']], ['lights', 'vec3', ['lights', 'result']], ['keep', 'float', ['keep', 'value']]],
-        lines: [
-          ['vec3 perChannel', 'pow(vec3(keep), vec3(1.6, 1.2, 1.0))'],
-          ['vec3 faded', 'max(last * perChannel - 0.004, 0.0)'],
-        ],
-        result: 'faded + lights',
-        note: [
-          'What: the next picture for the Trails pass: last frame, faded, with this frame\'s lights added on top.',
-          'perChannel: Keep for each colour, red kept least (Keep to the power 1.6), so old trails cool to blue.',
-          'faded: last frame dimmed by perChannel, minus a little every frame so faint trails really reach black.',
-          'result: the faded picture plus the fresh lights (light adds up; the half-float pass keeps it above 1).',
-        ],
-      }),
-      n('pass', 'trails', 1180, 260, { label: 'Trails',
+      nv('vec3', 'multiply', 'faded', 1060, 560, { ...note('Multiply: last frame\'s picture dimmed by Keep.') }, { a: ['last', 'color'], b: ['keep', 'value'] }),
+      n('colorPicker', 'cool', 1060, 760, { color: [0.985, 0.995, 1], ...note('Colour: a little more red than blue lost every frame, so old trails cool towards blue as they fade.') }),
+      nv('vec3', 'multiply', 'cooled', 1300, 560, { ...note('Multiply: the faded picture times that cooling colour.') }, { a: ['faded', 'result'], b: ['cool', 'rgb'] }),
+      n('addColor', 'feed', 1300, 260, { ...note('Add Colours: the faded, cooled picture plus this frame\'s lights on top: the next picture for the Trails pass (light adds up; the half-float pass keeps it above 1).') }, { a: ['cooled', 'result'], b: ['lights', 'result'] }),
+      n('pass', 'trails', 1540, 260, { label: 'Trails',
         ...note('Trails: the Pass that keeps the picture. What is wired into it is drawn into its texture; its Previous output (read by Sample (texture) on the left) hands that picture back next frame, which closes the loop. Half float, so the bright cores above 1 aren\'t clipped while they fade.') },
         { color: ['feed', 'result'] }),
-      n('toneMap', 'tone', 1440, 260, { mode: 'reinhard2',
+      n('toneMap', 'tone', 1780, 260, { mode: 'reinhard2',
         ...note('Tone Map (Reinhard2): brings the trails\' bright parts (above 1) back into range smoothly, so the lights\' cores don\'t flatten to white.') },
         { color: ['trails', 'color'] }),
-      outNode(1700, 260, ['tone', 'color'], 'the trails, toned. The Trails pass draws first each frame; this program reads it.'),
+      outNode(2020, 260, ['tone', 'color'], 'the trails, toned. The Trails pass draws first each frame; this program reads it.'),
     ],
     play: playRecord([
       ctl('decay', 'keep::value', 'Keep (per frame)', 0.8, 0.995, 0.001),
       ctl('swirl', 'swirl::value', 'Swirl', -0.03, 0.03, 0.0005),
     ], `**What it shows.** Feedback in a Pass. The Trails pass reads its own picture from the frame before (its **Previous** output), warps it a little, fades it and adds three moving lights on top. What it draws comes back next frame, so the lights leave trails that drift, spiral and cool as they fade.
 
-**How it is built.** Three lights (an Expression Block) are this frame's paint. Drift the old picture computes where to read last frame's picture (a little nearer the centre and turned by Swirl). **Sample (texture)** reads the Trails pass's Previous there; **Fade and add** dims it by Keep and adds the lights; that goes into the Trails pass, whose Previous closes the loop. **Tone Map** softens the bright cores for the output. **Feedback (texture)** is this loop in one node (Texture tools 2).
+**How it is built.** Three lights (two chained Motion 2D → Circle SDF → SDF Glow each, added together) are this frame's paint. A **Transform** (Scale 1.007, Turn from Swirl) and a small **Ripple / Wave** compute where to read last frame's picture (a little nearer the centre, turned, rippled). **Sample (texture)** reads the Trails pass's Previous there; two **Multiply** nodes dim it by Keep and cool it, **Add Colours** puts the lights on top; that goes into the Trails pass, whose Previous closes the loop. **Tone Map** softens the bright cores for the output. **Feedback (texture)** is this loop in one node (Texture tools 2).
 
 **Try.** Keep 0.995 for long comet tails, 0.9 for short sparks. Swirl negative turns the other way; 0 makes them stream straight out. Set the Trails pass to ½ for softer, cheaper trails. Replace the lights with anything (a shape, a video, the mouse) and it leaves trails too.`),
   };

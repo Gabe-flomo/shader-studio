@@ -15,7 +15,8 @@
  */
 import type { GraphNode } from '../types/nodeGraph';
 import type { ExampleGraph } from './exampleIndex';
-import { n } from './graphBuilder';
+import { n, nv } from './graphBuilder';
+import { gradientParams } from '../lib/colourGradient';
 import { agentsGroup, expr, groupInput, note, withOutputs } from './agentExampleKit';
 import { cinemaFinish } from './cinemaLook';
 
@@ -39,7 +40,7 @@ export const AGENT_SHADER_EXAMPLE_INDEX: Record<string, { label: string; descrip
   },
   agentShaderWalls: {
     label: 'Slime in a maze',
-    description: 'A shader as walls: a Truchet maze, one Expression Block giving a signed distance, goes into Move\'s Obstacle ƒ (walkers slide along the walls), the Trail\'s Block (no smell through a wall) and a second Sense whose Gradient turns a slow current along every wall. The slime fills the winding corridors with amber veins, and the same distance draws the stone walls they light.',
+    description: 'A shader as walls: a Truchet maze built from small nodes (Tile, a coin toss per cell, two Ring SDF arcs) gives a signed distance that goes into Move\'s Obstacle ƒ (walkers slide along the walls), the Trail\'s Block (no smell through a wall) and a Flow (Around) that turns a slow current along every wall. The slime fills the winding corridors with amber veins, and the same distance draws the stone walls they light.',
   },
   agentShaderNoiseFlow: {
     label: 'Ink along a noise field',
@@ -199,9 +200,9 @@ export function shaderRingsNodes(x = 0, y = 0): GraphNode[] {
 // ── 2. SDF walls: slime in a maze ────────────────────────────────────────────
 
 /**
- * A shader as walls (2026-10-19, replaced the heart/star/circle version): a Truchet maze drawn as one SDF chain. Move's
+ * A shader as walls (2026-10-19, replaced the heart/star/circle version): a Truchet maze drawn as one SDF chain of small nodes. Move's
  * Obstacle ƒ keeps walkers out of the walls (they slide along them), the Trail's Block wipes the smell inside them, and
- * a second Sense's Gradient turns a current along every wall, so the slime streams through the corridors as glowing
+ * Flow (Around) turns a current along every wall, so the slime streams through the corridors as glowing
  * veins. The walls and their lighting are drawn from the same distance.
  */
 export function shaderWallsNodes(x = 0, y = 0): GraphNode[] {
@@ -222,86 +223,55 @@ export function shaderWallsNodes(x = 0, y = 0): GraphNode[] {
     mode: 'jones', turn: 18, jitter: 0.08,
     ...note(['Steer (Jones rule): small turns (18°) and a little jitter, so the veins curve with the corridors instead of kinking.']),
   }, { readings: ['swSense', 'readings'] });
-  const feel = n('agentSense', 'swFeel', 420, 520, {
-    angle: 30, distance: 0.02, weight: 1, width: '1',
+  const drift = n('agentFlow', 'swDrift', 840, 520, {
+    mode: 'around', strength: 0.075, step: 0.01,
     ...note([
-      'Sense (the walls): a second Sense with only Field ƒ wired, from the Walls input. Its Here output is how far the walker is from the nearest wall; its Gradient, which way is away from the wall. Both go to Follow the corridors.',
-      'Why: a Sense can read any chain, not just a trail, and its Gradient is the shape\'s slope at the walker, worked out for you.',
+      'Flow, Around: a slow current along the walls, added to every step through Move\'s Also velocity. Field ƒ is the Walls chain: Around pushes along its contour lines, at right angles to its slope, and a distance\'s contour lines run alongside the walls.',
+      'Strength 0.075 is about 0.06 picture units a second. The two sides of a corridor face opposite walls, so their currents run opposite ways and veins stream past each other.',
+      'Try: Strength 0 for a still network packed into the corridors; 0.25 for fast rivers; −0.075 to turn every current round.',
     ]),
   }, { field: ['swIn', 'walls'] });
-  const drift = expr('swDrift', 1260, 520, {
-    label: 'Follow the corridors',
-    inputs: [{ name: 'away', type: 'vec2' }, { name: 'd', type: 'float' }, { name: 'flow', type: 'float', slider: { min: -0.3, max: 0.3 } }],
-    values: { flow: 0.06 },
-    lines: [
-      ['vec2 outward', 'length(away) > 1e-6 ? normalize(away) : vec2(0.0)'],
-      ['vec2 along', 'vec2(-outward.y, outward.x)'],
-      ['float near', 'exp(-max(d, 0.0) * 25.0)'],
-    ],
-    result: 'along * flow * near',
-    outputType: 'vec2',
-    wires: { away: ['swFeel', 'gradient'], d: ['swFeel', 'here'] },
-    note: [
-      'Follow the corridors (an Expression Block): a slow current along the walls, added to every step through Move\'s Also velocity.',
-      'outward: the way out of the nearest wall (Sense\'s Gradient). along: the wall\'s own direction (outward turned a quarter turn), so the current runs round every wall the same way.',
-      'near: 1 at a wall, fading out within about 0.05 of it, so the middle of a corridor is left to the slime.',
-      'Result: Flow (0.06 picture units a second) along the nearest wall, strongest beside it. Corridors carry currents both ways along their two sides, so veins stream past each other.',
-      'Try: Flow 0 for a still network packed into the corridors; 0.2 for fast rivers; −0.06 to turn every current round.',
-    ],
-  });
   const move = n('agentMove', 'swMove', 1680, 100, {
     speed: 0.15, edges: 'wrap', onObstacle: 'slide',
     ...note([
       'Move: one step along the heading plus the current. Obstacle ƒ is the Walls chain from outside: a step that would land where it is below 0 (inside a wall) is not taken.',
       'On obstacle Slide: the walker moves along the wall instead, so the streams hug the corridors. Try Turn back for walkers that bounce off the walls.',
     ]),
-  }, { heading: ['swSteer', 'heading'], also: ['swDrift', 'result'], obstacle: ['swIn', 'walls'] });
+  }, { heading: ['swSteer', 'heading'], also: ['swDrift', 'force'], obstacle: ['swIn', 'walls'] });
   const output = n('agentOutput', 'swOut', 2100, 140, {
     _groupOriginal: true,
     ...note(['Agent Output: Position, Heading and Velocity from Move.']),
   }, { position: ['swMove', 'position'], heading: ['swMove', 'heading'], velocity: ['swMove', 'velocity'] });
 
-  // ── Outside: the maze, one ordinary SDF chain ──
+  // ── Outside: the maze, a Truchet tiling built from small nodes ──
   const uv = n('uv', 'swUv', X(0), Y(420), { ...note(['UV: where each pixel (or, read inside the group, each walker) is.']) });
   const time = n('time', 'swTime', X(0), Y(620), { ...note(['Time: moves the film grain.']) });
-  const maze = expr('swWalls', X(420), Y(420), {
-    label: 'Truchet maze',
-    inputs: [{ name: 'uv', type: 'vec2' }, { name: 'cells', type: 'float', slider: { min: 1.5, max: 8 } }, { name: 'thick', type: 'float', slider: { min: 0.02, max: 0.2 } }],
-    values: { cells: 3.4, thick: 0.08 },
-    lines: [
-      ['vec2 cellP', 'uv * cells + vec2(0.37, 0.11)'],
-      ['vec2 cellId', 'floor(cellP)'],
-      ['float flip', 'fract(sin(dot(cellId, vec2(127.1, 311.7))) * 43758.5453)'],
-      ['vec2 inCell', 'fract(cellP) - 0.5'],
-      ['vec2 tile', 'flip > 0.5 ? vec2(-inCell.x, inCell.y) : inCell'],
-      ['float arc', 'min(abs(length(tile - 0.5) - 0.5), abs(length(tile + 0.5) - 0.5))'],
-    ],
-    result: '(arc - thick) / cells',
-    outputType: 'float',
-    wires: { uv: ['swUv', 'uv'] },
-    note: [
-      'Truchet maze (an Expression Block): the walls, as one signed distance in picture units (below 0 inside a wall). Truchet tiles: every square cell holds two quarter-circle arcs joining the middles of its sides, mirrored at random, and the arcs of neighbouring cells meet, so they join into long winding walls and closed loops.',
-      'cellP: the picture in cell units (Cells 3.4 to the picture\'s height), nudged so the middle is not on a corner. cellId: which cell. flip: a random number for the cell (a hash of cellId).',
-      'inCell: the position inside the cell, centred. tile: inCell mirrored left-right in half the cells (flip above 0.5), which flips that cell\'s arcs.',
-      'arc: the distance to the nearer of the two arcs (circles of radius 0.5 round two opposite corners).',
-      'Result: a wall Thick (0.08 of a cell) either side of each arc, divided by Cells to be in picture units like any other shape. It goes to the group (Obstacle ƒ, the walls Sense), to Inside a wall, to Emit and to the picture.',
-      'Try: Cells 6 for a tight labyrinth of thin corridors; Thick 0.18 for narrow channels the slime has to squeeze through.',
-    ],
-  });
-  const block = expr('swBlock', X(1260), Y(420), {
-    label: 'Inside a wall',
-    inputs: [{ name: 'd', type: 'float' }],
-    lines: [],
-    result: 'step(d, 0.0)',
-    outputType: 'float',
-    wires: { d: ['swWalls', 'result'] },
-    note: ['Inside a wall (an Expression Block): 1 inside a wall, 0 outside, for the Trail\'s Block, so no smell leaks through a wall and walkers in one corridor don\'t pull those in the next.'],
-  });
+  const CELLS = 3.4;
+  const maze: GraphNode[] = [
+    n('fract', 'swTile', X(260), Y(420), { scale: CELLS, ...note([
+      `Tile, Scale ${CELLS}: the picture cut into square cells, ${CELLS} to its height. Output is the place inside the cell (−0.5 to 0.5 each way), Cell ID which cell.`,
+      'The maze is a Truchet tiling: every cell holds two quarter-circle arcs, mirrored at random, and the arcs of neighbouring cells meet, so they join into long winding walls and closed loops.',
+    ]) }, { input: ['swUv', 'uv'] }),
+    n('randomFromId', 'swCoin', X(520), Y(620), { from: -0.5, to: 0.5, ...note(['Random (from ID): a steady coin toss for each cell, from its Cell ID, between −0.5 and 0.5.']) }, { id2: ['swTile', 'cellID'] }),
+    n('compare', 'swHeads', X(780), Y(620), { operator: '>', ...note(['Compare: 1 where the coin came up above 0 (half the cells), 0 elsewhere.']) }, { a: ['swCoin', 'value'] }),
+    n('makeVec2', 'swFlipLR', X(520), Y(820), { x: -1, y: 1, ...note(['Make Vec2 (−1, 1): a left–right mirror.']) }),
+    nv('vec2', 'multiply', 'swMirrored', X(780), Y(820), { ...note(['Multiply: the place in the cell, mirrored left to right, which flips the cell\'s arcs to the other pair of corners.']) }, { a: ['swTile', 'output'], b: ['swFlipLR', 'xy'] }),
+    nv('vec2', 'select', 'swTileP', X(1040), Y(620), { ...note(['Select: the mirrored place in the cells whose coin came up, the plain one in the others.']) }, { mask: ['swHeads', 'mask'], ifTrue: ['swMirrored', 'result'], ifFalse: ['swTile', 'output'] }),
+    n('ringSDF', 'swArcA', X(1300), Y(520), { radius: 0.5, posX: 0.5, posY: 0.5, ...note(['Ring SDF, radius 0.5 round the cell\'s top-right corner: one arc, joining the middles of the top and right sides.']) }, { position: ['swTileP', 'result'] }),
+    n('ringSDF', 'swArcB', X(1300), Y(720), { radius: 0.5, posX: -0.5, posY: -0.5, ...note(['Ring SDF round the bottom-left corner: the other arc.']) }, { position: ['swTileP', 'result'] }),
+    n('minMath', 'swArc', X(1560), Y(620), { ...note(['Min: the distance to the nearer of the two arcs.']) }, { a: ['swArcA', 'distance'], b: ['swArcB', 'distance'] }),
+    n('subtract', 'swThick', X(1780), Y(620), { b: 0.08, outputType: 'float', ...note(['Subtract 0.08: a wall 0.08 of a cell either side of each arc (below 0 inside a wall). Try 0.18 for narrow channels the slime has to squeeze through.']) }, { a: ['swArc', 'result'] }),
+    n('divide', 'swWalls', X(2000), Y(620), { b: CELLS, ...note([
+      `Divide by ${CELLS} (the Tile Scale): the walls in picture units like any other shape, so slopes and distances inside the group are right. Change both together (6 for a tight labyrinth of thin corridors).`,
+      'This distance goes to the group (Obstacle ƒ, the Flow current), to Inside a wall, to Emit and to the picture.',
+    ]) }, { a: ['swThick', 'result'] }),
+  ];
+  const block = n('compare', 'swBlock', X(2260), Y(420), { operator: '<', ...note(['Compare: 1 inside a wall (the distance below 0), 0 outside, for the Trail\'s Block, so no smell leaks through a wall and walkers in one corridor don\'t pull those in the next.']) }, { a: ['swWalls', 'result'] });
   const emit = n('agentEmit', 'swEmit', X(0), Y(0), {
     mode: 'fill', shape: 'field', threshold: 0.01, heading: 'random',
     ...note(['Emit, Shape Field: walkers are born anywhere the maze\'s distance is above 0.01, so never inside a wall. Where ƒ takes any chain, like Obstacle ƒ.']),
   }, { where: ['swWalls', 'result'] });
-  let group = agentsGroup('swSlime', X(420), Y(0), 'swEmit', [inputs, sense, steer, feel, drift, move, output], {
+  let group = agentsGroup('swSlime', X(420), Y(0), 'swEmit', [inputs, sense, steer, drift, move, output], {
     label: 'Slime in the maze', tier: '256k', preroll: 6,
     ...note([
       'Agents: 262,144 walkers (256k), 2 steps a frame: the slime rule (Sense → Steer → Move) with the maze as walls and a current along them.',
@@ -320,29 +290,22 @@ export function shaderWallsNodes(x = 0, y = 0): GraphNode[] {
       'Trail field: 512 rows; spreads a little (Diffuse 0.6) and fades fast (half-life 0.1 s), so the veins follow the walkers closely.',
       'Block: wired from Inside a wall: the trail is wiped inside the walls every step.',
     ]),
-  }, { deposit: ['swDeposit', 'deposit'], block: ['swBlock', 'result'] });
-  const look = expr('swLook', X(1680), Y(420), {
-    label: 'Stone and veins',
-    inputs: [{ name: 'a', type: 'float' }, { name: 'd', type: 'float' }, { name: 'uv', type: 'vec2' }],
-    lines: [
-      ['vec3 floor0', 'mix(vec3(0.008, 0.009, 0.014), vec3(0.022, 0.023, 0.032), uv.y * 0.5 + 0.5)'],
-      ['vec3 haze', 'vec3(1.0, 0.5, 0.18) * a * 0.18'],
-      ['float inside', '1.0 - smoothstep(0.0, 0.0025, d)'],
-      ['float ridge', 'smoothstep(0.0, -0.022, d)'],
-      ['vec3 stone', 'mix(vec3(0.03, 0.032, 0.042), vec3(0.15, 0.155, 0.18), ridge) * (0.7 + 0.3 * (uv.y * 0.5 + 0.5))'],
-      ['float lip', 'exp(-abs(d) * 260.0)'],
-    ],
-    result: 'mix(floor0 + haze, stone, inside) + vec3(1.0, 0.6, 0.3) * lip * min(a * 0.04, 0.35)',
-    outputType: 'vec3',
-    wires: { a: ['swTrail', 'amount'], d: ['swWalls', 'result'], uv: ['swUv', 'uv'] },
-    note: [
-      'Stone and veins (an Expression Block): the picture under the walkers, drawn from the same distance the walkers obey.',
-      'floor0: the corridor floor, near black, a touch lighter toward the top. haze: the trail\'s Amount as a faint amber warmth along the veins.',
-      'inside: 1 inside a wall. ridge: 0 at a wall\'s edge rising to 1 along its middle (the distance inside is negative). stone: dark slate at the edges to lighter along the ridge, a little brighter toward the top, so each wall reads as a rounded ridge lit from above.',
-      'lip: a thin line on every wall\'s edge, lit only where a vein runs beside it (times the trail\'s Amount): the veins seem to light the stone they pass.',
-      'Result: floor and haze, the stone walls on top, and their lit lips.',
-    ],
-  });
+  }, { deposit: ['swDeposit', 'deposit'], block: ['swBlock', 'mask'] });
+  // ── The picture under the walkers: stone and veins, drawn from the same distance the walkers obey ──
+  const look: GraphNode[] = [
+    n('gradient', 'swFloor', X(1260), Y(1060), { mode: 'linear_y', color_a: [0.008, 0.009, 0.014], color_b: [0.022, 0.023, 0.032], ...note(['Gradient (Linear Y): the corridor floor, near black, a touch lighter toward the top.']) }, { uv: ['swUv', 'uv'] }),
+    n('colorize', 'swHaze', X(1260), Y(1260), { color: [1, 0.5, 0.18], background: [0, 0, 0], gain: 0.18, ...note(['Colourize: the trail\'s Amount as a faint amber warmth along the veins.']) }, { field: ['swTrail', 'amount'] }),
+    n('addColor', 'swGround', X(1500), Y(1160), { ...note(['Add Colours: the floor with the veins\' warmth on it.']) }, { a: ['swFloor', 'color'], b: ['swHaze', 'color'] }),
+    n('colorize', 'swLip', X(1500), Y(1400), { color: [1, 0.6, 0.3], background: [0, 0, 0], gain: 0.035, ...note(['Colourize: the trail\'s Amount again, as the warm light a vein throws on the wall beside it (the wall\'s edge, below).']) }, { field: ['swTrail', 'amount'] }),
+    n('sdfFill', 'swLook', X(1740), Y(1160), {
+      strokeWidth: 0.004, strokeAlign: 'center',
+      ...gradientParams('fillColor', { along: 'inside', interp: 'smooth', from: 0, to: 0.022, stops: [{ pos: 0, color: [0.03, 0.032, 0.042] }, { pos: 1, color: [0.15, 0.155, 0.18] }] }),
+      ...note([
+        'SDF Fill on the walls\' distance: the stone. Its Fill colour is a Gradient along Edge → inside: dark slate at a wall\'s edge to lighter along its middle (0.022 in), so each wall reads as a rounded ridge.',
+        'Stroke: a thin line (0.004) on every wall\'s edge in the vein light from Colourize, so it glows only where a vein runs beside it: the veins seem to light the stone they pass. Background: the floor and its warmth.',
+      ]),
+    }, { d: ['swWalls', 'result'], strokeColor: ['swLip', 'color'], background: ['swGround', 'result'] }),
+  ];
   const draw = n('drawAgents', 'swDraw', X(2100), Y(0), {
     style: 'streaks', colorBy: 'speed', palette: 'gold', speedRef: 0.3, scaleBy: 'crowd', size: 1, brightness: 0.55, glow: 0.1, streak: 0.45, fade: 'off', lights: '0',
     ...note([
@@ -351,7 +314,7 @@ export function shaderWallsNodes(x = 0, y = 0): GraphNode[] {
       'Try: Style Points to see the walkers themselves; Brightness 0 to see only the trail\'s warmth.',
     ]),
   }, { agents: ['swSlime', 'agents'], over: ['swLook', 'result'] });
-  return [emit, uv, time, maze, block, group, deposit, trail, look, draw,
+  return [emit, uv, time, ...maze, block, group, deposit, trail, ...look, draw,
     ...cinemaFinish(['swDraw', 'color'], { x: X(2520), y: Y(0), prefix: 'swFin', uv: ['swUv', 'uv'], time: ['swTime', 'time'], outId: 'swOutput' })];
 }
 

@@ -51,6 +51,17 @@ export function n(type: string, id: string, x: number, y: number, params: Record
   return type === 'trailField' ? retypeTrailField(node) : node;
 }
 
+/**
+ * A math node (Add, Subtract, Multiply, Divide, Mix, Floor, Max, Normalize…) set to a vector type, as the card's
+ * type picker leaves it: its outputType param and its sockets retyped. Mix's T and Select's Mask stay floats.
+ */
+export function nv(t: 'vec2' | 'vec3', type: string, id: string, x: number, y: number, params: Record<string, unknown> = {}, wires: Wires = {}): GraphNode {
+  const node = n(type, id, x, y, { outputType: t, ...params }, wires);
+  for (const k of Object.keys(node.inputs)) if (!(type === 'mix' && k === 't') && !(type === 'select' && k === 'mask')) node.inputs[k] = { ...node.inputs[k], type: t };
+  for (const k of Object.keys(node.outputs)) node.outputs[k] = { ...node.outputs[k], type: t };
+  return node;
+}
+
 /** An iterated group: ports in and out, a subgraph, and how many times it runs. */
 export function group(id: string, x: number, y: number, o: {
   label: string; iterations: number;

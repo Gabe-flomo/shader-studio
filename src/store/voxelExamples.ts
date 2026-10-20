@@ -9,7 +9,7 @@
  */
 import type { GraphNode, SubgraphData } from '../types/nodeGraph';
 import type { ExampleGraph } from './exampleIndex';
-import { ctl, n, play } from './graphBuilder';
+import { ctl, n, nv, play } from './graphBuilder';
 import { WIGGLE_PALETTE, exprBlock } from './wiggleLook';
 
 const note = (text: string) => ({ __comment: text });
@@ -27,7 +27,7 @@ export const VOXEL_EXAMPLE_INDEX: Record<string, Pick<ExampleGraph, 'label' | 'd
   },
   comboVoxelSpheres: {
     label: 'Combo: Voxels + Random (from ID)',
-    description: 'Three drifting blobs (Sphere 3D ×3, Smooth Union) drawn as cubes by the March Loop\'s Voxels setting. Outside, an Expression Block turns Hit Pos and Normal into the cube\'s cell, Random (from ID) gives every cell its own number and a Palette turns it into a colour, so each cube keeps its colour as the blobs move through the grid. Multiplied by the loop\'s own lit Color. Voxel size is a Play slider.',
+    description: 'Three drifting blobs (Sphere 3D ×3, Smooth Union) drawn as cubes by the March Loop\'s Voxels setting. Outside, Multiply, Subtract, Divide and Floor turn Hit Pos and Normal into the cube\'s cell, Random (from ID) gives every cell its own number and a Palette turns it into a colour, so each cube keeps its colour as the blobs move through the grid. Multiplied by the loop\'s own lit Color. Voxel size is a Play slider.',
     play: true,
   },
 };
@@ -37,6 +37,14 @@ const cellBlock = (id: string, x: number, y: number, march: string, size: string
   pos: { type: 'vec3', from: [march, 'pos'] }, nrm: { type: 'vec3', from: [march, 'normal'] },
 }, [], `floor((pos - nrm * 0.5 * ${size}) / ${size})`,
 `Which cube did the ray hit? Hit Pos is on the cube's face, so step half a cube (${size}) back along the Normal to land inside it, then divide by the cube size and floor: whole-number cell coordinates, the same for every pixel of one cube. Keep the size here the same as the loop's Voxel size.`);
+
+/** The same as Which cube?, in nodes: Hit Pos stepped half a cube back along the Normal, ÷ the cube size, floored ('cell'). */
+const cellNodes = (x: number, y: number, march: string, size: number): GraphNode[] => [
+  nv('vec3', 'multiply', 'halfBack', x, y, { b: size / 2, ...note(`Multiply: the Normal × half a cube (${size / 2}). Hit Pos is on the cube's face; stepping back this far along the Normal lands inside the cube.`) }, { a: [march, 'normal'] }),
+  nv('vec3', 'subtract', 'inside', x + 240, y, { ...note('Subtract: Hit Pos less that step, a point inside the cube that was hit.') }, { a: [march, 'pos'], b: ['halfBack', 'result'] }),
+  nv('vec3', 'divide', 'inCubes', x + 480, y, { b: size, ...note(`Divide by the cube size (${size}): the point in cubes. Keep it the same as the loop's Voxel size.`) }, { a: ['inside', 'result'] }),
+  nv('vec3', 'floor', 'cell', x + 720, y, { ...note('Floor: whole-number cell coordinates, the same for every pixel of one cube: the cube\'s Cell ID.') }, { input: ['inCubes', 'result'] }),
+];
 
 export function buildVoxelExamples(): Record<string, ExampleGraph> {
   // ── 1. Voxel terrain (GI Lit March Group, Voxels) ─────────────────────────
@@ -101,25 +109,22 @@ export function buildVoxelExamples(): Record<string, ExampleGraph> {
 
   // ── 2. Combo: Voxels + Random (from ID) ───────────────────────────────────
   const bs = 0.1;
+  /** One sphere on a tilted circle: a spinning Transform (the orbit) then a moving one (the radius), then the Sphere. */
+  const orbiter = (k: string, y: number, o: { tilt: number; start: number; spin: number; out: number; r: number; what: string }): GraphNode[] => [
+    n('transform', `orbit${k}`, 260, y, { dim: '3', rx: o.tilt, ry: o.start, spin: o.spin, spinAxis: 'y', ...note(`Transform: spins this sphere's space about the up axis, ${o.spin}° a second, tilted ${o.tilt}° so its circle rises and falls (it starts ${o.start}° round). The next Transform moves the sphere out from the middle, so together they carry it round a circle.`) }, { p: ['sp', 'pos'] }),
+    n('transform', `out${k}`, 520, y, { dim: '3', x: o.out, ...note(`Transform: moves the sphere ${o.out} out from the middle, in the spinning space: the radius of its circle.`) }, { p: [`orbit${k}`, 'p'] }),
+    n('sphereSDF3D', `ball${k}`, 780, y, { radius: o.r, ...note(`Sphere, radius ${o.r}: ${o.what}`) }, { pos: [`out${k}`, 'p'] }),
+  ];
   const blobScene = n('sceneGroup', 'scene', 40, 760, {
-    label: 'Three blobs', ...note('Three spheres on slow circles, melted together with Smooth Unions. The loop\'s Voxels turn the melted shape into cubes.'),
+    label: 'Three blobs', ...note('Three spheres on slow tilted circles, melted together with Smooth Unions. The loop\'s Voxels turn the melted shape into cubes.'),
     subgraph: sub([
       n('scenePos', 'sp', 0, 200, { _groupOriginal: true, ...note('Scene Pos: the point being measured.') }),
-      n('time', 'tm', 0, 420, { ...note('Time: moves the three spheres.') }),
-      exprBlock('blobs', 260, 200, 'Three blobs', { p: { type: 'vec3', from: ['sp', 'pos'] }, t: { type: 'float', from: ['tm', 'time'] } }, [
-        { lhs: 'vec3 a', rhs: 'vec3(cos(t * 0.5) * 0.9, sin(t * 0.7) * 0.4, sin(t * 0.5) * 0.9)' },
-        { lhs: 'vec3 b', rhs: 'vec3(cos(t * 0.4 + 2.1) * 0.9, cos(t * 0.6) * 0.5, sin(t * 0.4 + 2.1) * 0.9)' },
-        { lhs: 'vec3 c', rhs: 'vec3(cos(t * 0.45 + 4.2) * 0.8, sin(t * 0.55 + 1.0) * 0.45, sin(t * 0.45 + 4.2) * 0.8)' },
-        { lhs: 'float da', rhs: 'length(p - a) - 0.75' },
-        { lhs: 'float db', rhs: 'length(p - b) - 0.6' },
-        { lhs: 'float dc', rhs: 'length(p - c) - 0.5' },
-        { lhs: 'float k', rhs: '0.5' },
-        { lhs: 'float h1', rhs: 'clamp(0.5 + 0.5 * (db - da) / k, 0.0, 1.0)' },
-        { lhs: 'float d1', rhs: 'mix(db, da, h1) - k * h1 * (1.0 - h1)' },
-        { lhs: 'float h2', rhs: 'clamp(0.5 + 0.5 * (dc - d1) / k, 0.0, 1.0)' },
-      ], 'mix(dc, d1, h2) - k * h2 * (1.0 - h2)',
-      'Three spheres (radius 0.75, 0.6, 0.5) whose centres a, b and c circle the middle at different speeds, joined by a smooth union (blend radius k = 0.5) so they melt into one blob where they meet. As they move through the cube grid, cubes switch on and off at the blob\'s edge.', 'float'),
-      n('sceneOutput', 'so', 640, 200, { _groupOriginal: true, ...note('Scene Output: the blob\'s distance.') }, { dist: ['blobs', 'result'] }),
+      ...orbiter('A', 0, { tilt: 24, start: 0, spin: 28.6, out: 0.9, r: 0.75, what: 'the biggest blob.' }),
+      ...orbiter('B', 260, { tilt: -30, start: 120, spin: 22.9, out: 0.9, r: 0.6, what: 'the middle blob, a third of a turn behind and slower, so the three keep meeting and parting.' }),
+      ...orbiter('C', 520, { tilt: 32, start: 240, spin: 25.8, out: 0.8, r: 0.5, what: 'the smallest blob.' }),
+      n('sdfUnion', 'meltAB', 1040, 120, { k: 0.5, ...note('Union, Smooth 0.5: the first two spheres melt into one blob where they come within half a unit of each other.') }, { a: ['ballA', 'dist'], b: ['ballB', 'dist'] }),
+      n('sdfUnion', 'melt', 1280, 260, { k: 0.5, ...note('Union, Smooth 0.5: and the third. As they move through the cube grid, cubes switch on and off at the blob\'s edge.') }, { a: ['meltAB', 'dist'], b: ['ballC', 'dist'] }),
+      n('sceneOutput', 'so', 1520, 260, { _groupOriginal: true, ...note('Scene Output: the blob\'s distance.') }, { dist: ['melt', 'dist'] }),
     ]),
   });
   const combo: ExampleGraph = {
@@ -133,24 +138,23 @@ export function buildVoxelExamples(): Record<string, ExampleGraph> {
         voxels: true, voxelSize: bs, maxSteps: 96, maxDist: 20, jitter: 0, bg: [0.012, 0.014, 0.03], albedo: [1, 1, 1], subgraph: passBody('march'),
         ...note(`March Loop with Voxels on (Advanced), Voxel size ${bs}: the ray walks a cube grid cell by cell and stops at the first cell whose centre is inside the blobs, so any scene becomes cubes. Its Color lights each cube by the face the ray came in through.`),
       }, { ro: ['cam', 'ro'], rd: ['cam', 'rd'], scene: ['scene', 'scene'] }),
-      cellBlock('cell', 700, 560, 'march', bs.toString()),
-      n('randomFromId', 'rnd', 960, 560, { from: 0, to: 0.45, seed: 3, ...note('Random (from ID): one number from 0 to 0.45 per cell, from its Cell ID. The same cell always gets the same number, so a cube keeps its colour while it exists.') }, { id: ['cell', 'result'] }),
-      n('palette', 'pal', 1200, 560, { ...WIGGLE_PALETTE, anim: 0.2, speed: 1, ...note('Palette: the Wiggle Tunnel\'s colours. Angle offset 0.2 plus the random 0 to 0.45 spans navy, sky blue and cream, with the odd orange cube.') }, { value: ['rnd', 'value'] }),
-      exprBlock('tint', 1440, 300, 'Colour the cubes', {
-        lit: { type: 'vec3', from: ['march', 'color'] }, col: { type: 'vec3', from: ['pal', 'color'] }, hit: { type: 'float', from: ['march', 'hit'] },
-      }, [], 'mix(lit, lit * col * 1.4, hit)',
-      'The loop\'s Color lights white cubes by their faces (and is the background where the ray missed). Where it hit, multiply by the cube\'s palette colour, lifted by 1.4 because the side faces are dim; where it missed, keep the background.'),
-      n('vignette', 'vig', 1680, 300, { radius: 0.8, softness: 0.6, strength: 0.6, ...note('Vignette: a gentle darkening toward the corners.') }, { color: ['tint', 'result'] }),
-      n('output', 'out', 1900, 300, { ...note('Output: the picture.') }, { color: ['vig', 'result'] }),
+      ...cellNodes(700, 560, 'march', bs),
+      n('randomFromId', 'rnd', 1400, 560, { from: 0, to: 0.45, seed: 3, ...note('Random (from ID): one number from 0 to 0.45 per cell, from its Cell ID. The same cell always gets the same number, so a cube keeps its colour while it exists.') }, { id: ['cell', 'output'] }),
+      n('palette', 'pal', 1640, 560, { ...WIGGLE_PALETTE, anim: 0.2, speed: 1, ...note('Palette: the Wiggle Tunnel\'s colours. Angle offset 0.2 plus the random 0 to 0.45 spans navy, sky blue and cream, with the odd orange cube.') }, { value: ['rnd', 'value'] }),
+      nv('vec3', 'multiply', 'tinted', 1880, 300, { ...note('Multiply: the loop\'s Color (white cubes lit by their faces) times the cube\'s palette colour.') }, { a: ['march', 'color'], b: ['pal', 'color'] }),
+      nv('vec3', 'multiply', 'lift', 2120, 300, { b: 1.4, ...note('Multiply by 1.4: a lift, because the side faces are dim.') }, { a: ['tinted', 'result'] }),
+      nv('vec3', 'mix', 'tint', 2360, 300, { ...note('Mix by Hit: the coloured cubes where the ray hit, the loop\'s own background where it missed (so the background is not tinted).') }, { a: ['march', 'color'], b: ['lift', 'result'], t: ['march', 'hit'] }),
+      n('vignette', 'vig', 2600, 300, { radius: 0.8, softness: 0.6, strength: 0.6, ...note('Vignette: a gentle darkening toward the corners.') }, { color: ['tint', 'result'] }),
+      n('output', 'out', 2840, 300, { ...note('Output: the picture.') }, { color: ['vig', 'result'] }),
     ],
     play: play([
       ctl('vs', 'march::voxelSize', 'Cube size', 0.04, 0.3, 0.005),
       ctl('c', 'cam::camAngle', 'Camera angle', 0, 6.28, 0.02),
     ], `**What it shows.** Three soft blobs melting into each other, drawn as cubes. As the blobs drift, cubes appear at their leading edge and vanish behind, and every cube keeps its own colour.
 
-**How it is built.** The Scene Group is plain: three moving spheres joined by a smooth union. The **March Loop** has **Voxels** on (in its Advanced section), so the ray walks a cube grid and any scene becomes cubes. Outside: **Which cube?** turns Hit Pos and Normal into the cell, **Random (from ID)** gives the cell a number, a **Palette** turns it into a colour, and that multiplies the loop's lit Color (an Expression Block keeps the background where the ray missed).
+**How it is built.** The Scene Group is plain: three spheres, each carried round a tilted circle by two Transforms (one spinning, one moving it out), joined by Smooth Unions. The **March Loop** has **Voxels** on (in its Advanced section), so the ray walks a cube grid and any scene becomes cubes. Outside: Multiply, Subtract, Divide and **Floor** turn Hit Pos and Normal into the cube's cell, **Random (from ID)** gives the cell a number, a **Palette** turns it into a colour, and that multiplies the loop's lit Color (a Mix by Hit keeps the background where the ray missed).
 
-**Try.** Slide **Cube size** (and set the same size in the Which cube? block, or the colours slip). Swap the blobs for any Scene Group, or turn Voxels off to see the smooth shape.`),
+**Try.** Slide **Cube size** (and set the same size on the Multiply (half of it) and Divide before the Floor, or the colours slip). Swap the blobs for any Scene Group, or turn Voxels off to see the smooth shape.`),
   };
 
   return { voxelTerrain: terrain, comboVoxelSpheres: combo };

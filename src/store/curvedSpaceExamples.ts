@@ -12,7 +12,8 @@
  */
 import type { GraphNode, SubgraphData } from '../types/nodeGraph';
 import type { PlayControl } from '../types/play';
-import { ctl, n, play } from './graphBuilder';
+import { ctl, n, nv, play } from './graphBuilder';
+import { WIGGLE_PALETTE } from './wiggleLook';
 import { expr, note } from './agentExampleKit';
 import type { ExampleGraph } from './exampleIndex';
 import { CURVED_EXAMPLE_INDEX } from './curvedSpaceExampleIndex';
@@ -95,13 +96,35 @@ const FLOOR = (cell: string): Array<[string, string]> => [
 type Example = { key: string; nodes: GraphNode[]; controls: PlayControl[]; notes: string };
 const E: Example[] = [];
 
-const nodesFor = (cam: GraphNode, sc: GraphNode, lp: GraphNode, sh: GraphNode, extra: GraphNode[] = []): GraphNode[] => [
+const nodesFor = (cam: GraphNode, sc: GraphNode, lp: GraphNode, sh: GraphNode | GraphNode[], extra: GraphNode[] = [], shaded: Wire = ['shade', 'result'], toneX = 900): GraphNode[] => [
   n('time', 'time', 40, 460, { ...note(['Time in seconds: it turns the camera slowly so the bend is seen from every side.']) }),
-  cam, sc, lp, sh,
-  n('toneMap', 'tone', 900, 220, { mode: 'aces', ...note(['Tone Map: squeezes the lit colours into the displayable range with a film-like curve.']) }, { color: ['shade', 'result'] }),
-  n('output', 'out', 1140, 220, { ...note(['Output: the picture.']) }, { color: ['tone', 'color'] }),
+  cam, sc, lp, ...(Array.isArray(sh) ? sh : [sh]),
+  n('toneMap', 'tone', toneX, 220, { mode: 'aces', ...note(['Tone Map: squeezes the lit colours into the displayable range with a film-like curve.']) }, { color: shaded }),
+  n('output', 'out', toneX + 240, 220, { ...note(['Output: the picture.']) }, { color: ['tone', 'color'] }),
   ...extra,
 ];
+
+/**
+ * The spherical world's shading, all nodes: each sphere's cell (Hit Pos ÷ the lattice spacing, floored) gives it a
+ * random colour on the Wiggle palette; Multi-Light lights it (Iter as a cheap occlusion); Volumetric Fog fades it by
+ * the distance the ray really travelled.
+ */
+function shadeNodes(cell: number, fogRate: number): GraphNode[] {
+  return [
+    nv('vec3', 'divide', 'inCells', 640, 520, { b: cell, ...note([`Divide: the hit point in lattice cells (the spheres are ${cell} apart).`]) }, { a: ['march', 'pos'] }),
+    nv('vec3', 'floor', 'cell', 860, 520, { ...note(['Floor: which cell of the lattice the ray hit, as whole numbers. The whole of one sphere is in one cell, so it gets one colour.']) }, { input: ['inCells', 'result'] }),
+    n('randomFromId', 'rnd', 1080, 520, { from: 0, to: 0.5, seed: 0, ...note(['Random (from ID): a steady number from 0 to 0.5 for that cell, so every sphere has its own colour and keeps it.']) }, { id: ['cell', 'output'] }),
+    n('palette', 'pal', 1300, 520, { ...WIGGLE_PALETTE, anim: 0.18, speed: 1, ...note(['Palette: the Wiggle Tunnel\'s colours (navy, sky blue, cream, orange). Angle offset 0.18 plus the random half-turn spreads the spheres across the blues and creams.']) }, { value: ['rnd', 'value'] }),
+    n('remap', 'occ', 1080, 760, { inMin: 0, inMax: 1, outMin: 1, outMax: 0.45, ...note(['Remap: Iter (the share of steps the ray used) turned into a cheap occlusion, 1 in the open down to 0.45 where rays slowed down: crevices and the edges of spheres darken.']) }, { value: ['march', 'iter'] }),
+    n('multiLight', 'lit', 1540, 220, {
+      sunFrom: 'angles', azimuth: 55, elevation: 52.7, sunR: 0.9, sunG: 0.88, sunB: 0.82, skyR: 0.3, skyG: 0.32, skyB: 0.38, bounceR: 0.16, bounceG: 0.16, bounceB: 0.18,
+      background: 'colour', bgColor: BG,
+      ...note(['Multi-Light: a sun from up and to the right, a sky fill from above and a little bounce, over the sphere\'s colour, with the occlusion as AO. Where the ray hit nothing it shows the dark background.']),
+    }, { baseColor: ['pal', 'color'], normal: ['march', 'normal'], hit: ['march', 'hit'], ao: ['occ', 'result'] }),
+    n('volumetricFog', 'fog', 1780, 220, { density: fogRate, fogR: BG[0], fogG: BG[1], fogB: BG[2], ...note([`Volumetric Fog: fades each sphere into the background by the true distance its ray travelled (Distance, Density ${fogRate}), so the far side of the world sinks into the dark.`]) },
+      { color: ['lit', 'color'], depth: ['march', 'dist'], hit: ['march', 'hit'] }),
+  ];
+}
 
 // ── Spherical world ─────────────────────────────────────────────────────────
 
@@ -126,10 +149,9 @@ const nodesFor = (cam: GraphNode, sc: GraphNode, lp: GraphNode, sh: GraphNode, e
     'In a space of curvature k the ray at true distance t is at ro + dir · sin(√k · t) / √k. A full circuit is 2π/√k (about 31 here) and the point straight behind you, the antipode, is π/√k (about 16) away.',
     'Max Dist 60 is long enough to go once round the world; Max Steps 140 gives rays the room to thread the gaps between spheres.',
   ]);
-  const sh = shade('floor(pos / 1.2)', [], 0.045, ['The cell here is the sphere\'s own cell of the lattice, so all of a sphere is one colour.']);
   E.push({
     key: 'curvedSpherical',
-    nodes: nodesFor(cam, sc, lp, sh, [radius]),
+    nodes: nodesFor(cam, sc, lp, shadeNodes(1.2, 0.045), [radius], ['fog', 'color'], 2020),
     controls: [
       ctl('k', 'march::curvature', 'Space curvature', 0, 0.25, 0.002),
       ctl('r', 'rad::value', 'Sphere radius', 0.1, 0.55, 0.01),
@@ -137,7 +159,7 @@ const nodesFor = (cam: GraphNode, sc: GraphNode, lp: GraphNode, sh: GraphNode, e
     ],
     notes: `**What it shows.** Someone standing in the middle of an endless lattice of spheres, but in a space that curves like the surface of a ball. At **Space curvature 0** it is the ordinary lattice: spheres getting smaller and smaller toward the horizon. Raise the curvature and the rays bend toward each other: the far spheres stop shrinking, then **grow again**, and the sphere right behind the far side of the world, the antipode, is the nearest one seen from the back: a huge ball on the horizon, with the whole world wrapped round to meet itself.
 
-**How it is built.** A Scene Group repeats one sphere every 1.2 units (Repeat 3D), a March Camera sits in the middle of the lattice, and the March Loop's **Space curvature** bends how its rays travel (the maths is in docs/curved-space.md). Nothing about the lattice changes: only the rays. A Shade block gives each sphere its own colour, a sun and sky light, and fog by the distance the ray really travelled.
+**How it is built.** A Scene Group repeats one sphere every 1.2 units (Repeat 3D), a March Camera sits in the middle of the lattice, and the March Loop's **Space curvature** bends how its rays travel (the maths is in docs/curved-space.md). Nothing about the lattice changes: only the rays. Its cell (Hit Pos ÷ 1.2, Floor) gives each sphere a Random (from ID) colour on a Palette; Multi-Light gives it a sun and sky light, and Volumetric Fog fades it by the distance the ray really travelled.
 
 **Try.** Slide **Space curvature** from 0 up: watch the lattice fold. Small values (0.01) are a gentle bend; at 0.04 you can see round the world; at 0.25 the whole world is only about 12 across. **Sphere radius** makes the antipode ball bigger or smaller. **Look around** turns the camera. Set the loop's Space curvature below 0 to see the opposite bend (the next example). The shading is the same flat-space lighting at every curvature (a limit noted in the docs).`,
   });
