@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.317',
+    date: '2026-10-19',
+    title: "Passes you can see, Simple Expression",
+    highlights: [
+      { area: 'Studio', text: "A Passes n/8 chip on the graph toolbar shows how many passes a graph uses; click it for what uses them and why there's a limit." },
+      { area: 'Studio', text: "Simple Expression: a node for one line of GLSL. Add inputs as you need them; each takes its type from the wire plugged into it." },
+      { area: 'Studio', text: "Over the pass limit? The error now lists which nodes use how many passes." },
+    ],
+  },
+  {
     id: '2026.10.316',
     date: '2026-10-19',
     title: "Toolbars that fit",
