@@ -14,6 +14,7 @@
 - **Sun from**: the direction in degrees (0 from the right, 90 from the top, 180 from the left).
 - **Sun height**: low sun (10–30°) rakes across and shows every ripple; 90 is overhead.
 - **Ambient**: light that reaches the shadows too.
+- **Keep flat parts** (off by default): flat parts keep the colour as it came in and only slopes get lighter or darker, as an emboss over a photo (Texture Lab's Height Light starts with it on).
 - **Low / High colour**: the surface from Range low to Range high, unless **Colour** is wired (a palette, a picture).
 
 ## Outputs
@@ -22,7 +23,7 @@
 
 ## How it works
 
-It reads the height at this pixel and on four sides of it, Spacing apart. Slope = the differences × Relief. Normal = normalize(−slope, 1). Shade = dot(normal, sun), clamped to 0–1. Color = surface × (Ambient + (1 − Ambient) × Shade).
+It reads the height at this pixel and on four sides of it, Spacing apart. Slope = the differences × Relief. Normal = normalize(−slope, 1). Shade = dot(normal, sun), clamped to 0–1. Color = surface × (Ambient + (1 − Ambient) × Shade); with Keep flat parts, divided by the light flat ground gets, Ambient + (1 − Ambient) × sin(Sun height).
 
 ## Example
 

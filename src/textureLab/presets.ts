@@ -55,7 +55,7 @@ export const TX_PRESETS: readonly TxPreset[] = [
   {
     key: 'relief', label: 'Relief', blurb: 'The picture as a carved relief, lit by a low sun.',
     blocks: [
-      { type: 'heightLight', params: { channel: 'bright', relief: 0.07, sunAngle: 135, sunHeight: 32, ambient: 0.4, spacing: 2.5 } },
+      { type: 'heightLight', params: { channel: 'bright', relief: 0.07, sunAngle: 135, sunHeight: 32, ambient: 0.4, spacing: 2.5, keepFlat: true } },
       { type: 'curves', params: curvesPresetParams('contrast') ?? {} },
     ],
   },

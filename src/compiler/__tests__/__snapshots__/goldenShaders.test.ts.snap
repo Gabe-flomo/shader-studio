@@ -2899,7 +2899,7 @@ exports[`golden shaders: every example compiles as it did > combinePeopleRings 1
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1624d04b24107c0b56397a11ed6c:33995",
+  "fragmentShader": "172e84f85b197802b4ed3833108e:33722",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "1b25432dac64a1165a1fcc5edeef:754",

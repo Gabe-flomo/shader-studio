@@ -171,10 +171,13 @@ export function applyTextureLab(graph: readonly GraphNode[], spec0: TextureLabSp
   } else {
     const kind = spec.source.kind as 'room' | 'walkway' | 'ball';
     const type = kind === 'ball' ? 'videoInput' : 'textureInput';
-    const own = kind === 'ball' ? BALL_VIDEO_PARAMS : { fit: 'cover', ...builtinImageParams(kind === 'walkway' ? WALKWAY_CAT_ID : ROOM_AND_CAT_ID) };
+    const own = kind === 'ball' ? BALL_VIDEO_PARAMS : { fit: 'stretch', ...builtinImageParams(kind === 'walkway' ? WALKWAY_CAT_ID : ROOM_AND_CAT_ID) };
     const prev = old.get('source');
     const kept = prev && prev.type === type && found && found.meta.spec.source.kind === kind ? specParams(prev.params) : {};
-    const src = make('source', type, { ...own, ...(spec.source.params ?? {}), ...kept }, {}, 0, 0, SOURCE_NOTE[kind]);
+    // Always Stretch: its Color then lines up with its Texture (what the tools that read round each pixel take, which
+    // covers the picture as Stretch does). Fill cropped the colour but not the texture, so a relief or a mask landed
+    // off the picture (builds made before kept Fill). Texture Lab draws at the photo's shape, so nothing is stretched.
+    const src = make('source', type, { ...own, ...(spec.source.params ?? {}), ...kept, ...(type === 'textureInput' ? { fit: 'stretch' } : {}) }, {}, 0, 0, SOURCE_NOTE[kind]);
     srcId = src.id;
     cur = { color: [srcId, 'color'], texture: [srcId, 'texture'] };
   }

@@ -55,6 +55,11 @@ export interface BlockDef {
   views: BlockView[];
   /** Settings it starts with, where the node's own defaults don't show it off on a picture. */
   start?: Params;
+  /**
+   * Slider ranges for a picture, where the node's own are for something else (Height Light's Range is −10…10 for a
+   * Trail's sand; a picture's brightness is 0…1). Typing beyond still widens the slider.
+   */
+  ranges?: Record<string, { min: number; max: number; step?: number }>;
   special?: BlockSpecial;
   /** Needs the depth model (downloaded once, from the Depth card). */
   needsModel?: boolean;
@@ -121,7 +126,8 @@ export const BLOCKS: readonly BlockDef[] = [
 
   // ── Light & depth ──
   { type: 'heightLight', group: 'light', label: 'Height Light', line: 'Lit like a relief, brightness as height', icon: 'sun', feed: 'texture',
-    special: 'heightLight', start: { channel: 'bright', relief: 0.1, sunHeight: 30, ambient: 0.35 }, views: [{ id: 'color', label: 'Lit', out: 'color' }, { id: 'shade', label: 'Light only', out: 'shade' }] },
+    special: 'heightLight', start: { channel: 'bright', relief: 0.06, spacing: 2, sunHeight: 30, ambient: 0.35, keepFlat: true },
+    ranges: { low: { min: 0, max: 1 }, high: { min: 0, max: 1 }, relief: { min: 0, max: 0.3 } }, views: [{ id: 'color', label: 'Lit', out: 'color' }, { id: 'shade', label: 'Light only', out: 'shade' }] },
   { type: 'depthMix', group: 'light', label: 'Depth fog', line: 'Haze in the far part (Depth Mix)', icon: 'layers', feed: 'either', colorIn: 'picture',
     special: 'depthMix', needsModel: true, start: { mode: 'fog', haze: 0.6 }, views: [color] },
   { type: 'dofTexture', group: 'light', label: 'Depth of Field', line: 'A lens focused on a point', icon: 'eye', feed: 'texture',

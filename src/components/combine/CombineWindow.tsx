@@ -28,6 +28,7 @@ import { Menu } from '../ui/Menu';
 import { usePhoneDialog } from '../ui/phoneDialog';
 import { StudioShell, StudioLabel, StripRow } from '../builders/studio/StudioShell';
 import { LiveViewport } from '../builders/studio/LiveViewport';
+import { usePictureAspect } from '../builders/studio/usePictureAspect';
 import { SceneCrumb } from '../builders/SceneCrumb';
 import { NumRow } from '../sceneBuilder/controls';
 import { BuilderNote } from '../builders/BuilderWindow';
@@ -80,6 +81,9 @@ export function CombineWindow() {
   const canUndo = useCombine(s => s.past.length > 0);
   const canRedo = useCombine(s => s.future.length > 0);
   const budget = useNodeGraphStore(s => passBudget(s.nodes));
+  // The base's shape (a photo's, a video's): the picture is drawn at it, letterboxed, not stretched to the window.
+  const base = spec.layers[0]?.product;
+  const aspect = usePictureAspect(base?.kind === 'node' ? base.nodeId : null);
   const n = spec.layers.length;
   const over = budget.used > budget.max, warn = budget.used >= budget.max - 1;
   const passes = <span data-combine-passes={over ? 'over' : warn ? 'warn' : 'ok'} style={{ color: over ? tk.status.danger : warn ? tk.status.warningText : undefined }}>Passes {budget.used}/{budget.max}</span>;
@@ -108,7 +112,7 @@ export function CombineWindow() {
       nav={<LayerStack />} navWidth={256}
       inspector={<LayerSettings />} inspectorWidth={340}
       presets={<PresetsStrip />} presetsSummary={`${COMBINE_PRESETS.length} built in: ${COMBINE_PRESETS.map(p => p.label).join(' · ')}`}>
-      <LiveViewport ownSize clock emptyNote="The preview is hidden: show it to see the combined scene here."
+      <LiveViewport ownSize aspect={aspect} clock emptyNote="The preview is hidden: show it to see the combined scene here."
         overlay={() => (isolate ? (
           <button type="button" data-combine-isolated onClick={() => isolateLayer(null)} title="Show the whole stack (Esc)"
             style={{ position: 'absolute', left: 10, top: 10, zIndex: 2, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', border: 0, borderRadius: 999, cursor: 'pointer', background: 'rgba(0, 0, 0, 0.6)', color: '#fff', font: `600 11.5px ${fontFamily.ui}` }}>
@@ -279,7 +283,8 @@ function AddLayer() {
     const type = which === 'ball' ? 'videoInput' : 'textureInput';
     const params = which === 'ball'
       ? { videoId: BALL_VIDEO.id, _fileName: BALL_VIDEO.name, _hasFile: true, _isPlaying: true, _loop: true, _speed: 1 }
-      : { fit: 'cover', ...builtinImageParams(which === 'room' ? ROOM_AND_CAT_ID : WALKWAY_CAT_ID) };
+      // Stretch: the picture's colour and its texture (what a mask, Segment, reads) then line up, at the picture's shape.
+      : { fit: 'stretch', ...builtinImageParams(which === 'room' ? ROOM_AND_CAT_ID : WALKWAY_CAT_ID) };
     addProductNode(plainNode(type, id, { ...params, __comment: `${which === 'ball' ? 'Video' : 'Texture'}: a picture Combine put in the stack. Pick your own on this card.` }));
     pick({ kind: 'node', nodeId: id, output: 'color' });
   };
