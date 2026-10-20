@@ -28,6 +28,7 @@ import { useBuilderWindows } from '../builders/windows';
 import { useCombine } from './store';
 import { applyCombine, checkCombineEdits } from './apply';
 import { CB_BUILD, findCombineBuild } from './meta';
+import { addFill, updateFill } from './fills';
 import { emptyCombine, nextLayerId, normalizeCombine, removeLayer, type CombineLayer, type CombineSpec, type NodeRef, type ProductRef, type VerbId } from './spec';
 
 // ── Coming back to Combine ───────────────────────────────────────────────────
@@ -42,6 +43,8 @@ interface Return {
   on: string | null;
   /** Edit product: the layer. */
   layerId?: string;
+  /** New… for a per-blob fill: the fill layer and the slot (a fill's id, 'rest', or 'add' for a new fill). */
+  fill?: { layerId: string; slot: string };
   /** The graph when Combine handed over (× on the builder puts it back). */
   before: GraphNode[] | null;
   at: number;
@@ -77,7 +80,10 @@ function onBuilderDone(close: () => void, ids: ReadonlyArray<string | null | und
     const spec: CombineSpec = { v: 1, layers: product ? [{ id: 'L1', product, verb: 'base', settings: {} }] : [] };
     c.openWith(spec, { picker: { on: product ? 'L1' : null, product: null }, selected: product ? 'L1' : null });
   } else if (r.mode === 'new') {
-    if (product && r.on === null) {
+    if (r.fill) {
+      const spec = product ? putFill(r.spec, r.fill.layerId, r.fill.slot, product) : r.spec;
+      c.openWith(spec, { anchorId: r.anchorId, selected: r.fill.layerId });
+    } else if (product && r.on === null) {
       const spec = structuredClone(r.spec);
       const id = nextLayerId(spec);
       spec.layers.unshift({ id, product, verb: 'base', settings: {} });
@@ -299,13 +305,34 @@ export function newProductIn(kind: SceneKind, on: string | null): void {
   startSceneKind(kind);
 }
 
-/** "Edit product": the layer's build in its own builder, coming back here (rebuilt) when it is done. */
-export function editLayerProduct(layerId: string): boolean {
+/** `spec` with `product` as the per-blob fill `slot` of layer `layerId` (a fill's id, 'rest', or 'add'). */
+function putFill(spec0: CombineSpec, layerId: string, slot: string, product: ProductRef): CombineSpec {
+  const spec = structuredClone(spec0);
+  const l = spec.layers.find(x => x.id === layerId);
+  if (!l?.fills) return spec;
+  if (slot === 'rest') l.fills = { ...l.fills, rest: product };
+  else if (slot === 'add') l.fills = addFill(l.fills, product) ?? l.fills;
+  else l.fills = updateFill(l.fills, slot, { fill: product });
+  return spec;
+}
+
+/** "New…" on a per-blob fill: that kind's builder, coming back here with its build as the fill of `slot`. */
+export function newFillIn(kind: SceneKind, layerId: string, slot: string): void {
+  hook();
+  const c = useCombine.getState();
+  ret = { mode: 'new', gen: sceneDraftGeneration(), spec: structuredClone(c.spec), anchorId: c.anchorId, on: null, fill: { layerId, slot }, layerId, before: useNodeGraphStore.getState().nodes, at: Date.now() };
+  c.setIsolate(null);
+  c.close();
+  startSceneKind(kind);
+}
+
+/** "Edit product": the layer's build (or one of its per-blob fills: `product`) in its own builder, coming back here (rebuilt) when it is done. */
+export function editLayerProduct(layerId: string, product?: ProductRef): boolean {
   const c = useCombine.getState();
   const layer = c.spec.layers.find(l => l.id === layerId);
-  if (!layer || layer.product.kind !== 'build') return false;
+  const p = product ?? layer?.product;
+  if (!layer || p?.kind !== 'build') return false;
   hook();
-  const p = layer.product;
   ret = { mode: 'edit', gen: sceneDraftGeneration(), spec: structuredClone(c.spec), anchorId: c.anchorId, on: null, layerId, before: useNodeGraphStore.getState().nodes, at: Date.now() };
   c.setIsolate(null);
   c.close();

@@ -21,6 +21,8 @@
  *    fill layer on it. The fill sticks to every blob (Blob Track → Blob Space, the fill drawn at each blob's Local UV:
  *    a picture chain through Blob Space's Fill field, a texture through Fill texture, a 3D scene through its camera's
  *    UV) or fills the whole mask; Select lays it over the picture under the mask.
+ *    Per blob (phase 3, fills.ts): one Blob Space per fill, each picking its blob By order or By ID, chained by Select
+ *    over the rest's fill (a Blob Space on every blob, cut off the listed ones by a Simple Expression) or the picture.
  *
  * Phase 2 (points.ts): Collide with and Follow the shape, points on a 2D build's shape or in a 3D scene: plain nodes
  * added inside the points' Agents group (`inner`), and the walkers drawn over the layer below as Place in draws them.
@@ -35,9 +37,10 @@ import { resolveProduct, type Resolved } from './products';
 import { mk, mkVec3, ref, simple, textureFor, tidy, type Ctx, type InnerEdit, type LayerOut, type Patch } from './glue';
 import { collideWith, followShape, pointsOver } from './points';
 import { exprFor } from './exprs';
+import { fillIdOf, fillName, withFillIds } from './fills';
 import {
   MASK_DEFAULTS, PLACE_DEFAULTS, REPLACE_DEFAULTS, num, settingsOf, str, targetOf,
-  type Blend, type CombineLayer, type CombineSpec, type NodeRef, type PlaceHow3d, type PlaceHowPic, type ProductKind, type Stick,
+  type Blend, type CombineLayer, type CombineSpec, type FillEntry, type NodeRef, type PlaceHow3d, type PlaceHowPic, type ProductKind, type Stick,
 } from './spec';
 
 export type { InnerEdit, LayerOut, Patch } from './glue';
@@ -238,6 +241,56 @@ function maskLayer(ctx: Ctx, layer: CombineLayer, a: Resolved, b: LayerOut): Lay
   return { id: L, kind: 'mask', label: a.label, colour: ref(show, 'result'), texture: null, mask };
 }
 
+/** What a mask layer gives a fill: its Blob data (made here when it has none) and its mask. */
+interface BlobBase { blobs: NodeRef; mask: NodeRef }
+
+/** The mask's Blob data: the mask product's own Blob Track, else one made on the mask's texture (role `<L>:blobs`). */
+function blobDataFor(ctx: Ctx, L: string, m: NonNullable<LayerOut['mask']>): NodeRef | string {
+  if (m.blobs) return m.blobs;
+  if (!m.texture) return 'The mask has no texture for Blob Track to read.';
+  const bt = mk(ctx, L, 'blobs', 'blobTrack', { maxBlobs: Math.max(1, Math.min(16, m.maxBlobs ?? 4)), channel: 'red', minSize: 0.004, maxSize: 0.95, smoothing: 0.5, boxStyle: 'none', marker: 'none' }, { texture: m.texture },
+    'Blob Track: splits the mask into separate blobs (one per person or thing) and follows each, keeping its ID. It reads the red channel (the Segment confidence); Max size 0.95, so a person filling most of the frame still counts. Its Blob data (centre, size, ID of each, smoothed by Smoothing) tells Blob Space where they are.');
+  return ref(bt, 'texture');
+}
+
+const ordinal = (k: number) => (k === 0 ? '1st' : k === 1 ? '2nd' : k === 2 ? '3rd' : `${k + 1}th`);
+
+/**
+ * A Blob Space drawing `a` on the blobs (every one, or the one `only` picks), the fill wired the way its product needs:
+ * a picture chain through the Fill field, a texture through Fill texture, a 3D scene through its camera's UV (a
+ * patch). Returns the node and the colour to show where its Alpha is.
+ */
+function blobFill(ctx: Ctx, L: string, part: string, a: Resolved, base: BlobBase, fitS: { fit: unknown; padding: number; scale: number; spin: number },
+  only: { by: 'order' | 'id'; key: number; name: string } | null, lead: string): { space: GraphNode; colour: NodeRef } {
+  const fit = blobFitOf(fitS.fit);
+  // One for all keeps phase 1's notes word for word (notes go into the shader as comments: the examples' golden shaders).
+  const all = !only && !lead;
+  const fitWords = { box: all ? 'stretched to each box' : 'stretched to the box', square: 'keeping its shape', circle: 'cut round' }[fit];
+  const wires: Record<string, NodeRef | null> = { blobs: base.blobs, mask: base.mask };
+  let how: string;
+  let threeD = false;
+  if (a.kind === 'scene3d' && a.cam && !a.splat) {
+    threeD = true;
+    how = all ? 'the 3D scene renders inside each blob: its March Camera\'s UV is wired from Local UV (a full march per pixel the blobs cover)'
+      : `the 3D scene renders inside ${only ? 'that blob' : 'each blob'}: its March Camera's UV is wired from Local UV (a full march per pixel it covers)`;
+  } else if (a.texture) {
+    wires.fillTexture = a.texture;
+    how = all ? `${a.label} (a texture) is read in each blob at its 0–1 UV (Fill texture)` : `${a.label} (a texture) is read at the blob's 0–1 UV (Fill texture)`;
+  } else {
+    wires.fill = a.colour;
+    how = all ? `${a.label}'s chain is drawn again in each blob at its Local UV (Fill is a field socket: no pass)` : `${a.label}'s chain is drawn again at the blob's Local UV (Fill is a field socket: no pass)`;
+  }
+  const pick = only ? { only: 'one', onlyBy: only.by, onlyIndex: only.key } : {};
+  const which = only
+    ? (only.by === 'id' ? `only the blob with ID ${only.key} (it keeps this fill until it is lost)` : `only blob ${only.name}, the ${ordinal(only.key)} oldest seen now (when an older one goes, the next takes its place)`)
+    : 'every blob';
+  const space = mk(ctx, L, part, 'blobSpace', { fit, padding: fitS.padding, scale: fitS.scale, spin: fitS.spin, ...pick }, wires,
+    all ? `Blob Space: each pixel's place in the blob it is on, from Blob Track's data. The fill sticks to every blob, ${fitWords}, and follows it: ${how}. Alpha is Inside times the mask, so the fill takes the blob's shape.`
+      : `Blob Space: ${lead}Each pixel's place in the blob it is on, from Blob Track's data. The fill is drawn on ${which}, ${fitWords}, and follows it: ${how}. Alpha is Inside times the mask, so the fill takes the blob's shape.`);
+  if (threeD) ctx.patches.push({ nodeId: a.cam!, input: 'uv', from: ref(space, 'localUv'), note: only ? `renders inside blob ${only.name}` : 'renders inside each blob' });
+  return { space, colour: threeD ? a.colour! : ref(space, 'color') };
+}
+
 /** A fill on a mask layer: on every blob (Blob Track → Blob Space) or the whole mask, over the picture under it. */
 function fillLayer(ctx: Ctx, layer: CombineLayer, a: Resolved, b: LayerOut): LayerOut | string {
   const L = layer.id;
@@ -245,45 +298,96 @@ function fillLayer(ctx: Ctx, layer: CombineLayer, a: Resolved, b: LayerOut): Lay
   if (!m) return 'A fill goes on a mask layer.';
   const pic = m.under;
   if (!pic.colour) return 'The picture under the mask is missing.';
+  if (layer.fills?.mode === 'perBlob') return perBlobFills(ctx, layer, m, pic);
   if (!a.colour) return `${a.label} has no picture to fill with.`;
-  if (layer.fills?.mode === 'perBlob') ctx.warnings.push('Per-blob fills come in a later phase: every blob shows this fill for now.');
   const S = settingsOf(layer, REPLACE_DEFAULTS);
   const stick = str<Stick>(S.stick, ['blobs', 'frame'], 'blobs');
   let fill: NodeRef = a.colour;
   let where: NodeRef = m.mask;
   if (stick === 'blobs') {
-    let blobs = m.blobs;
-    if (!blobs) {
-      if (!m.texture) return 'The mask has no texture for Blob Track to read.';
-      const bt = mk(ctx, L, 'blobs', 'blobTrack', { maxBlobs: Math.max(1, Math.min(16, m.maxBlobs ?? 4)), channel: 'red', minSize: 0.004, maxSize: 0.95, smoothing: 0.5, boxStyle: 'none', marker: 'none' }, { texture: m.texture },
-        'Blob Track: splits the mask into separate blobs (one per person or thing) and follows each, keeping its ID. It reads the red channel (the Segment confidence); Max size 0.95, so a person filling most of the frame still counts. Its Blob data (centre, size, ID of each, smoothed by Smoothing) tells Blob Space where they are.');
-      blobs = ref(bt, 'texture');
-    }
-    const fitWords = { box: 'stretched to each box', square: 'keeping its shape', circle: 'cut round' }[blobFitOf(S.fit)];
-    const wires: Record<string, NodeRef | null> = { blobs, mask: m.mask };
-    let how: string;
-    let threeD = false;
-    if (a.kind === 'scene3d' && a.cam && !a.splat) {
-      threeD = true;
-      how = `the 3D scene renders inside each blob: its March Camera's UV is wired from Local UV (a full march per pixel the blobs cover)`;
-    } else if (a.texture) {
-      wires.fillTexture = a.texture;
-      how = `${a.label} (a texture) is read in each blob at its 0–1 UV (Fill texture)`;
-    } else {
-      wires.fill = a.colour;
-      how = `${a.label}'s chain is drawn again in each blob at its Local UV (Fill is a field socket: no pass)`;
-    }
-    const space = mk(ctx, L, 'space', 'blobSpace', { fit: blobFitOf(S.fit), padding: num(S.padding, 0.15), scale: num(S.scale, 1), spin: num(S.spin, 0) }, wires,
-      `Blob Space: each pixel's place in the blob it is on, from Blob Track's data. The fill sticks to every blob, ${fitWords}, and follows it: ${how}. Alpha is Inside times the mask, so the fill takes the blob's shape.`);
-    if (threeD) ctx.patches.push({ nodeId: a.cam!, input: 'uv', from: ref(space, 'localUv'), note: 'renders inside each blob' });
-    fill = threeD ? a.colour : ref(space, 'color');
-    where = ref(space, 'alpha');
+    const blobs = blobDataFor(ctx, L, m);
+    if (typeof blobs === 'string') return blobs;
+    const f = blobFill(ctx, L, 'space', a, { blobs, mask: m.mask }, { fit: S.fit, padding: num(S.padding, 0.15), scale: num(S.scale, 1), spin: num(S.spin, 0) }, null, '');
+    fill = f.colour;
+    where = ref(f.space, 'alpha');
   }
   const amount = mk(ctx, L, 'amount', 'multiply', { b: num(S.amount, 1) }, { a: where, b: exprFor(ctx, layer, 'amount', {}) },
     stick === 'blobs' ? 'Multiply: where the fill shows (Blob Space\'s Alpha) times Amount.' : 'Multiply: the mask times Amount: how much of the fill replaces what was found.');
   const sel = mkVec3(ctx, L, 'replace', 'select', { mask: ref(amount, 'result'), ifTrue: fill, ifFalse: pic.colour },
     `Select: ${a.label} where the mask found something, ${pic.label} everywhere else.`);
   return { id: L, kind: 'picture', label: `${pic.label} (replaced)`, colour: ref(sel, 'result'), texture: null };
+}
+
+/**
+ * Per blob (docs/combine.md "Per blob"): each listed blob its own fill, the others the rest's (or the picture).
+ *
+ *   picture ─▶ [the rest: Blob Space (every blob), Alpha × "not a listed blob" → Select] ─▶ fill #1: Blob Space (one
+ *   blob) → Select ─▶ fill #2 … ─▶ the layer's picture
+ *
+ * One Blob Space per fill (each has its own Fill: a 2D chain, a photo, a 3D scene's camera UV), picking its blob By
+ * order (Slot) or By ID. A muted fill is left out and its blob gets the rest. Blob Space works its fill out only where
+ * its blob is, so N fills cost N fills' worth of pixels, not N whole frames (a 3D fill marches where its blob is).
+ */
+function perBlobFills(ctx: Ctx, layer: CombineLayer, m: NonNullable<LayerOut['mask']>, pic: LayerOut): LayerOut | string {
+  const L = layer.id;
+  const F = withFillIds(layer.fills!);
+  const S = settingsOf(layer, REPLACE_DEFAULTS);
+  const blobs = blobDataFor(ctx, L, m);
+  if (typeof blobs === 'string') return blobs;
+  const base: BlobBase = { blobs, mask: m.mask };
+  const fitOf = (e?: FillEntry) => ({ fit: e?.fit ?? S.fit, padding: num(S.padding, 0.15), scale: num(e?.scale, num(S.scale, 1)), spin: num(S.spin, 0) });
+  const amountB = num(S.amount, 1);
+  // Amount as a line (Phase 2's ƒ): one Simple Expression, wired into every fill's Multiply.
+  const amountX = exprFor(ctx, layer, 'amount', {});
+  const by: 'order' | 'id' = F.by === 'id' ? 'id' : 'order';
+  let colour: NodeRef = pic.colour!;
+  const cams = new Set<string>();
+  // A 3D scene draws in one place at a time: its camera's UV comes from one Blob Space.
+  const camFree = (a: Resolved, what: string) => {
+    if (a.kind !== 'scene3d' || !a.cam || a.splat) return true;
+    if (cams.has(a.cam)) { ctx.warnings.push(`${what}: ${a.label} already fills another blob. A 3D scene renders in one blob at a time: pick another product.`); return false; }
+    cams.add(a.cam);
+    return true;
+  };
+  // The fills to draw: resolved, not muted, a 3D scene once.
+  const live: Array<{ e: FillEntry; fid: string; a: Resolved; name: string }> = [];
+  F.blobs.forEach((e, i) => {
+    if (e.muted) return;
+    const name = fillName(by, e.key);
+    const a = resolveProduct(e.fill, ctx.graph);
+    if (a.missing || !a.colour) { ctx.warnings.push(`Fill ${name}: ${a.missing ?? `${a.label} has no picture to fill with.`}`); return; }
+    if (!camFree(a, `Fill ${name}`)) return;
+    live.push({ e, fid: fillIdOf(e, i), a, name });
+  });
+  // The rest: every blob but the listed ones.
+  if (F.rest) {
+    const a = resolveProduct(F.rest, ctx.graph);
+    if (a.missing || !a.colour) ctx.warnings.push(`The rest: ${a.missing ?? `${a.label} has no picture to fill with.`}`);
+    else if (camFree(a, 'The rest')) {
+      const r = blobFill(ctx, L, 'rest:space', a, base, fitOf(), null, 'the rest\'s fill (the blobs without one of their own). ');
+      let where: NodeRef = ref(r.space, 'alpha');
+      if (live.length) {
+        const keys = live.map(x => x.e.key);
+        const keep = simple(ctx, L, 'rest:keep', 'Not a listed blob', ['a', ...keys.map(k => `step(0.5, abs(s - ${k.toFixed(1)}))`)].join(' * '), 'float',
+          [['a', where], ['s', ref(r.space, by === 'id' ? 'id' : 'slot')]],
+          `Simple Expression: the rest's Alpha, but 0 on the blobs with a fill of their own (${keys.map(k => fillName(by, k)).join(', ')}). s is the blob's ${by === 'id' ? 'ID' : 'Slot (0 the oldest)'}; step(0.5, abs(s - k)) is 0 only on blob k.`);
+        where = ref(keep, 'result');
+      }
+      const amt = mk(ctx, L, 'rest:amount', 'multiply', { b: amountB }, { a: where, b: amountX }, 'Multiply: where the rest\'s fill shows, times Amount.');
+      const sel = mkVec3(ctx, L, 'rest:show', 'select', { mask: ref(amt, 'result'), ifTrue: r.colour, ifFalse: colour },
+        `Select: ${a.label} on every blob without a fill of its own, ${pic.label} elsewhere.`);
+      colour = ref(sel, 'result');
+    }
+  }
+  for (const { e, fid, a, name } of live) {
+    const f = blobFill(ctx, L, `fill:${fid}:space`, a, base, fitOf(e), { by, key: e.key, name }, `fill ${name}. `);
+    const amt = mk(ctx, L, `fill:${fid}:amount`, 'multiply', { b: amountB }, { a: ref(f.space, 'alpha'), b: amountX }, `Multiply: where fill ${name} shows (its Blob Space's Alpha), times Amount.`);
+    const sel = mkVec3(ctx, L, `fill:${fid}:show`, 'select', { mask: ref(amt, 'result'), ifTrue: f.colour, ifFalse: colour },
+      `Select: ${a.label} on blob ${name}; what is under it (the picture, or the fills before) everywhere else.`);
+    colour = ref(sel, 'result');
+  }
+  if (colour === pic.colour) ctx.warnings.push('Per blob: nothing to draw yet. Pick a product for a blob, or for the rest.');
+  return { id: L, kind: 'picture', label: `${pic.label} (replaced)`, colour, texture: null };
 }
 
 // ── The stack ────────────────────────────────────────────────────────────────

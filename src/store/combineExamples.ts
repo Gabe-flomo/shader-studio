@@ -1,5 +1,5 @@
 /**
- * combineExamples.ts — Combine's examples (docs/combine.md): four of its presets as the graphs Done leaves, built
+ * combineExamples.ts — Combine's examples (docs/combine.md): five of its presets as the graphs Done leaves, built
  * from ordinary nodes. The products are made by their own builders (a 3D build from a recipe, a 2D build, the
  * built-in photos) and the glue by Combine (combine/build.ts); every node carries a note saying what it does and why.
  *
@@ -16,7 +16,7 @@ import { COMBINE_EXAMPLE_INDEX } from './combineExampleIndex';
 export const COMBINE_EXAMPLE_KEYS = Object.keys(COMBINE_EXAMPLE_INDEX);
 
 const PRESET_OF: Record<string, string> = {
-  combinePhotoInRoom: 'photoInRoom', combinePeopleRings: 'peopleRings', combineSparksTrace: 'sparksTrace', combineFireflies: 'firefliesSculpture',
+  combinePhotoInRoom: 'photoInRoom', combinePeopleRings: 'peopleRings', combineSparksTrace: 'sparksTrace', combineFireflies: 'firefliesSculpture', combineTwoLooks: 'twoLooks',
 };
 
 /** One example: the preset's products and its glue, ids counted from 1, with the Output. */

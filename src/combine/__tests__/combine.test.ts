@@ -209,12 +209,12 @@ describe('Replace mask with (one fill for all)', () => {
     expect(removeCombine(r.nodes, r.anchorId!).find(x => x.id === cam.id)!.inputs.uv.connection).toBeUndefined();
   });
 
-  it('per-blob fills are the hook for phase 3: built as one for all, with a note', () => {
+  it('per blob with no fills yet draws the picture and says so (phase 3: combinePerBlob.test.ts)', () => {
     const w = world();
     const spec = stack(w, { kind: 'build', scene: '2d', id: w.twoD });
     spec.layers[2].fills = { mode: 'perBlob', by: 'order', blobs: [] };
     const r = applyCombine(w.nodes, spec, { nextId });
-    expect(r.build.warnings.join(' ')).toMatch(/later phase/);
+    expect(r.build.warnings.join(' ')).toMatch(/nothing to draw yet/);
     compiles(r.nodes);
   });
 });

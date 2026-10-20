@@ -11,6 +11,8 @@ in** and **Replace mask with** (one fill for all), with the new **Blob Space** n
 Phase 2: **Collide with** and **Follow the shape** (points on a 2D build's shape or in a 3D scene), the new **Follow
 surface (3D Scene)** node, and **one-line expressions** on a verb's numbers.
 
+Phase 3: Replace mask's **per-blob fills** (each blob its own fill, attached by order or ID, and a fill for the rest).
+
 ## Two ways in
 
 - **Combine** on the Scene builder's kind page (the ninth card). It opens on an empty stack with "+ Add a layer"
@@ -33,7 +35,7 @@ Combine is off on a phone. A graph Combine made opens there as plain nodes.
 - **Settings** (right): the selected layer's verb. The primary section is open and the rest fold with a one-line
   summary. Choices are picture tiles (Card / World / By depth, Over / By depth, Box / Square / Circle) before sliders.
 - **Presets** (bottom): Photo in a room, People → rings, Photo as the world, Shapes on a photo, Sparks trace a star,
-  Dust settles on shapes. Each makes its
+  Dust settles on shapes, Two blobs, two looks. Each makes its
   products the way their builders would and replaces the stack (the products the previous preset made go with it).
 - The header counts the graph's passes (Passes N/8), amber at the last full-quality pass and red over it.
 
@@ -152,8 +154,44 @@ How the fill is drawn on a blob depends on what it is:
 | a 3D scene | its March Camera's UV is wired from Blob Space's Local UV: the scene renders inside each blob (a full march where the blobs are) |
 | points | Draw agents' Image as Fill texture |
 
-**Per blob** (each blob its own fill, By order or By ID) is phase 3. The data model has it (`fills` on the layer) and
-Blob Space's **Fill: One blob, Pick by order / ID** is the node side of it; the window shows it as coming later.
+### Per blob
+
+The Fill section's first choice: **One for all** (the layer's product on every blob) or **Per blob** (each blob its
+own fill). Per blob always sticks to the blobs.
+
+```
+ FILL     [ One for all ][ Per blob ]
+ Attach by [ Order ][ ID ]           2 seen now: #1 · #2
+ ● #1  ▣ Rings (2D scene)            ◐  ›
+ ● #2  ▣ 3D scene              3D    ◐  ›
+   Rest  The picture (as it is)
+ + Fill another blob
+ The fills add no pass · 1 3D march (each where its blob is) · Passes 0/8
+```
+
+- **Attach by** says which blob a fill is on. **Order**: #1 is the first blob seen now (the oldest), #2 the next…
+  When a blob goes, the ones after it move up, so its fill passes to the next blob. **ID**: each fill is on a tracked
+  ID and stays on that blob until it is lost; a new blob gets the rest. Switching keeps every fill on the blob it is on
+  (#1 ↔ ID 1: a fresh track numbers the first blobs 1, 2, 3…).
+- **Rows** are folded to one line: the blob (its colour dot is filled while it is seen), the product, what it costs
+  (+N passes its product uses, 3D for a scene that marches where its blob is), mute (the blob gets the rest), and ›.
+  Unfolded: which blob (On #1 #2 #3, or the IDs seen now; taking another fill's blob swaps the two), its own Fit (As
+  all, Box, Square, Circle) and Fill scale, Edit in its builder, Remove.
+- **The product well** opens a menu: the graph's pictures, 3D scenes and points, the built-in photos and video, or New
+  in a builder (its Done comes back to that fill; its × comes back with the graph as it was). Each fill can be any of
+  them; a 3D scene can fill one blob at a time (its camera's UV comes from one Blob Space).
+- **Rest**: every blob without a fill of its own. None (the default): they stay as the picture.
+- **The viewport** rings the blobs seen now in their fill's colour, named (#1 · Rings). Hovering a row rings its blob
+  brighter; clicking a blob opens its row, or gives a blob without one a fill of its own (dashed ring).
+- Up to 8 fills a layer. The cost line says what the fills use, and when the graph is in grace or locked (combine-plan
+  §5): a fill whose product needs a pass then can't be added.
+
+The glue: one Blob Space per fill with **Fill: One blob**, **Pick by** order (its Slot) or ID, **Which** = the blob, its
+fill wired as above, then Multiply by Amount and Select over what is under it. The rest is a Blob Space on every blob
+whose Alpha a Simple Expression cuts off the listed blobs (`a * step(0.5, abs(s - 0.0)) * …`, s its Slot or ID), under
+the fills. Each fill's nodes keep their ids by the fill's own id (F1, F2…), so moving a fill to another blob or another
+product keeps wires and Play controls. Fill scale per fill can go to Play after Done (right-click); the layer's Amount
+is set on every fill's node at once, so it stays a Combine slider.
 
 ## Blob Space (node)
 
@@ -193,9 +231,11 @@ slider Constants are, by the same right-click.
 
 ## Examples
 
-*Combine: a photo in a room*, *Combine: people → rings*, *Combine: sparks trace a star* and *Combine: fireflies round
-a sculpture* (store/combineExamples.ts), built from the presets and opened by key. They aren't in a folder (each keeps
-its curated five); they show under Blob Space, Picture Card, Ride a Path and Follow surface (3D Scene).
+*Combine: a photo in a room*, *Combine: people → rings*, *Combine: sparks trace a star*, *Combine: fireflies round
+a sculpture* and *Combine: two blobs, two looks* (per blob: a Blob Track on the bright shapes of the Ball action clip,
+rings on #1 and a 3D scene on #2) (store/combineExamples.ts), built from the presets and opened by key. They aren't in a
+folder (each keeps its curated five); they show under Blob Space, Picture Card, Ride a Path and Follow surface (3D
+Scene).
 
 ## Code
 
@@ -203,6 +243,8 @@ its curated five); they show under Blob Space, Picture Card, Ride a Path and Fol
 `build.ts` (the glue), `apply.ts` (into the graph, rebuild, patches, hand edits), `meta.ts` (recognize), `store.ts`,
 `actions.ts` (the draft, Add to this…, New… and Edit product round trips), `presets.ts`; phase 2: `glue.ts` (the
 pieces glue is made of), `points.ts` (Collide with, Follow the shape), `exprs.ts` (expressions), and the node
-`nodes/definitions/agentFollowScene.ts`. The window is
-`components/combine/CombineWindow.tsx`; Add to this… is `components/combine/AddToThis.tsx`. Tests:
-`src/combine/__tests__/combine.test.ts`, `src/combine/__tests__/combinePoints.test.ts`, `src/nodes/__tests__/blobSpace.test.ts`.
+`nodes/definitions/agentFollowScene.ts`; phase 3: `fills.ts` (per-blob fill edits). The window is
+`components/combine/CombineWindow.tsx`; Add to this… is `components/combine/AddToThis.tsx`; the per-blob list and the
+viewport's blob rings are `components/combine/BlobFills.tsx`. Tests: `src/combine/__tests__/combine.test.ts`,
+`src/combine/__tests__/combinePoints.test.ts`, `src/combine/__tests__/combinePerBlob.test.ts`,
+`src/nodes/__tests__/blobSpace.test.ts`.
