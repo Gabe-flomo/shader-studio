@@ -4,7 +4,7 @@
 
 ## The card
 
-- **Inputs**: one row each, with its socket. A new node has one input, `a`, and returns it. **+ Input** adds the next free name (`a`, `b`, `c` … skipping `t`, which is time). Double-click a name to rename it; the expression follows the new name and the wire stays. The ↑ moves a row up, × removes it (and its wire).
+- **Inputs**: one row each, with its socket. A new node has one input, `a`, and returns it. **+ Input** adds the next free name (`a`, `b`, `c` … skipping `t`, which is time). Double-click a name to rename it; the expression follows the new name and the wire stays. The ↑ moves a row up, the bin removes it (and its wire); the row's × (far right) only unwires it.
 - **Types come from wires.** An input has no type of its own: it shows **any** (a dashed chip, a grey socket) until something is wired in, then takes the wire's type (float, vec2, vec3, vec4, mat2, mat3) in the wire's colour. Rewire it and it retypes at once. An unwired input is a float 0.0.
 - **Output**: float, vec2, vec3 or vec4: what the Result socket gives.
 - **The field**: the app's one-line GLSL field (highlighting, completions of the inputs and free names, bracket marks). Typing recompiles after a short pause, as the Expression Block does.
@@ -73,4 +73,4 @@ Before every compile (and so when a graph loads, a wire is made, replaced or rem
 
 ## Phone
 
-The phone's node page shows the same card body with the input rows listed in it (name, type, ↑, ×), + Input, the Output type and the field.
+The phone's node page shows the same card body with the input rows listed in it (name, type, ↑, bin), + Input, the Output type and the field.

@@ -3,7 +3,7 @@
  *
  * SimpleExprInputName sits in each input row, beside the socket: the input's name (double-click to
  * rename; it must be a GLSL name), its type (“any” until a wire comes in, then the wire's type, in the
- * wire's colour) and × to remove it. SimpleExprCardBody is under the rows: + Input, the Output type,
+ * wire's colour), ↑ to move it and a bin to remove it. SimpleExprCardBody is under the rows: + Input, the Output type,
  * the one-line GLSL field (the app's CodeInput: highlighting, completions, the error edge) with what's
  * wrong or what it makes under it, a hint of the free names, and Convert to Expression Block.
  *
@@ -116,7 +116,7 @@ export function SimpleExprInputName({ node, inputKey, touch = false }: { node: G
           )}
           <button type="button" aria-label={`Remove input ${v.name}`} title={`Remove ${v.name}${wired ? ' and its wire' : ''}`} {...stop}
             onClick={e => { e.stopPropagation(); replace(node.id, n => removeSimpleExprVar(n, inputKey), `Removed input ${v.name}`); }}
-            style={iconBtn(tk.text.faint, small, false)}><Icon name="close" size={11} /></button>
+            style={iconBtn(tk.text.faint, small, false)}><Icon name="trash" size={11} /></button>
         </span>
       )}
     </span>
