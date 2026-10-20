@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.320',
+    date: '2026-10-20',
+    title: "Two spare passes",
+    highlights: [
+      { area: 'Studio', text: "Graphs can use 9 or 10 passes: the preview draws those at half size (the Passes chip turns amber), and exports stay full quality." },
+      { area: 'Studio', text: "At 10 passes, nodes that would add another are locked, with a toast that shows what's using them." },
+    ],
+  },
+  {
     id: '2026.10.319',
     date: '2026-10-20',
     title: "Easier node info",
