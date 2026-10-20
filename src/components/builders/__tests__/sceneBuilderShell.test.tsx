@@ -123,7 +123,7 @@ describe('the kind page', () => {
     expect($('[data-studio-title]')?.textContent).toBe('Scene builder');
     expect($('[data-studio-kind]')?.textContent).toBe('What kind of scene?');
     const cards = [...document.querySelectorAll('[data-scene-kind]')];
-    expect(cards.map(c => c.getAttribute('data-scene-kind'))).toEqual(['2d', 'agents', 'grid', 'simulation', '3d', 'splat', 'timecube', 'warp', 'combine']);
+    expect(cards.map(c => c.getAttribute('data-scene-kind'))).toEqual(['2d', 'agents', 'grid', 'simulation', '3d', 'splat', 'timecube', 'warp', 'combine', 'texture']);
     for (const c of cards) {
       expect(c.querySelector('canvas')).toBeTruthy();
       expect(c.textContent).toContain(SCENE_KINDS.find(k => k.id === c.getAttribute('data-scene-kind'))!.line);
