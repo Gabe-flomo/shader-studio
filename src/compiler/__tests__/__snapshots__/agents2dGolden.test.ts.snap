@@ -1194,10 +1194,10 @@ exports[`2D agents and pass graphs compile as they did before 3D > texLabThermal
 {
   "agents": "1fe1f0024152e81521f99e5e13c1:4",
   "errors": null,
-  "fragmentShader": "148169bf1bafe714f711994846d5:18150",
+  "fragmentShader": "0def22389f4ad01a60a2c1684c6e:17877",
   "paramBindings": "18aceb852a51d508681166678a7b:1435",
   "paramUniforms": "0ceae8dcff195c196823864aef84:1234",
-  "passes": "0d26eac4d1e50d1d7f345b52c35e:51731",
+  "passes": "01e818d205b70905d88efebbd354:51179",
   "success": true,
   "textureUniforms": "06cfa5276d831f17fb53b69b17bb:24",
   "web": null,
