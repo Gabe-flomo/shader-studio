@@ -35,6 +35,8 @@ Code: `src/textureLab/` (blocks, spec, apply, presets, store, actions, picture) 
 - **Viewport:** the main preview at the viewport's size, with a before | after divider (toggle it in the top bar).
 - **Presets:** Thermal, Ink outline, Motion trails (best on a video), Relief; your picture stays. Your own presets save
   from the strip. **Surprise me** picks 2–4 tools from a seed, varied, at most 4 passes.
+- **Add to this…** beside Done (the shared StudioShell's, docs/combine.md): Done, then Combine opens with the stack as
+  its first layer, a Picture.
 - No Play controls are added. Right-click a slider for Add to Play controls, as on node cards.
 
 ## Tools (Texture tools nodes)
