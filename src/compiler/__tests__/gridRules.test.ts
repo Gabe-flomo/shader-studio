@@ -162,13 +162,13 @@ describe('rule spec → GLSL', () => {
     expect(Object.keys(r.paramBindings).some(k => k.includes('__step') || k.includes('__picview'))).toBe(false);
   });
 
-  it('counts its board (and picture) towards the 8 Pass nodes', () => {
+  it('counts its board (and picture) towards the pass limit (10, 8 at full quality)', () => {
     const nodes: GraphNode[] = [];
-    for (let k = 0; k < 5; k++) nodes.push(n('gridRules', `node_${10 + k}`, 0, 0, { label: `G${k}` }), n('glowTexture', `node_${20 + k}`, 0, 0, {}, { texture: [`node_${10 + k}`, 'texture'] }));
+    for (let k = 0; k < 6; k++) nodes.push(n('gridRules', `node_${10 + k}`, 0, 0, { label: `G${k}` }), n('glowTexture', `node_${20 + k}`, 0, 0, {}, { texture: [`node_${10 + k}`, 'texture'] }));
     nodes.push(n('output', 'node_9', 0, 0, {}, { color: ['node_10', 'color'] }));
     const r = compileNodes(nodes);
     expect(r.success).toBe(false);
-    expect(r.errors?.[0]).toMatch(/^This graph needs 10 of 8 passes: Grid Rules ×5 \(10 passes\)/);
+    expect(r.errors?.[0]).toMatch(/^This graph needs 12 passes, and 10 is the most \(8 at full quality\): Grid Rules ×6 \(12 passes\)/);
   });
 });
 

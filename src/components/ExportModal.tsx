@@ -208,6 +208,8 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
   // A transparent background, for laying the picture or the Play layers over other footage.
   const [transparent, setTransparent] = useState(false);
   const nodes = useNodeGraphStore(s => s.nodes);
+  // The pass grace zone (compiler/passBudget.ts): passes the live preview draws at half size.
+  const gracedPasses = useNodeGraphStore(s => s.passes?.filter(p => p.full).length ?? 0);
   const play  = useNodeGraphStore(s => s.play);
   // The Output's Alpha / Opacity (or Output (RGBA)): the picture has its own alpha, so a transparent export keeps it.
   const ownAlpha = graphOwnAlpha(nodes);
@@ -922,6 +924,16 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
               { value: 'performance', label: takesOk ? 'Record performance (take)' : 'Record performance (take) · Pro', sub: 'your moves, render later' },
             ]}
           />
+        )}
+
+        {tab === 'video' && state === 'idle' && gracedPasses > 0 && (
+          <Help>
+            <span data-export-grace="">
+              {needsOfflineHandle
+                ? `Rendered at full quality: in the preview, ${gracedPasses} pass${gracedPasses === 1 ? '' : 'es'} run${gracedPasses === 1 ? 's' : ''} at half resolution (the graph uses more than 8 passes).`
+                : `Recorded from the live preview, where ${gracedPasses} pass${gracedPasses === 1 ? '' : 'es'} run${gracedPasses === 1 ? 's' : ''} at half resolution (the graph uses more than 8 passes). The frame-by-frame formats render them at full quality.`}
+            </span>
+          </Help>
         )}
 
         {tab === 'performance' && state === 'idle' && (

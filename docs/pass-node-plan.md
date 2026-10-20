@@ -4,7 +4,7 @@
 
 ## How many passes (the pass account, 2026-10-19)
 
-A graph has **8 passes** (`MAX_PASSES`). A Pass node is one, and so are the nodes that open into passes when the graph compiles:
+A graph has **8 passes at full quality** (`MAX_PASSES`), and **2 more at lower quality** (`GRACE_PASSES`, the grace zone), so **10 at most** (`HARD_MAX_PASSES`). A Pass node is one, and so are the nodes that open into passes when the graph compiles:
 
 | Node | Passes |
 |---|---|
@@ -21,13 +21,29 @@ A graph has **8 passes** (`MAX_PASSES`). A Pass node is one, and so are the node
 
 **Why a limit:** each pass renders the whole picture into a texture of its own every frame, and a shader can only read so many textures at once.
 
+### Grace and the lock (2026-10-20)
+
+| Passes used | Compile | Live preview | Chip | Adding a node that adds a pass |
+|---|---|---|---|---|
+| 0–6 | ok | full quality | grey "Passes 6/8" | allowed |
+| 7–8 | ok | full quality | amber | allowed |
+| 9 | ok (grace) | lower quality | amber with a **½** badge: "Passes 9/8 · lower quality (grace 1 of 2)" | allowed |
+| 10 | ok (grace) | lower quality | amber with a locked **½** badge: "… (grace 2 of 2) · passes locked" | **locked** |
+| 11 or more | fails, itemised | – | red | only reachable by loading an older file |
+
+- **Lower quality, one rule.** With 9 or 10 passes, every pass whose Scale is 1 (full) draws at **½** in the live preview, and a fixed-size Shader Texture halves its size (never below 128 px). Left alone: passes already at ½ or below, Memory and Values at points (fixed-size data), Data Textures and 32-bit float targets (data, not pictures), Grid Rules boards and Optical Flow's passes (their size is part of the simulation), and Blur / Glow's hidden passes. The rule is `graceScale` in `compiler/passBudget.ts`, applied in `compiler/passGraph.ts`: the compiled `PassProgram` carries the preview's `scale` / `size` and, when it was halved, its `full` size.
+- **One shader for both sizes.** A halved pass is compiled with the assembler's `anySize` option: its Mouse and a Texture Input's `_px` (one picture pixel) read the picture's size (`u_pictureRes`) instead of the pass's own, so the same program is right at half size and at full. No texture is added, so the 16-texture check per program is unchanged.
+- **Exports stay full quality.** An export renders into its own targets (`PassTargets` with `full`, `lib/passRunner.ts` `passTargetSize`), where a graced pass draws at its `full` size. The Record window says so: "Rendered at full quality: in the preview, 2 passes run at half resolution". Recording the live canvas (the browser's MediaRecorder, real time) records the preview as it is, and the window says that instead. Websites (Pages) run the same compiled programs as the preview, so they use the grace sizes.
+- **The lock (at 10).** One guard, `store/passLock.ts`, wraps the graph store's writes (its `set`, and `setState`, which builders call directly): any write that would take the graph past 10 is refused. That covers adding a node, a built node, a duplicate, a paste, a recipe or starter, a builder's Done, turning a node back on (un-bypassing an Optical Flow, a Feedback, a Memory node…), a setting that opens a pass (Draw agents Sprite source, March Camera Lens Smooth, Curve Trace Beam, Grid Rules Texture) and wiring a Value at Point. The check is `wouldExceedPasses(next, prev)`: past 10 *and* more than before, so a graph loaded past the limit can still have passes removed. Never refused: loading a graph (a write that starts a new graph) and undo / redo. The refused action leaves no undo step behind.
+- **What you see when it refuses.** A toast: "Locked: this would need 11 passes, and 10 is the most." with "Remove a pass first, or bypass a node that adds passes." and a **Show passes** button that opens the chip's panel. In the node library, a node that adds a pass shows a lock and "Locked: 10 of 10 passes", its Add to graph button is off and it can't be dragged in. Removing a pass unlocks them at once. (A bypassed Pass node still counts as a pass: bypass passes its picture through, but it is still drawn.)
+
 **Where you see it:**
-- **The toolbar chip** "Passes 3/8", beside the node count, once the graph uses a pass. Amber with one pass (or none) left, red when over. A click opens the account: one row per node that costs passes ("Pass · Feedback blur 1", "Optical Flow 2", "Memory nodes (3) 1 shared"); a row jumps to its node (inside a group too). Under them: "Blur and Glow use their own hidden passes: 5 of 48 (they don't count)", and why there is a limit. On a narrow canvas the chip is one of the last to fold into the toolbar's ⋯, and from there it opens the same account.
+- **The toolbar chip** "Passes 3/8", beside the node count, once the graph uses a pass. Amber with one pass (or none) left; amber with a ½ badge in the grace zone (9–10), its panel explaining that passes past 8 draw at half resolution in the preview and exports stay full quality; red past 10. A click opens the account: one row per node that costs passes ("Pass · Feedback blur 1", "Optical Flow 2", "Memory nodes (3) 1 shared"); a row jumps to its node (inside a group too). Under them: "Blur and Glow use their own hidden passes: 5 of 48 (they don't count)", and why there is a limit. On a narrow canvas the chip is one of the last to fold into the toolbar's ⋯, and from there it opens the same account.
 - **On a phone**, the same chip sits at the right of the graph's header row (beside Select) and opens the account as a sheet.
 - **In the node library** (node browser preview, search palette preview, phone Browse): "Uses 1 pass (of 8)", "Uses 2 passes (of 8)", "Shares 1 pass (of 8)…", or when it applies ("Draw: Beam uses 1 pass").
-- **Over the limit**, the compile error lists everything that counts, from the same account: "This graph needs 10 of 8 passes: Pass ×5, Optical Flow ×1 (2 passes), Feedback (texture) ×2, Memory nodes (1, shared by 1). Remove some of them, or let one Pass draw several steps with its Repeat setting."
+- **Over the limit** (more than 10, only from a graph loaded that way), the compile error lists everything that counts, from the same account: "This graph needs 11 passes, and 10 is the most (8 at full quality): Pass ×5, Optical Flow ×1 (2 passes), Feedback (texture) ×3, Memory nodes (1, shared by 1). Remove some of them, or let one Pass draw several steps with its Repeat setting."
 
-**One source of truth.** `compiler/passExpand.ts` `expandPassNodes` is the expansion the pass compile runs (groups with a Pass, Shader Textures, Grid Rules, Beams, Feedback, Data Textures, Render Targets, Sprites, Memory, Optical Flow, probes, Smooth lens). `compiler/passBudget.ts` `passBudget(nodes)` runs it, counts the Pass nodes that come out (the number the compile checks) and traces each back to the graph node it came from; hidden passes come from `hiddenPlanOf` (compiler/hiddenBlurs.ts), the plan the compile draws. No shader is generated, and the result is memoised by the node list. `nodePassNote(type)` gives the library's note from a fresh node of the type, with its Texture inputs wired. Tests: `compiler/__tests__/passBudget.test.ts` (each kind's count equals the compiled passes) and `components/shell/__tests__/passBudgetChip.test.tsx`.
+**One source of truth.** `compiler/passExpand.ts` `expandPassNodes` is the expansion the pass compile runs (groups with a Pass, Shader Textures, Grid Rules, Beams, Feedback, Data Textures, Render Targets, Sprites, Memory, Optical Flow, probes, Smooth lens). `compiler/passBudget.ts` `passBudget(nodes)` runs it, counts the Pass nodes that come out (the number the compile checks) and traces each back to the graph node it came from; hidden passes come from `hiddenPlanOf` (compiler/hiddenBlurs.ts), the plan the compile draws. No shader is generated, and the result is memoised by the node list. `nodePassNote(type)` gives the library's note from a fresh node of the type, with its Texture inputs wired. Tests: `compiler/__tests__/passBudget.test.ts` (each kind's count equals the compiled passes; levels, `graceScale`, `wouldExceedPasses`), `compiler/__tests__/passGraph.test.ts` (the compile at 8, 9, 10 and 11), `store/__tests__/passLock.test.ts` (the lock on each add path, un-bypass, a setting, a builder's setState; load, undo and removing never refused), `lib/__tests__/passGraceExport.test.ts` (export at full size) and `components/shell/__tests__/passBudgetChip.test.tsx` (the chip's states).
 
 ## What shipped (phase 7, 2026-10-04)
 
@@ -264,7 +280,7 @@ This depends on the GPU Particles node (on `claude/release-oct-particles`, not o
 - **Memory:** half-float RGBA is 8 bytes per pixel. At 1080p that's ≈16.6 MB per full-size pass, ×2 with Previous. At ½ Scale it's ¼ of that.
 - **Draws:** each pass is one full-screen draw at scale² of the pixels. Taps dominate: Sobel 9, Blur 13–37, Glow ≈25.
 - **Limits:**
-  - Up to **8 passes** per graph, counting the nodes that open into passes (see "How many passes" above; the error past that lists them).
+  - Up to **8 passes** per graph at full quality and 2 more at lower quality, counting the nodes that open into passes (see "How many passes" above, "Grace and the lock"; the error past 10 lists them).
   - Each program is checked against WebGL2's guaranteed 16 texture units: font, video, images, Data, echo up to 6, `u_prevFrame`, passes and particles together. Over the limit is a compile error naming the program and listing what it samples.
 - **Guidance:** a Blur or Glow card set more than about 12 px with no lower-Scale Pass upstream shows a "set the Pass to ½ for speed" tip. The Performance panel's per-pass rows make cost visible.
 - **Unread passes:** a pass nothing reads (directly or through other passes or particles) isn't drawn.

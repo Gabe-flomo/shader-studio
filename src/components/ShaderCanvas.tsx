@@ -1271,7 +1271,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           const keepTime = u.u_time.value;
           const split = !!passRunner?.splitsForParticles;
           if (passRunner && split) {
-            offlinePassTargets ??= new PassTargets(renderer, supportsHalfFloat);
+            // An export: passes the grace zone halves in the preview draw at full size (PassProgram.full).
+            offlinePassTargets ??= new PassTargets(renderer, supportsHalfFloat, { full: true });
             if (!opts || !!opts.first || !offlineStarted) offlinePassTargets.clearPrevious();
             u.u_time.value = time;
             passRunner.run(offlinePassTargets, exportW, exportH, undefined, undefined, 'particles');
@@ -1295,7 +1296,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           // Pass nodes: textures of the render's own; a Pass's Previous steps like feedback does.
           const passFeedback = !!passRunner?.hasPrevious;
           if (passRunner) {
-            offlinePassTargets ??= new PassTargets(renderer, supportsHalfFloat);
+            offlinePassTargets ??= new PassTargets(renderer, supportsHalfFloat, { full: true });
             // (Already started over above when some pass draws before the particles.)
             if ((!opts || !!opts.first || !offlineStarted) && !split) offlinePassTargets.clearPrevious();
           }
