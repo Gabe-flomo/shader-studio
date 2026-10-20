@@ -1,5 +1,5 @@
 /**
- * noiseRecipes.ts — starter recipes for noise (Fractal Noise, Noise Float, Wave Texture),
+ * noiseRecipes.ts — starter recipes for noise (Fractal Noise, Noise Float),
  * Voronoi and the Palette (docs/starter-recipes.md).
  */
 import type { RecipeContext, StarterRecipe, Wire } from './types';
@@ -10,7 +10,6 @@ function driftParams(ctx: RecipeContext): Record<string, unknown> {
   switch (ctx.self.type) {
     case 'fbm': return { scale: 2, time_scale: 0.2 };
     case 'voronoi': return { time_scale: 0.4 };
-    case 'waveTexture': return { speed: 0.3, distortion: 2 };
     default: return {};
   }
 }

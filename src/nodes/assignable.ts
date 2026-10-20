@@ -23,7 +23,7 @@ import { getNodeDefinitionFor } from './definitions';
 /** Categories whose cards never offer the operator. */
 const NOT_ASSIGNABLE_CATEGORIES = new Set(['Sources', 'Output', 'Utility', 'Functions', 'Loops', '3D Scene', 'Grid']);
 /** Structural types, whatever their category. */
-const NOT_ASSIGNABLE_TYPES = new Set(['output', 'vec4Output', 'loopIndex', 'loopCarry', 'group']);
+const NOT_ASSIGNABLE_TYPES = new Set(['output', 'vec4Output', 'loopIndex', 'loopCarry', 'loopBreak', 'group']);
 
 export function isAssignableDef(def: NodeDefinition | undefined): boolean {
   if (!def || NOT_ASSIGNABLE_TYPES.has(def.type)) return false;

@@ -160,6 +160,29 @@ export const ExpNode: NodeDefinition = {
   },
 };
 
+/** Log's bases: GLSL's log() is base e, log2() base 2; base 10 is log2 × log10(2). */
+const LOG_BASES: Record<string, { fn: string; scale?: string }> = { e: { fn: 'log' }, '2': { fn: 'log2' }, '10': { fn: 'log2', scale: '0.30103' } };
+
+export const LogNode: NodeDefinition = {
+  type: 'log', label: 'Log', aliases: ['Logarithm', 'ln', 'log2', 'Natural log'], category: 'Math', subcategory: 'Arithmetic',
+  description: 'The logarithm, Exp backwards: how many times the Base multiplies into Input (log₂ 8 is 3). It turns fast growth into an even ramp, so it is how a fractal\'s escape count gets smooth colours (n − log₂ log₂ |z|²) and how a distance that doubles every step becomes even bands. Keep Input above 0.',
+  inputs: { input: { type: 'float', label: 'Input' } }, outputs: { output: { type: 'float', label: 'Output' } },
+  defaultParams: { base: 'e', exact: false },
+  paramDefs: {
+    base: { label: 'Base', type: 'select', hint: 'e: the natural log, GLSL\'s log(). 2: log2(), how many doublings (fractal smooth colouring uses it). 10: how many tenfolds.', options: [
+      { value: 'e', label: 'e (natural, ln)' }, { value: '2', label: '2 (log2)' }, { value: '10', label: '10' },
+    ] },
+    exact: exactDef('Off: Input is kept above 0 (at least 1e-8) first, so 0 or a negative number never gives −inf or NaN. On: the plain GLSL call (undefined at 0 and below).'),
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const t = ot(node), o = `${node.id}_output`;
+    const x = inputVars.input || bcast(t, '1.0');
+    const b = LOG_BASES[String(node.params.base)] ?? LOG_BASES.e;
+    const call = `${b.fn}(${isExact(node) ? x : `max(${x}, ${bcast(t, '1e-8')})`})`;
+    return { code: `    ${t} ${o} = ${b.scale ? `${call} * ${b.scale}` : call};\n`, outputVars: { output: o } };
+  },
+};
+
 export const PowNode: NodeDefinition = {
   type: 'pow', label: 'Pow', category: 'Math', subcategory: 'Arithmetic', description: 'Base raised to the power Exponent: pow(Base, Exponent). Above 1 it sharpens a 0…1 value, below 1 it softens it.',
   inputs: { base: { type: 'float', label: 'Base' }, exponent: { type: 'float', label: 'Exponent' } },
@@ -749,6 +772,30 @@ export const ComplexMulNode: NodeDefinition = {
   },
 };
 
+export const ComplexDivNode: NodeDefinition = {
+  type: 'complexDiv', label: 'Complex Divide', aliases: ['Complex Div', 'Complex Quotient'], category: 'Math', subcategory: 'Complex Numbers',
+  description: 'Divides complex number A by B (vec2: across is the real part, up the imaginary): the angles subtract and the lengths divide. Newton\'s method needs it: z − f(z) ÷ f′(z) slides every point towards a root of f.',
+  inputs: { a: { type: 'vec2', label: 'A (re,im)' }, b: { type: 'vec2', label: 'B (re,im)' } },
+  outputs: { result: { type: 'vec2', label: 'Result' } },
+  defaultParams: {},
+  paramDefs: {},
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const a  = inputVars.a || 'vec2(1.0, 0.0)';
+    const b  = inputVars.b || 'vec2(1.0, 0.0)';
+    // A ÷ B = A × conj(B) ÷ |B|²; |B|² kept above a hair so dividing by 0 gives a big number, not NaN.
+    return {
+      code: [
+        `    vec2  ${id}_av = ${a};\n`,
+        `    vec2  ${id}_bv = ${b};\n`,
+        `    float ${id}_bb = max(dot(${id}_bv, ${id}_bv), 1e-12);\n`,
+        `    vec2  ${id}_result = vec2(${id}_av.x*${id}_bv.x + ${id}_av.y*${id}_bv.y, ${id}_av.y*${id}_bv.x - ${id}_av.x*${id}_bv.y) / ${id}_bb;\n`,
+      ].join(''),
+      outputVars: { result: `${id}_result` },
+    };
+  },
+};
+
 export const ComplexPowNode: NodeDefinition = {
   type: 'complexPow', label: 'Complex Pow', category: 'Math', subcategory: 'Complex Numbers', description: 'Raise complex number (vec2) to a real power via polar form',
   inputs: { z: { type: 'vec2', label: 'Z (re,im)' }, exponent: { type: 'float', label: 'Exponent' } },
@@ -1077,6 +1124,7 @@ export const VECTORIZABLE_NODES: Record<string, { primaryInput: string; primaryO
   sin:      { primaryInput: 'input', primaryOutput: 'output' },
   cos:      { primaryInput: 'input', primaryOutput: 'output' },
   exp:      { primaryInput: 'input', primaryOutput: 'output' },
+  log:      { primaryInput: 'input', primaryOutput: 'output' },
   pow:      { primaryInput: 'base',  primaryOutput: 'result' },
   negate:   { primaryInput: 'input', primaryOutput: 'output' },
   floor:    { primaryInput: 'input', primaryOutput: 'output' },
@@ -1105,6 +1153,6 @@ export const VECTORIZABLE_NODES: Record<string, { primaryInput: string; primaryO
 
 /** Node types whose type pills also offer vec4. */
 export const VEC4_CAPABLE_NODES = new Set([
-  'constant', 'add', 'subtract', 'multiply', 'divide', 'mix', 'sin', 'cos', 'exp', 'pow', 'negate', 'floor', 'sqrt', 'round', 'fractRaw',
+  'constant', 'add', 'subtract', 'multiply', 'divide', 'mix', 'sin', 'cos', 'exp', 'log', 'pow', 'negate', 'floor', 'sqrt', 'round', 'fractRaw',
   'sign', 'smoothstep', 'clamp', 'mod', 'abs', 'ceil', 'tanh', 'minMath', 'max', 'step', 'length', 'dot', 'normalizeVec2',
 ]);

@@ -12,7 +12,7 @@ import { clipGlsl, clipOutputSize, cleanTransform, isIdentity, parseSavedClip } 
 export const LoopIndexNode: NodeDefinition = {
   type: 'loopIndex',
   label: 'Loop Index',
-  category: 'Sources',
+  category: 'Loops',
   description: 'Current iteration index (float i) — place inside a group with iterations > 1. Use with an iterated group or Loop Carry; outside a loop it always outputs 0.',
   inputs: {},
   outputs: {

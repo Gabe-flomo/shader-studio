@@ -14,6 +14,10 @@
  */
 import type { GraphNode } from '../types/nodeGraph';
 import { getNodeDefinition } from '../nodes/definitions';
+import { isOffered } from '../nodes/notOffered';
+
+/** A type quick add or search may suggest next: registered, offered (not retired or deprecated), not an output. */
+const isSuggestable = (t: string) => { const d = getNodeDefinition(t); return !!d && !d.deprecated && isOffered(t) && !/^(output|vec4Output|passOutput)$/.test(t); };
 import { outputKinds, spaceInputs, type ValueKind } from './kinds';
 import { MOVES, moveById, labelOf, movesFor, quickAddMoves, type Move } from './moves';
 
@@ -124,7 +128,7 @@ export function learnedNext(nodeType: string, key: string, dir: 'in' | 'out', t:
     ? t.table.next(end.type, end.key, limit * 3).map(x => ({ type: x.toType, key: x.inKey, s: strength(x) }))
     : t.table.prev(end.type, end.key, limit * 3).map(x => ({ type: x.fromType, key: x.outKey, s: strength(x) }));
   return list
-    .filter(x => x.s > 0.03 && getNodeDefinition(x.type) && !/^(output|vec4Output|passOutput)$/.test(x.type))
+    .filter(x => x.s > 0.03 && isSuggestable(x.type))
     .slice(0, limit)
     .map(x => ({
       type: x.type, key: x.key, strength: x.s,

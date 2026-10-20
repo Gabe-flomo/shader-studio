@@ -203,11 +203,14 @@ export const POLAR_RECIPES: StarterRecipe[] = [
       nodes: [
         n('uv', 'uv', col(-1), 0, note('UV: the position of each pixel, (0, 0) in the middle.', 'Why: what Polar Space turns into (angle, radius).')),
         n('time', 'time', col(1), 300, note('Time: seconds since the start.', 'Why: makes the stripes move.')),
-        n('waveTexture', 'stripes', col(1), 0, { mode: 'x', scale: 18.8496, speed: 0.6, ...note(
-          'Wave Texture: straight stripes across X.',
-          'Why: it reads polar space, where X is the angle, so the stripes become rays round the centre and Twist curls them into a spiral. Scale is 2π × 3, so three arms meet up all the way round (keep it a multiple of 6.2832 to avoid a seam).',
-        ) }, { uv: [SELF, 'output'], time: ['time', 'time'] }),
-        n('palette', 'hue', col(2), 0, { preset: '3', scale: 0.8, ...note('Palette: the stripes as colour.') }, { value: ['stripes', 'value'] }),
+        n('splitVec2', 'xy', col(1), 0, note('Split Vec2: the polar point\'s X, which is the angle round the centre.', 'Why: stripes across X become rays round the centre, and Twist curls them into a spiral.'), { v: [SELF, 'output'] }),
+        n('multiply', 'drift', col(1), 300, { b: 0.0318, ...note('Multiply: Time × 0.0318, a slow slide along X.', 'Why: added to X, it turns the stripes (0.6 ÷ the Freq below, so they move 0.6 radians of wave a second).') }, { a: ['time', 'time'] }),
+        n('add', 'turn', col(2), 0, note('Add: the angle plus the drift.', 'Why: the stripes slide round as Time runs.'), { a: ['xy', 'x'], b: ['drift', 'result'] }),
+        n('sin', 'stripes', col(3), 0, { freq: 18.8496, amp: 0.5, ...note(
+          'Sin: straight stripes across X, −0.5 to 0.5.',
+          'Why: Freq is 2π × 3, so three arms meet up all the way round (keep it a multiple of 6.2832 to avoid a seam).',
+        ) }, { input: ['turn', 'result'] }),
+        n('palette', 'hue', col(4), 0, { preset: '3', scale: 0.8, ...note('Palette: the stripes as colour.') }, { value: ['stripes', 'output'] }),
       ],
       wire: { input: ['uv', 'uv'] },
       show: ['hue', 'color'],
