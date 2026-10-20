@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.324',
+    date: '2026-10-20',
+    title: "Combine crash fix",
+    highlights: [
+      { area: 'Studio', text: "Fixed a crash in Combine when coming back from a builder to pick how a new layer joins the scene." },
+    ],
+  },
+  {
     id: '2026.10.323',
     date: '2026-10-20',
     title: "Follow, collide, fill each blob",
