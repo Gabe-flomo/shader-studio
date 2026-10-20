@@ -33,14 +33,28 @@ export type ProductRef =
   | { kind: 'rig'; look: string };
 
 /**
- * Replace mask's fills. Phase 1 builds `all` (one fill for every blob: the layer's product). `perBlob` is the hook for
- * phase 3: each blob its own fill, chosen By order (oldest first, the default) or By ID, the rest getting `rest`.
+ * One per-blob fill (fills.ts): the blob it is on (`key`: by order the slot, 0 the oldest blob seen now; by ID the
+ * tracked ID), its product, and its own Fit and Fill scale when they differ from the layer's. `id` ('F1'…) is stable:
+ * the roles of its glue start with it.
+ */
+export interface FillEntry {
+  id?: string;
+  key: number;
+  fill: ProductRef;
+  muted?: boolean;
+  fit?: 'box' | 'square' | 'circle';
+  scale?: number;
+}
+
+/**
+ * Replace mask's fills. `all` (or none): one fill for every blob, the layer's product. `perBlob`: each listed blob its
+ * own fill, attached By order (oldest first, the default) or By ID; the other blobs get `rest` (none: the picture).
  */
 export interface FillSpec {
   mode: 'all' | 'perBlob';
   by: 'order' | 'id';
   rest?: ProductRef;
-  blobs: { key: number; fill: ProductRef }[];
+  blobs: FillEntry[];
 }
 
 export type SettingValue = number | string | boolean;
@@ -254,7 +268,11 @@ export function removeLayer(spec: CombineSpec, id: string): CombineSpec {
 /** A short line for a layer card: "Place in · card", "Replace · people". */
 export function verbLine(layer: CombineLayer): string {
   if (layer.verb === 'base') return 'Base';
-  if (layer.verb === 'replaceMask') return layer.product.kind === 'mask' ? `Find ${layer.product.find}` : 'Replace the mask';
+  if (layer.verb === 'replaceMask') {
+    if (layer.product.kind === 'mask') return `Find ${layer.product.find}`;
+    const f = layer.fills;
+    return f?.mode === 'perBlob' ? `Per blob · ${f.blobs.length} fill${f.blobs.length === 1 ? '' : 's'} by ${f.by === 'id' ? 'ID' : 'order'}` : 'Replace the mask';
+  }
   if (layer.verb === 'collide') return `Collide · ${str(layer.settings.mode, ['bounce', 'slide', 'settle'] as const, 'slide')}`;
   if (layer.verb === 'follow') {
     const how = str(layer.settings.how, ['trace', 'cling', 'flow', 'orbit'] as const, 'trace');

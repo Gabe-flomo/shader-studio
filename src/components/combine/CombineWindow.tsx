@@ -62,6 +62,8 @@ import { BALL_VIDEO } from '../../lib/builtinVideos';
 import { getNodeDefinition } from '../../nodes/definitions';
 import type { GraphNode } from '../../types/nodeGraph';
 import { SEGMENT_CLASSES } from '../../nodes/definitions/segment';
+import { fillSummary, isPerBlob } from '../../combine/fills';
+import { BlobRings, FillModeChoice, PerBlobFills } from './BlobFills';
 
 const KIND_ICON: Record<ProductKind, IconName> = { picture: 'image', pictureDepth: 'image', scene3d: 'cube', points: 'swarm', mask: 'mask', motion: 'motion' };
 
@@ -113,12 +115,12 @@ export function CombineWindow() {
       inspector={<LayerSettings />} inspectorWidth={340}
       presets={<PresetsStrip />} presetsSummary={`${COMBINE_PRESETS.length} built in: ${COMBINE_PRESETS.map(p => p.label).join(' · ')}`}>
       <LiveViewport ownSize aspect={aspect} clock emptyNote="The preview is hidden: show it to see the combined scene here."
-        overlay={() => (isolate ? (
+        overlay={({ image }) => <>{!isolate && <BlobRings image={image} />}{isolate ? (
           <button type="button" data-combine-isolated onClick={() => isolateLayer(null)} title="Show the whole stack (Esc)"
             style={{ position: 'absolute', left: 10, top: 10, zIndex: 2, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', border: 0, borderRadius: 999, cursor: 'pointer', background: 'rgba(0, 0, 0, 0.6)', color: '#fff', font: `600 11.5px ${fontFamily.ui}` }}>
             <Icon name="eye" size={13} />Up to {layerName(spec, isolate)} · show all
           </button>
-        ) : null)} />
+        ) : null}</>} />
       {edits && <EditsBanner edits={edits} />}
       {picker && <AddLayer />}
     </StudioShell>
@@ -589,20 +591,19 @@ function LayerSettings() {
     </Fold>);
   } else if (layer.verb === 'replaceMask') {
     const R = settingsOf(layer, REPLACE_DEFAULTS);
-    body.push(<Fold key="fill" id="fill" title="Fill" primary summary={`${R.stick === 'blobs' ? 'each blob' : 'whole mask'} · ${R.fit}`}>
-      <TileGrid cols={2}>
-        <Tile icon="layers" label="One for all" sub="the same on every blob" on attrs={{ 'data-fill': 'all' }} onClick={() => updateLayer(L, l => { delete l.fills; })} />
-        <Tile icon="grid" label="Per blob" sub="comes later" disabled attrs={{ 'data-fill': 'perBlob' }} title="Each blob its own fill (By order or By ID): a later phase" onClick={() => {}} />
-      </TileGrid>
-      <TileGrid cols={2}>
+    // Per blob (BlobFills.tsx): each blob its own fill, attached by order or ID, and the rest; always on the blobs.
+    const perBlob = isPerBlob(layer);
+    body.push(<Fold key="fill" id="fill" title="Fill" primary summary={fillSummary(layer, R)}>
+      <FillModeChoice layer={layer} />
+      {perBlob ? <PerBlobFills layer={layer} /> : <TileGrid cols={2}>
         <Tile icon="target" label="On each blob" sub="fitted, follows it" on={R.stick === 'blobs'} attrs={{ 'data-stick': 'blobs' }} onClick={() => set('stick')('blobs')} />
         <Tile icon="mask" label="Whole mask" sub="as it is" on={R.stick === 'frame'} attrs={{ 'data-stick': 'frame' }} onClick={() => set('stick')('frame')} />
-      </TileGrid>
-      {xslider('amount', 'Amount', 1, 0, 1, ['amount', 'b'])}
+      </TileGrid>}
+      {xslider('amount', 'Amount', 1, 0, 1, perBlob ? undefined : ['amount', 'b'])}
     </Fold>);
-    if (R.stick === 'blobs') body.push(<Fold key="stick" id="stick" title="Stick" summary={`${R.fit} · padding ${num(R.padding, 0.15)}`}>
+    if (R.stick === 'blobs' || perBlob) body.push(<Fold key="stick" id="stick" title="Stick" summary={`${R.fit} · padding ${num(R.padding, 0.15)}`}>
       <TileGrid cols={3}>{(['box', 'square', 'circle'] as const).map(f => <Tile key={f} icon={f === 'circle' ? 'target' : f === 'box' ? 'layout' : 'grid'} label={f === 'box' ? 'Box' : f === 'square' ? 'Square' : 'Circle'} on={R.fit === f} attrs={{ 'data-fit': f }} onClick={() => set('fit')(f)} />)}</TileGrid>
-      {slider('padding', 'Padding', 0.15, -0.5, 1, ['space', 'padding'])}{slider('scale', 'Fill scale', 1, 0.1, 4, ['space', 'scale'])}{slider('spin', 'Spin by ID', 0, 0, 1, ['space', 'spin'])}
+      {slider('padding', 'Padding', 0.15, -0.5, 1, perBlob ? undefined : ['space', 'padding'])}{slider('scale', 'Fill scale', 1, 0.1, 4, perBlob ? undefined : ['space', 'scale'])}{slider('spin', 'Spin by ID', 0, 0, 1, perBlob ? undefined : ['space', 'spin'])}
     </Fold>);
   }
   return (

@@ -19,4 +19,8 @@ export const COMBINE_EXAMPLE_INDEX: Record<string, { label: string; description:
     label: 'Combine: fireflies round a sculpture',
     description: 'Combine\'s Follow the shape in 3D, Orbit: walkers circle a ray-marched torus-and-ball sculpture in a shell just off its surfaces. The Scene Group comes into the Agents group through a Scene port; Follow surface (3D Scene) reads it on a coarse 48³ grid, keeps each walker\'s velocity along the surface, steers it round the up axis and pulls it back to the shell. Draw agents sees them through the scene\'s camera, hidden behind the sculpture.',
   },
+  combineTwoLooks: {
+    label: 'Combine: two blobs, two looks',
+    description: 'Combine\'s Replace mask with, per blob: a Blob Track splits the bright shapes of the built-in Ball action clip into blobs (up to 4) and follows them. One Blob Space per fill picks its blob by order (Fill: One blob): #1, the oldest blob seen now, gets a 2D kaleidoscope through its Fill field; #2 a small 3D scene whose March Camera UV is wired from that Blob Space\'s Local UV, cut round. The other blobs stay as the clip. Two Selects lay the fills over it. Reopen it in the Scene builder to switch Attach by to ID or give the rest a fill.',
+  },
 };

@@ -16,6 +16,7 @@ import { builtinImageParams, ROOM_AND_CAT_ID, WALKWAY_CAT_ID } from '../lib/buil
 import { rulesTemplateNodes } from '../agentRules/templates';
 import { agents3dStarter, remapMarks } from '../agentRules/space3d';
 import { freshIds } from '../store/agentSetup';
+import { BALL_VIDEO } from '../lib/builtinVideos';
 import type { CombineSpec } from './spec';
 
 export interface CombinePreset {
@@ -24,7 +25,7 @@ export interface CombinePreset {
   /** One line for the card's tooltip. */
   hint: string;
   /** The card's picture: an icon over a colour wash. */
-  icon: 'cube' | 'mask' | 'image' | 'layers' | 'swarm';
+  icon: 'cube' | 'mask' | 'image' | 'layers' | 'swarm' | 'grid';
 }
 
 export const COMBINE_PRESETS: readonly CombinePreset[] = [
@@ -34,6 +35,7 @@ export const COMBINE_PRESETS: readonly CombinePreset[] = [
   { key: 'sceneOnPhoto', label: 'Shapes on a photo', hint: 'A 3D scene\'s shapes laid over Room and cat (Place in · over).', icon: 'layers' },
   { key: 'sparksTrace', label: 'Sparks trace a star', hint: 'A swarm of walkers riding a glowing 2D star\'s outline (Follow the shape · trace).', icon: 'swarm' },
   { key: 'dustSettles', label: 'Dust settles on shapes', hint: '3D walkers falling onto a ball and a block and piling up there (Collide with · settle).', icon: 'cube' },
+  { key: 'twoLooks', label: 'Two blobs, two looks', hint: 'The bright shapes of the Ball action clip as blobs, each with its own fill: rings on #1, a 3D scene on #2 (Replace mask with · per blob, by order).', icon: 'grid' },
 ];
 
 /** A small surface-lit 3D scene: a floor, a ball, a block (the 3D builder's own recipe words). */
@@ -113,6 +115,35 @@ function photo(id: string, which: 'room' | 'walkway', at: { x: number; y: number
   };
 }
 
+/** A node of `type` with its sockets, default params and `params`. */
+function plain(type: string, id: string, at: { x: number; y: number }, params: Record<string, unknown>): GraphNode {
+  const def = getNodeDefinition(type)!;
+  const inputs = Object.fromEntries(Object.entries(def.inputs).map(([k, s]) => [k, { type: s.type, label: s.label }]));
+  const outputs = Object.fromEntries(Object.entries(def.outputs).map(([k, s]) => [k, { type: s.type, label: s.label }]));
+  return { id, type, position: at, inputs, outputs, params: { ...(def.defaultParams ?? {}), ...params } };
+}
+
+/** A Video node with the built-in Ball action clip. */
+function video(id: string, at: { x: number; y: number }): GraphNode {
+  return plain('videoInput', id, at, {
+    videoId: BALL_VIDEO.id, _fileName: BALL_VIDEO.name, _hasFile: true, _isPlaying: true, _loop: true, _speed: 1,
+    ...note(['Video: the built-in Ball action clip. Pick your own video on this card: the blobs and their fills follow it.']),
+  });
+}
+
+/** A Blob Track finding the bright shapes of the picture `from` (its texture), with no marks of its own. */
+function blobTrack(id: string, from: string, at: { x: number; y: number }): GraphNode {
+  const n = plain('blobTrack', id, at, {
+    channel: 'luma', threshold: 0.3, minSize: 0.01, maxSize: 0.6, maxBlobs: 4, smoothing: 0.6, boxStyle: 'none', marker: 'none',
+    ...note([
+      'Blob Track: splits the clip\'s bright shapes (luma above Threshold 0.3) into blobs and follows each, keeping its ID.',
+      'Min size 0.01 ignores specks; Max blobs 4. Its Blob data tells each fill\'s Blob Space where its blob is, and Inside is the mask the fills are cut to (each blob\'s box).',
+    ]),
+  });
+  n.inputs.texture = { ...n.inputs.texture, connection: { nodeId: from, outputKey: 'texture' } };
+  return n;
+}
+
 /** `key`'s products added to `graph`, and the stack joining them. Null for an unknown key. */
 export function presetGraph(key: string, graph: readonly GraphNode[], nextId: () => string): { nodes: GraphNode[]; spec: CombineSpec; made: string[] } | null {
   let nodes = [...graph];
@@ -132,6 +163,16 @@ export function presetGraph(key: string, graph: readonly GraphNode[], nextId: ()
   const addPhoto = (which: 'room' | 'walkway') => {
     const id = nextId();
     nodes.push(photo(id, which, { x: left - 420, y: low }));
+    return id;
+  };
+  const addVideo = () => {
+    const id = nextId();
+    nodes.push(video(id, { x: left - 420, y: low }));
+    return id;
+  };
+  const addBlobs = (from: string) => {
+    const id = nextId();
+    nodes.push(blobTrack(id, from, { x: left - 20, y: low }));
     return id;
   };
   let spec: CombineSpec;
@@ -190,6 +231,22 @@ export function presetGraph(key: string, graph: readonly GraphNode[], nextId: ()
     spec = { v: 1, layers: [
       { id: 'L1', product: { kind: 'build', scene: '3d', id: s }, verb: 'base', settings: {} },
       { id: 'L2', product: { kind: 'build', scene: 'agents', id: a.groupId }, verb: 'collide', settings: { mode: 'settle', gravity: 0.8, friction: 0.6, reach: 1.8 } },
+    ] };
+  } else if (key === 'twoLooks') {
+    // Per blob: Blob Track splits the bright shapes of the Ball action clip into blobs; #1 (the oldest seen) gets the
+    // rings, #2 a 3D scene cut round; the others stay as the clip.
+    const v = addVideo();
+    const bt = addBlobs(v);
+    const r = scene2d(RINGS_RECIPE_2D);
+    const s = scene3d(SHAPES_RECIPE);
+    spec = { v: 1, layers: [
+      { id: 'L1', product: { kind: 'node', nodeId: v, output: 'color' }, verb: 'base', settings: {} },
+      { id: 'L2', product: { kind: 'node', nodeId: bt, output: 'inside' }, verb: 'replaceMask', settings: {} },
+      { id: 'L3', product: { kind: 'build', scene: '2d', id: r }, verb: 'replaceMask', settings: { stick: 'blobs', fit: 'square', padding: 0.1 },
+        fills: { mode: 'perBlob', by: 'order', blobs: [
+          { id: 'F1', key: 0, fill: { kind: 'build', scene: '2d', id: r } },
+          { id: 'F2', key: 1, fill: { kind: 'build', scene: '3d', id: s }, fit: 'circle' },
+        ] } },
     ] };
   } else return null;
   return { nodes, spec, made: nodes.filter(n => !before.has(n.id)).map(n => n.id) };
