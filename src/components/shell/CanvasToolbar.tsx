@@ -19,6 +19,7 @@ import { Tooltip } from '../ui/Tooltip';
 import { FitToolbar, type FitToolbarItem } from '../ui/FitToolbar';
 import { computeGraphStats, countNodes, mainBodyLines } from './graphStats';
 import { PerfBadge, PerfPanel } from './PerfPanel';
+import { PassBudgetChip, usePassBudget } from './PassBudget';
 import { useGraphMaximize } from './graphLayout';
 import { isDesktop, useBreakpoint } from '../../hooks/useBreakpoint';
 import { loadShortcutMap } from '../../hooks/useShortcuts';
@@ -53,10 +54,13 @@ export function CanvasToolbar({ showOutline = false, onToggleOutline, readOnly =
   const compact = !isDesktop(useBreakpoint());
   const graphMaximized = useGraphMaximize(s => s.on);
   const showMaximize = !readOnly && isDesktop(useBreakpoint());
+  const passes = usePassBudget();
   // Whatever doesn't fit the canvas's width folds into a "⋯" by priority (ui/FitToolbar, docs/toolbars.md):
   // Fit and zoom stay longest; the stats, Clear and Randomise go first.
   const items: FitToolbarItem[] = [
     { key: 'stats', label: 'Graph stats', hint: 'Node count and frame time', node: <GraphStatus />, priority: 30 },
+    // The pass account (shell/PassBudget.tsx): only once the graph uses a pass; stays on the bar long.
+    ...(passes.used > 0 ? [{ key: 'passes', label: `Passes ${passes.used} of ${passes.max}`, hint: 'What uses the graph\'s passes', node: <PassBudgetChip />, priority: 85 }] : []),
     ...(zoom !== undefined && onZoom ? [
       { key: 'sepZoom', label: '', divider: true, priority: 30 },
       {

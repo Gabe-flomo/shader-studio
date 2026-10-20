@@ -34,6 +34,7 @@ import { useCtp, type CtpPalette } from '../../theme/nodePalette';
 import { BuildersSection } from '../builders/BuildersSection';
 import { rankMatches } from './nodeSearchModel';
 import { ExamplesStrip } from './ExampleLinks';
+import { PassCostNote } from './PassCostNote';
 import { searchFocusTypes, usingTitle } from './exampleLinksModel';
 import { examplesForCategory, examplesForType, examplesForTypes } from '../../store/exampleNodeIndex';
 
@@ -256,6 +257,8 @@ export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
         {def.description && (
           <div style={{ fontSize: 13, color: tc.subtext0, lineHeight: 1.5 }}>{def.description}</div>
         )}
+
+        <PassCostNote type={selectedType} fontSize={12.5} />
 
         <ExamplesStrip key={selectedType} id="used-in" hits={examplesForType(selectedType, 3)} title="Used in" layout="list" show={3} touch hideTypes onOpened={onClose} />
 

@@ -168,7 +168,7 @@ describe('rule spec → GLSL', () => {
     nodes.push(n('output', 'node_9', 0, 0, {}, { color: ['node_10', 'color'] }));
     const r = compileNodes(nodes);
     expect(r.success).toBe(false);
-    expect(r.errors?.[0]).toMatch(/up to 8 Pass nodes .*Grid Rules/);
+    expect(r.errors?.[0]).toMatch(/^This graph needs 10 of 8 passes: Grid Rules ×5 \(10 passes\)/);
   });
 });
 

@@ -28,6 +28,7 @@ import { recordRecentNode } from '../../nodes/recentNodes';
 import { HIDDEN_NODES, CATEGORY_SECTIONS, rowLabel, VIRTUAL_ROWS, rowOfType, MERGED_CATEGORIES, CATEGORY_INFO, ROW_ADD_PARAMS, nodesOfRow, CATEGORY_ORDER, CATEGORY_GROUPS, byLabel } from './libraryRows';
 import { nodeBlurb } from '../../nodes/plainDescriptions';
 import { ExamplesStrip } from './ExampleLinks';
+import { PassCostNote } from './PassCostNote';
 import { searchFocusTypes, usingTitle } from './exampleLinksModel';
 import { rankMatches } from './nodeSearchModel';
 import { examplesForCategory, examplesForType, examplesForTypes } from '../../store/exampleNodeIndex';
@@ -193,6 +194,7 @@ function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, o
       {!isGlsl && nodeBlurb(def) && (
         <DocText text={nodeBlurb(def)!} style={{ fontSize: 12, color: tk.text.muted }} />
       )}
+      {!isGlsl && <PassCostNote type={type} />}
       {!isGlsl && userNode && (() => {
         const rows = [
           ...userNode.inputs.map(i => ({ kind: 'in', label: i.label, type: i.type, hint: i.hint })),

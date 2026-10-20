@@ -45,6 +45,7 @@ import { DocText } from '../ui/DocText';
 import { NodeInlineViz, INLINE_VIZ_TYPES } from './NodeInlineViz';
 import { nodeBlurb } from '../../nodes/plainDescriptions';
 import { ExamplesStrip } from './ExampleLinks';
+import { PassCostNote } from './PassCostNote';
 import { searchFocusTypes, usingTitle } from './exampleLinksModel';
 import { examplesForCategory, examplesForType, examplesForTypes } from '../../store/exampleNodeIndex';
 
@@ -686,6 +687,7 @@ function Preview({ item, tk, pal, favorites, onToggleFavorite, onActivate, onDel
         )}
         {item.why && <div style={{ fontSize: 12, color: tk.accent.text }}>{item.why}</div>}
         {descOf(def) && <DocText text={descOf(def)} style={{ fontSize: 12, color: tk.text.muted }} />}
+        <PassCostNote type={def.type} />
         {(ins.length > 0 || outs.length > 0) && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '6px 8px', borderRadius: radius.md, background: tk.bg.field, fontSize: 11.5 }}>
             {ins.slice(0, 6).map((s, i) => <SocketRow key={`i${i}`} tk={tk} kind="in" label={s.label} type={s.type} />)}

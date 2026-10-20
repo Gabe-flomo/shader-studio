@@ -49,6 +49,7 @@ import { Icon } from '../ui/Icon';
 import type { IconName } from '../ui/iconPaths';
 import { Button, IconButton } from '../ui/Button';
 import { Sheet } from '../ui/Sheet';
+import { PassBudgetChip } from '../shell/PassBudget';
 import { DataEditorLauncher } from '../data/DataEditorLauncher';
 import { suggestConnections } from './smartConnect';
 import { suggestQuickAdds } from './quickAdds';
@@ -4225,6 +4226,8 @@ export function MobileGraphBrowser() {
             {selectMode ? 'Cancel' : <><Icon name="check" size={13} />Select</>}
           </button>
         )}
+        {/* The pass account (shell/PassBudget.tsx): only once the graph uses a pass; opens a sheet. */}
+        <span style={{ marginLeft: !focusedNode && !homeGraphView ? 0 : 'auto', flexShrink: 0, display: 'inline-flex' }}><PassBudgetChip touch /></span>
             </div>
             {showHiddenPath && hiddenPathSegments.length > 0 && (
               <>

@@ -213,4 +213,28 @@ describe('every action stays reachable at narrow widths', () => {
     expect(bar.getAttribute('aria-label')).toBe('Graph tools');
     expectAllReachable(bar, ['stats', 'zoom', 'fit', 'autoLayout', 'outline', 'randomise', 'clear'], 'canvas toolbar');
   });
+
+  it('the canvas toolbar\'s Passes chip: stays long, and folded its ⋯ entry opens the same account', async () => {
+    const { useNodeGraphStore } = await import('../../../store/useNodeGraphStore');
+    const { n } = await import('../../../store/graphBuilder');
+    useViewport.setState({ breakpoint: 'tablet' });
+    useNodeGraphStore.getState().replaceGraph([
+      n('uv', 'uvn', 0, 0), n('swizzle', 'rgb', 0, 0, { inputType: 'vec2', pattern: 'xyx' }, { input: ['uvn', 'uv'] }),
+      n('pass', 'p', 0, 0, {}, { color: ['rgb', 'output'] }), n('output', 'out', 0, 0, {}, { color: ['p', 'color'] }),
+    ]);
+    const h = render(<div data-fit-bounds=""><CanvasToolbar onToggleOutline={() => {}} zoom={1} onZoom={() => {}} onResetZoom={() => {}} onFit={() => {}} onAutoLayout={() => {}} /></div>);
+    const bar = h.querySelector('[data-fit-toolbar]')!;
+    expectAllReachable(bar, ['stats', 'passes', 'zoom', 'fit'], 'canvas toolbar with passes');
+    // Folds after the stats (lower priority) but before Fit.
+    resize(420);
+    let { onBar } = reachable(bar);
+    expect(onBar.includes('passes') || !onBar.includes('stats')).toBe(true);
+    resize(40);
+    ({ onBar } = reachable(bar));
+    expect(onBar).not.toContain('passes');
+    act(() => bar.querySelector<HTMLButtonElement>('[data-fit-more] button')!.click());
+    const row = document.querySelector('[data-fit-menu] [data-fit-row="passes"]')!;
+    act(() => row.querySelector<HTMLButtonElement>('[data-pass-budget] button')!.click());
+    expect(document.querySelector('[data-pass-budget-panel] [data-pass-budget-headline]')!.textContent).toBe('1 of 8 used · 7 left');
+  });
 });

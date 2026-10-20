@@ -144,7 +144,7 @@ describe('Pass node compile', () => {
     nodes.push(n('output', 'node_9', 0, 0, {}, { color: prev }));
     const r = compileGraph({ nodes });
     expect(r.success).toBe(false);
-    expect(r.errors![0]).toMatch(/up to 8 Pass nodes/);
+    expect(r.errors![0]).toMatch(/^This graph needs 9 of 8 passes: Pass ×9\. /);
     const ok = compileGraph({ nodes: nodes.filter(x => x.id !== `node_${100 + MAX_PASSES}`).map(x => x.type === 'output' ? n('output', 'node_9', 0, 0, {}, { color: [`node_${100 + MAX_PASSES - 1}`, 'color'] }) : x) });
     expect(ok.errors).toBeUndefined();
     expect(ok.passes).toHaveLength(MAX_PASSES);
