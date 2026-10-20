@@ -27,13 +27,15 @@ import { hasHiddenBlur } from './blurPasses';
 import { hasSmoothDof } from './smoothDofExpand';
 import { compileSplatProbes, hasSplatScene, pictureGraphOf } from './splatGraph';
 import { resolveSendReceive } from './sendReceive';
+import { syncSimpleExprTypes } from './simpleExprSync';
 
 const EMPTY_OUTPUT_VARS = new Map<string, Record<string, string>>();
 
 export function compileGraph(input: NodeGraph): CompilationResult {
   // Send / Receive (docs/send-receive.md): each Receive becomes a real wire to its Send, through group
   // ports added for this compile, before anything else looks at the graph.
-  const sr = resolveSendReceive(input.nodes);
+  // Simple Expressions' inputs take the types of the wires into them (simpleExprSync.ts).
+  const sr = resolveSendReceive(syncSimpleExprTypes(input.nodes));
   if (sr.errors.length) {
     return {
       vertexShader: '', fragmentShader: '', success: false, errors: sr.errors,

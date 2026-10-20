@@ -41,6 +41,7 @@ import { FOURD_EXAMPLE_INDEX } from './fourDExamples';
 import { TEXTURE_TOOL_EXAMPLE_INDEX } from './textureToolExamples';
 import { MEMORY_EXAMPLE_INDEX } from './memoryExamples';
 import { SEND_RECEIVE_EXAMPLE_INDEX } from './sendReceiveExamples';
+import { SIMPLE_EXPR_EXAMPLE_INDEX } from './simpleExprExamples';
 import { AUDIO_EXAMPLE_INDEX } from './audioExamples';
 import { PICTURE_EXAMPLE_INDEX } from './pictureExamples';
 import { PICTURES_3D_EXAMPLE_INDEX } from './pictures3dExamples';
@@ -275,6 +276,8 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...MEMORY_EXAMPLE_INDEX,
   // Send & Receive (sendReceiveExamples.ts, docs/send-receive.md): wireless links across groups.
   ...SEND_RECEIVE_EXAMPLE_INDEX,
+  // Simple Expression (simpleExprExamples.ts, docs/simple-expression.md): one-line GLSL on the card.
+  ...SIMPLE_EXPR_EXAMPLE_INDEX,
   // Audio (audioExamples.ts, docs/audio-tools.md): bands, Spectrum, Spectrogram, Waveform, a learned sound.
   ...AUDIO_EXAMPLE_INDEX,
   // Light rays (raysExamples.ts, docs/radial-fast-blur.md): Radial Fast Blur on text and on a burst of shapes.

@@ -43,6 +43,7 @@ Node labels live in the node definitions; their rules are under "Node labels" be
 | **Library** | What you saved that goes on the graph (group presets first, My nodes, functions, Expression Blocks, transforms, palettes) and your media, drawn like the Nodes list: the sidebar entry, Files → Library (`docs/library.md`). Saved graphs are the top bar's **Load** | Saved Graphs, Saved Keyframes |
 | **Storage** | How much is saved and where: the workspace folder, backups, export and import of everything (the Files page only) | Library (for the space meter) |
 | **Nodes reference** | Every node type with its sockets, a live picture and its GLSL, under Help | |
+| **Simple Expression** | The one-line GLSL node: its inputs (added with **+ Input**) take the type of the wire into them; **Convert to Expression Block** grows it into a full block, **Simplify to Simple Expression** goes back (`docs/simple-expression.md`) | One-liner, Formula, Quick expression (those are search aliases, not labels) |
 | **colour** | UI copy spells it the British way | color |
 
 ## Decisions and why

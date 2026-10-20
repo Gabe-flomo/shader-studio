@@ -1,4 +1,6 @@
 import { resolveSendReceive, syncSendReceiveTypes } from '../compiler/sendReceive';
+import { syncSimpleExprTypes } from '../compiler/simpleExprSync';
+import { SIMPLE_EXPR_TYPE, retypeSimpleExpr } from '../nodes/definitions/simpleExpr';
 import { RECEIVE_TYPE } from '../nodes/definitions/sendReceive';
 import { socketDefault } from '../nodes/socketDefault';
 import { isPlayfile } from '../playfile/reader';
@@ -1141,6 +1143,12 @@ interface NodeGraphState {
    * nodes/sceneLink.ts): one undo step and a compile. False when `edit` returns null (nothing changes).
    */
   rewriteTopLevel: (edit: (nodes: GraphNode[], nextId: () => string) => GraphNode[] | null, label: string) => boolean;
+  /**
+   * Replace one node of the level being edited (top level or the open group) with `edit(node)`: one
+   * undo step and a compile. For card edits that change a node's sockets with its params (Simple
+   * Expression's + Input, rename, Output type) or turn it into another type (Convert to Expression Block).
+   */
+  replaceNodeInScope: (nodeId: string, edit: (n: GraphNode) => GraphNode, label: string) => void;
 
   /** Change the vector type of a vectorizable math node (sin, cos, pow, etc.).
    *  Updates params.outputType plus the primary input and output socket types. */
@@ -3996,6 +4004,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     if (type === 'dataTexture' || type === 'readChannels') newNode = retypeDataTexture(newNode);
     if (type === 'renderTargets') newNode = retypeRenderTargets(newNode);
     if (type === 'readNeighbours') newNode = retypeReadNeighbours(newNode);
+    if (type === SIMPLE_EXPR_TYPE) newNode = retypeSimpleExpr(newNode);
 
     const { activeGroupId, activeGroupPath } = get();
     // Inside a Scene Group: a shape is wired from Scene Pos and into the scene's
@@ -5107,6 +5116,23 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     return true;
   },
 
+  replaceNodeInScope: (nodeId, edit, label) => {
+    const st = get();
+    const topLevel = st.nodes.some(n => n.id === nodeId);
+    const scope = topLevel ? st.nodes : getActiveNodes(st.nodes, st.activeGroupPath);
+    const node = scope?.find(n => n.id === nodeId);
+    if (!scope || !node) return;
+    const next = edit(node);
+    if (next === node) return;
+    undoManager.push(st.nodes, { label, nodeIds: [nodeId] });
+    const list = scope.map(n => (n.id === nodeId ? next : n));
+    const nodes = topLevel ? list : setActiveNodes(st.nodes, st.activeGroupPath, list);
+    if (!nodes) return;
+    set({ nodes });
+    compilationService.cancelPending();
+    get().compile();
+  },
+
   setNodesRewritten: (nodes, label) => {
     undoManager.push(get().nodes, { label: label ?? 'Optimised the graph' });
     const ids = new Set(nodes.map(n => n.id));
@@ -5252,7 +5278,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     }
     {
       // Send / Receive (docs/send-receive.md): a Send takes the type wired into it, its Receives the Send's type and name.
-      const synced = syncSendReceiveTypes(get().nodes);
+      // Simple Expressions (docs/simple-expression.md) likewise: each input takes the type wired into it. Either can feed the other.
+      const synced = syncSimpleExprTypes(syncSendReceiveTypes(syncSimpleExprTypes(get().nodes)));
       if (synced !== get().nodes) set({ nodes: synced });
     }
     if (force) {

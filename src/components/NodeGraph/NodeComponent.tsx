@@ -151,6 +151,8 @@ import { DataTextureCardBody } from './DataTextureCardBody';
 import { RenderTargetsCardBody } from './RenderTargetsCardBody';
 import { SendReceiveCardBody } from './SendReceiveCardBody';
 import { SEND_CARRIES } from '../../nodes/definitions/sendReceive';
+import { SIMPLE_EXPR_CARRIES, SIMPLE_EXPR_TYPE } from '../../nodes/definitions/simpleExpr';
+import { SimpleExprCardBody, SimpleExprInputName } from './SimpleExprCard';
 import { DepthCardBody } from '../depth/DepthCardBody';
 import { BlobTrackCardBody } from '../blobs/BlobTrackCardBody';
 import { CacheCardBody } from '../cache/CacheCardBody';
@@ -3347,7 +3349,10 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
 
           const slotName = inputLabelOf(node, key, input.label);
           // A Send takes any value it can carry (it retypes to it): numbers, vectors, textures.
-          const compat0 = (t: string) => node.type === 'send' && SEND_CARRIES.has(t);
+          // A Simple Expression's input takes any number, vector or matrix (it retypes to the wire).
+          const compat0 = (t: string) => (node.type === 'send' && SEND_CARRIES.has(t)) || (node.type === SIMPLE_EXPR_TYPE && SIMPLE_EXPR_CARRIES.has(t));
+          // …and has no colour of its own until something is wired in ("any").
+          const untyped = node.type === SIMPLE_EXPR_TYPE && !isConnected;
 
           // Drag-highlight: compatible = glow, incompatible = dim
           let socketOpacity = 1;
@@ -3412,7 +3417,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                   transform: isKeyframed ? 'rotate(45deg)' : undefined,
                   boxSizing: 'border-box',
                   background: socketError ? tk.status.danger : isKeyframed ? (kfBypassed ? tk.bg.panel : tk.status.warning) : isConnected ? (TYPE_COLORS[input.type] || '#888') : tk.bg.panel,
-                  border: `2px solid ${socketError ? tk.status.danger : isKeyframed ? tk.status.warning : (TYPE_COLORS[input.type] || '#888')}`,
+                  border: `2px solid ${socketError ? tk.status.danger : isKeyframed ? tk.status.warning : untyped ? tk.border.strong : (TYPE_COLORS[input.type] || '#888')}`,
                   marginRight: socketMarginRight,
                   flexShrink: 0,
                   marginLeft: socketMarginLeft,
@@ -3543,6 +3548,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                     <GroupPortName label={slotName} type={input.type} origin={key in def.inputs ? 'built-in' : 'added'} socketSide="left"
                       onRename={name => renameMarchLoopInput(node.id, key, name)}
                       onRemove={() => removeMarchLoopInput(node.id, key)} />
+                  ) : node.type === SIMPLE_EXPR_TYPE ? (
+                    <SimpleExprInputName node={node} inputKey={key} touch={isTouchDevice} />
                   ) : slotName}
                   {isField && (
                     // A badge, not a button: it sits inside the label, whose click disconnects, so it swallows its own clicks.
@@ -3636,6 +3643,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         {!collapsed && (node.type === 'exprNode' || node.type === 'customFn') && (
           <CodeCard node={node} touch={isTouchDevice} onEdit={openCodeEditor} onEditNote={openNoteEditor} />
         )}
+
+        {/* ── Simple Expression: + Input, Output type, the one-line field (SimpleExprCard.tsx) ── */}
+        {!collapsed && node.type === SIMPLE_EXPR_TYPE && <SimpleExprCardBody node={node} touch={isTouchDevice} />}
 
         {/* ── Transform Vec inline editor ── */}
         {!collapsed && node.type === 'transformVec' && (() => {

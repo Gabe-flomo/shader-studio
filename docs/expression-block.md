@@ -4,6 +4,11 @@ A node of a few lines of GLSL: inputs (each a local variable, a float can be a s
 run top to bottom (`uv *= 2.0`, `float d = length(uv) - r`), and a Return. Any line variable can
 also be an output socket (Also outputs). A Custom Function is the same idea written as one body.
 
+For a single line, **Simple Expression** (`docs/simple-expression.md`) is the lighter node: the line on
+the card, inputs added with + Input that take the type of their wire. A block that is only a Return
+line (no lines, loop, sliders, extra outputs or pictures) can be turned into one: right-click →
+**Simplify to Simple Expression**; a Simple Expression's **Convert to Expression Block** goes back.
+
 ## The card
 
 The card on the canvas is read-only: a carousel of **Code**, **Preview** and **Note** pages (empty

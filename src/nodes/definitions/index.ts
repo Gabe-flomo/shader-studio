@@ -16,6 +16,7 @@ import { DepthNode } from './depth';
 import { BlobTrackNode } from './blobTrack';
 import { CacheNode, CacheReadNode } from './cache';
 import { SendNode, ReceiveNode } from './sendReceive';
+import { SimpleExprNode } from './simpleExpr';
 import { AnalyzeNode } from './analyze';
 import { TextNode } from './text';
 import { SegmentNode } from './segment';
@@ -534,6 +535,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   forLoop: ForLoopNode,
   exprNode: ExprBlockNode,
   customFn: CustomFnNode,
+  simpleExpr: SimpleExprNode,
   gravitationalLens: GravitationalLensNode,
   floatWarp: FloatWarpNode,
   vignette: VignetteNode,
