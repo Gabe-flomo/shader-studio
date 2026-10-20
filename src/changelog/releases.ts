@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.319',
+    date: '2026-10-20',
+    title: "Easier node info",
+    highlights: [
+      { area: 'Studio', text: "Node info cards lead with a short summary; inputs, outputs and settings fold into one-line rows you can open, with a filter for big nodes." },
+      { area: 'Studio', text: "Settings with choices show them as chips, and each card links to the examples that use the node." },
+    ],
+  },
+  {
     id: '2026.10.318',
     date: '2026-10-19',
     title: "Built from nodes",
