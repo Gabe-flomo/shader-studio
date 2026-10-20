@@ -29,7 +29,8 @@ import { recordRecentNode } from '../../nodes/recentNodes';
 import { HIDDEN_NODES, CATEGORY_SECTIONS, rowLabel, VIRTUAL_ROWS, rowOfType, MERGED_CATEGORIES, CATEGORY_INFO, ROW_ADD_PARAMS, nodesOfRow, CATEGORY_ORDER, CATEGORY_GROUPS, byLabel } from './libraryRows';
 import { nodeBlurb } from '../../nodes/plainDescriptions';
 import { ExamplesStrip } from './ExampleLinks';
-import { PassCostNote } from './PassCostNote';
+import { PassCostNote, typeAddsPass, useAddPassLocked } from './PassCostNote';
+import { passBudget, passesLocked } from '../../compiler/passBudget';
 import { searchFocusTypes, usingTitle } from './exampleLinksModel';
 import { rankMatches } from './nodeSearchModel';
 import { examplesForCategory, examplesForType, examplesForTypes } from '../../store/exampleNodeIndex';
@@ -168,6 +169,8 @@ function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, o
   const hasViz = INLINE_VIZ_TYPES.has(type);
   const isGlsl = context === 'glsl';
   const glslSource = isGlsl ? getNodeGLSLSource(type) : null;
+  // The pass lock (store/passLock.ts): at 10 passes a node that adds one can't be added.
+  const passLocked = useAddPassLocked(isGlsl || swapMode ? null : type);
 
   return (
     <div style={{ marginTop: 8, padding: 10, display: 'flex', flexDirection: 'column', gap: 8, border: `1px solid ${tk.border.default}`, borderRadius: radius.lg, background: tk.bg.panel }}>
@@ -214,7 +217,7 @@ function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, o
       {isGlsl ? (
         <Button size="sm" variant="primary" icon="code" onClick={() => { if (glslSource) onGlslInsert?.(glslSource); }}>Insert at cursor</Button>
       ) : (
-        <Button size="sm" variant="primary" icon="plus" onClick={onAdd}>{swapMode ? 'Replace with this' : 'Add to graph'}</Button>
+        <Button size="sm" variant="primary" icon={passLocked ? 'lock' : 'plus'} disabled={passLocked} title={passLocked ? 'Locked: 10 of 10 passes. Remove a pass, or bypass a node that adds passes, first.' : undefined} onClick={onAdd}>{swapMode ? 'Replace with this' : 'Add to graph'}</Button>
       )}
       {!isGlsl && !swapMode && <ExamplesStrip key={type} id="used-in" hits={examplesForType(type, 3)} title="Used in" layout="list" show={3} hideTypes onOpened={onExampleOpened} />}
       {userNode && !isGlsl && (
@@ -285,6 +288,8 @@ export function NodeBrowser({
   const containerRef = useRef<HTMLDivElement>(null);
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isGlsl = context === 'glsl';
+  // The pass lock (store/passLock.ts): at 10 passes, a node that adds one isn't dragged in.
+  const passLock = useNodeGraphStore(s => passesLocked(passBudget(s.nodes).used));
   // The Builders section (docs/node-browser.md): not in the GLSL page's browser, nor while picking a node to switch to.
   const showBuilders = !isGlsl && !swapTargetNodeId;
 
@@ -362,7 +367,7 @@ export function NodeBrowser({
             onSingleClick={() => handleNodeClick(def.type)}
             onDoubleClick={() => handleNodeDblClick(def.type)}
             swapMode={!!swapTargetNodeId}
-            drag={onDragAdd && !isGlsl ? { label: def.label, type: def.type, place: pos => onDragAdd(def.type, pos, ROW_ADD_PARAMS[path[0] ?? '']?.[def.type]) } : null}
+            drag={onDragAdd && !isGlsl && !(passLock && typeAddsPass(def.type)) ? { label: def.label, type: def.type, place: pos => onDragAdd(def.type, pos, ROW_ADD_PARAMS[path[0] ?? '']?.[def.type]) } : null}
             onDragEnd={() => { setPreviewType(null); onDragDone?.(); }}
             btnRef={el => { if (el) nodeButtonRefs.current.set(def.type, el); else nodeButtonRefs.current.delete(def.type); }}
           />

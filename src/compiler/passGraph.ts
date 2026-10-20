@@ -49,9 +49,10 @@ import { isOpticalFlow } from './opticalFlowExpand';
 import { PROBE_PASS_ID, isProbe, pinUvGlsl, textNeedsProbe } from './probeExpand';
 import { SHADER_TEXTURE_TYPE } from '../nodes/definitions/shaderTexture';
 
-import { MAX_PASSES, PASS_TYPE, expandPassNodes } from './passExpand';
-import { overBudgetMessage, passBudget } from './passBudget';
-export { MAX_PASSES, PASS_TYPE, expandPassNodes };
+import { HARD_MAX_PASSES, MAX_PASSES, PASS_TYPE, expandPassNodes } from './passExpand';
+import { graceScale, overBudgetMessage, passBudget } from './passBudget';
+import { DATA_PACK_TYPE } from '../nodes/definitions/dataTexture';
+export { HARD_MAX_PASSES, MAX_PASSES, PASS_TYPE, expandPassNodes };
 /** WebGL2 guarantees 16 texture units per fragment shader. */
 export const MAX_SAMPLERS = 16;
 
@@ -206,7 +207,9 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
 
     const passNodes = nodes.filter(n => n.type === PASS_TYPE);
     // Over the limit: the itemised account (compiler/passBudget.ts), from the same expansion.
-    if (passNodes.length > MAX_PASSES) { const b = passBudget(graph.nodes); return failure([overBudgetMessage({ ...b, used: passNodes.length })]); }
+    if (passNodes.length > HARD_MAX_PASSES) { const b = passBudget(graph.nodes); return failure([overBudgetMessage({ ...b, used: passNodes.length })]); }
+    // Past MAX_PASSES (the grace zone): full-size passes draw at half size in the live preview (graceScale).
+    const grace = passNodes.length > MAX_PASSES;
     const byId = new Map(nodes.map(n => [n.id, n]));
 
     // 1. Slugs, once for the whole graph, in the usual sort order (Previous wires left out, so feedback isn't a cycle;
@@ -390,8 +393,10 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     for (const c of [finalList, ...passLists.values()]) for (const r of c.readsPrevious) previousRead.add(r);
 
     // 4. Compile each list with today's compiler.
-    const compileList = (list: GraphNode[], pictureScale?: number, pictureRes?: boolean, pinUv?: string) => generateFragmentShader(topologicalSort(list), list, {
+    const compileList = (list: GraphNode[], pictureScale?: number, pictureRes?: boolean, pinUv?: string, anySize?: boolean) => generateFragmentShader(topologicalSort(list), list, {
       slugs,
+      // A pass grace halves in the preview and exports at full size: it reads the picture's size, not its own.
+      ...(anySize ? { anySize: true } : {}),
       // The Value at point Pass: g_uv pinned to each texel's point.
       ...(pinUv ? { pinUv } : {}),
       // The memory Pass (compiler/memoryExpand.ts): fixed size, so the Mouse reads the picture's size.
@@ -447,7 +452,14 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
         },
       };
       const fixedSize = passFixedSize(pass.params.__size);
-      const r = compileList(hidden.annotate([...c.nodes.values(), sink], id), fixedSize ? 1 : PASS_SCALES[String(pass.params.scale ?? '1')] ?? 1, id === MEMORY_PASS_ID, id === PROBE_PASS_ID && Array.isArray(pass.params.__pinUv) ? pinUvGlsl(pass.params.__pinUv as [number, number][]) : undefined);
+      const fullScale = PASS_SCALES[String(pass.params.scale ?? '1')] ?? 1;
+      const format = sel(pass.params.format, ['half', 'byte', 'float'] as const, 'half');
+      // The grace zone: the size it draws at in the live preview (exports keep `full`). Data passes keep theirs.
+      const graced = grace ? graceScale({
+        id, scale: fullScale, size: fixedSize, format,
+        data: byId.get(pass.inputs.color?.connection?.nodeId ?? '')?.type === DATA_PACK_TYPE || extra.some(x => x.format === 'float'),
+      }) : null;
+      const r = compileList(hidden.annotate([...c.nodes.values(), sink], id), fixedSize ? 1 : fullScale, id === MEMORY_PASS_ID, id === PROBE_PASS_ID && Array.isArray(pass.params.__pinUv) ? pinUvGlsl(pass.params.__pinUv as [number, number][]) : undefined, !!graced && !fixedSize);
       absorb(r);
       for (const [nid, vars] of r.nodeOutputVars) if (nid !== sink.id && !passVars.has(nid)) passVars.set(nid, vars);
       const slug = slugs.get(id)!;
@@ -457,8 +469,8 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
       passes.push({
         nodeId: id, slug, label, fragmentShader: r.fragmentShader,
         reads: [...[...c.reads].map(r2 => slugs.get(r2)!), ...(hidden.reads.get(id) ?? [])], readsPrevious: [...c.readsPrevious].map(r2 => slugs.get(r2)!),
-        scale: PASS_SCALES[String(pass.params.scale ?? '1')] ?? 1,
-        format: sel(pass.params.format, ['half', 'byte', 'float'] as const, 'half'),
+        scale: graced && !fixedSize ? graced.scale : fullScale,
+        format,
         filter: sel(pass.params.filter, ['linear', 'nearest'] as const, 'linear'),
         wrap: sel(pass.params.wrap, ['clamp', 'repeat', 'mirror'] as const, 'clamp'),
         previous: previousRead.has(id), live: live.has(id),
@@ -468,7 +480,8 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
         ...(beforeParticles.has(id) ? { beforeParticles: true } : {}),
         ...(passRepeat(pass.params.repeat) > 1 ? { repeat: passRepeat(pass.params.repeat) } : {}),
         // A Shader Texture's fixed size and how often it draws (only present when set).
-        ...(fixedSize ? { size: fixedSize } : {}),
+        ...(fixedSize ? { size: graced?.size ?? fixedSize } : {}),
+        ...(graced ? { full: { scale: fullScale, ...(fixedSize ? { size: fixedSize } : {}) } } : {}),
         ...(pass.params.__update === 'once' || pass.params.__update === 'change' ? { update: pass.params.__update } : {}),
         ...(pass.params.__update === 'change' && pass.params.__stillTime === true ? { stillTime: true } : {}),
       });

@@ -21,6 +21,10 @@ import { expandSmoothDof } from './smoothDofExpand';
 export const PASS_TYPE = 'pass';
 /** Most passes in one graph: Pass nodes, and every pass another node opens into (see passBudget.ts). */
 export const MAX_PASSES = 8;
+/** Passes allowed past MAX_PASSES at lower quality: the live preview draws full-size passes at half size (passBudget.ts graceScale). */
+export const GRACE_PASSES = 2;
+/** The compile's limit and the lock line: no change may take a graph past it (store/passLock.ts). */
+export const HARD_MAX_PASSES = MAX_PASSES + GRACE_PASSES;
 
 /** What expandPassNodes gives back: the node list the pass compile cuts, and what each expansion bound. */
 export interface ExpandedPassNodes {

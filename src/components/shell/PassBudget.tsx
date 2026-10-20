@@ -2,12 +2,14 @@
  * PassBudget — the pass account on the graph (docs/pass-node-plan.md, "How many passes").
  *
  * A chip ("Passes 3/8") in the canvas toolbar beside the node count, and in the phone graph's header,
- * shown once the graph uses a pass: amber with one pass (or none) left, red over the limit. A click
+ * shown once the graph uses a pass: amber with one full-quality pass (or none) left; amber with a ½ badge in
+ * the grace zone (9 or 10 passes: lower quality in the preview, and at 10 adding a pass is locked); red past
+ * the limit (only a graph loaded that way: the lock keeps edits from getting there). A click
  * opens the account: each node that costs passes (a row jumps to it), the Blur / Glow hidden passes
  * that don't count, and why there is a limit. The numbers come from compiler/passBudget.ts, the same
  * expansion the compile checks.
  */
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
@@ -15,7 +17,8 @@ import { Icon } from '../ui/Icon';
 import { Popover } from '../ui/Popover';
 import { Sheet } from '../ui/Sheet';
 import { Tooltip } from '../ui/Tooltip';
-import { PASS_LIMIT_WHY, budgetLevel, passBudget, type PassBudget, type PassBudgetItem } from '../../compiler/passBudget';
+import { GRACE_PASSES, GRACE_WHY, HARD_MAX_PASSES, PASS_LIMIT_WHY, budgetLevel, passBudget, passesLocked, type BudgetLevel, type PassBudget, type PassBudgetItem } from '../../compiler/passBudget';
+import { usePassPanelRequest } from '../../store/passLock';
 
 /** The whole graph's pass account (top level, whichever group is open). */
 export function usePassBudget(): PassBudget {
@@ -32,8 +35,22 @@ export function passItemName(i: PassBudgetItem): string {
 /** A row's cost: "1", "2", "1 shared". */
 export const passItemCost = (i: PassBudgetItem): string => (i.shared ? `${i.cost} shared` : String(i.cost));
 
-function levelColour(tk: ReturnType<typeof useTokens>, level: ReturnType<typeof budgetLevel>): string {
-  return level === 'over' ? tk.status.danger : level === 'warn' ? tk.status.warningText : tk.text.secondary;
+function levelColour(tk: ReturnType<typeof useTokens>, level: BudgetLevel): string {
+  return level === 'over' ? tk.status.danger : level === 'warn' || level === 'grace' ? tk.status.warningText : tk.text.secondary;
+}
+
+/** The grace zone in words: "lower quality (grace 1 of 2)", "… (grace 2 of 2) · passes locked". */
+export function graceWords(b: Pick<PassBudget, 'used' | 'max'>): string {
+  return `lower quality (grace ${b.used - b.max} of ${GRACE_PASSES})${passesLocked(b.used) ? ' · passes locked' : ''}`;
+}
+
+/** The chip's tooltip (and the start of its accessible name). */
+export function budgetTip(b: Pick<PassBudget, 'used' | 'max'>): string {
+  const level = budgetLevel(b.used, b.max);
+  if (level === 'over') return `${b.used - HARD_MAX_PASSES} over the limit of ${HARD_MAX_PASSES} passes`;
+  if (level === 'grace') return `Passes ${b.used}/${b.max} · ${graceWords(b)}`;
+  const left = b.max - b.used;
+  return level === 'warn' ? `${left} of ${b.max} full-quality passes left, then ${GRACE_PASSES} at lower quality` : `${left} of ${b.max} passes left`;
 }
 
 /** The chip. Renders nothing while the graph uses no pass. `touch`: the phone's (opens a sheet). */
@@ -43,11 +60,14 @@ export function PassBudgetChip({ touch = false }: { touch?: boolean }) {
   const ref = useRef<HTMLSpanElement>(null);
   const [open, setOpen] = useState(false);
   const [hover, setHover] = useState(false);
+  // The lock's toast offers Show passes: open this panel.
+  const asked = usePassPanelRequest(s => s.n);
+  const seen = useRef(asked);
+  useEffect(() => { if (asked !== seen.current) { seen.current = asked; setOpen(true); } }, [asked]);
   if (b.used === 0) return null;
   const level = budgetLevel(b.used, b.max);
   const colour = levelColour(tk, level);
-  const left = b.max - b.used;
-  const tip = level === 'over' ? `${b.used - b.max} over the limit of ${b.max} passes` : `${left} of ${b.max} passes left`;
+  const tip = budgetTip(b);
   const panel = <PassBudgetPanel budget={b} onDone={() => setOpen(false)} titled={!touch} />;
   return (
     // Inside the toolbar a click elsewhere opens the code: keep these clicks here.
@@ -67,6 +87,15 @@ export function PassBudgetChip({ touch = false }: { touch?: boolean }) {
         >
           <Icon name="layers" size={14} />
           Passes {b.used}/{b.max}
+          {level === 'grace' && (
+            // Lower quality: passes past 8 draw at half resolution in the preview.
+            <span data-pass-grace-badge="" aria-hidden style={{
+              marginLeft: 1, padding: '0 4px', borderRadius: 4, lineHeight: '15px', fontSize: touch ? 11 : 10.5, fontWeight: 650,
+              color: tk.status.warningText, border: `1px solid ${tk.status.warning}`,
+            }}>
+              {passesLocked(b.used) ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}><Icon name="lock" size={10} />½</span> : '½'}
+            </span>
+          )}
         </button>
       </Tooltip>
       {open && (touch
@@ -92,14 +121,21 @@ export function PassBudgetPanel({ budget: b, onDone, titled = true }: {
     onDone?.();
   };
   const headline = level === 'over'
-    ? `${b.used} of ${b.max}: ${b.used - b.max} over the limit`
-    : `${b.used} of ${b.max} used · ${b.max - b.used} left`;
+    ? `${b.used} passes: ${b.used - HARD_MAX_PASSES} over the limit of ${HARD_MAX_PASSES}`
+    : level === 'grace'
+      ? `${b.used} of ${b.max} · ${graceWords(b)}`
+      : `${b.used} of ${b.max} used · ${b.max - b.used} left`;
   const muted = { fontSize: 11.5, color: tk.text.muted, lineHeight: 1.5 } as const;
   return (
     <div data-pass-budget-panel="" style={{ color: tk.text.secondary, font: `12px ${fontFamily.ui}` }}>
       <div style={{ padding: '12px 14px 8px', borderBottom: `1px solid ${tk.border.subtle}` }}>
         {titled && <div style={{ fontSize: 13.5, fontWeight: 650, color: tk.text.primary }}>Passes</div>}
         <div data-pass-budget-headline="" style={{ marginTop: 2, fontWeight: 600, color: levelColour(tk, level) }}>{headline}</div>
+        {level === 'grace' && (
+          <div data-pass-budget-grace="" style={{ ...muted, marginTop: 6, color: tk.text.secondary }}>
+            {GRACE_WHY}{passesLocked(b.used) ? ` ${HARD_MAX_PASSES} is the most: a node that would add a pass can't be added (or turned back on) until you remove one, or bypass a node that adds passes.` : ''}
+          </div>
+        )}
       </div>
       <div style={{ padding: '6px 6px', display: 'flex', flexDirection: 'column' }}>
         {b.items.map(i => (

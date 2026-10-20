@@ -10,7 +10,7 @@ vi.hoisted(() => {
 });
 
 import { compileGraph } from '../graphCompiler';
-import { hasPassNode, MAX_PASSES } from '../passGraph';
+import { HARD_MAX_PASSES, hasPassNode, MAX_PASSES } from '../passGraph';
 import { n, group, port } from '../../store/graphBuilder';
 import type { GraphNode } from '../../types/nodeGraph';
 
@@ -137,17 +137,55 @@ describe('Pass node compile', () => {
     expect(r.errors![0]).toMatch(/^Node group_9: "G" repeats its nodes \(Iterations above 1\)/);
   });
 
-  it(`allows up to ${MAX_PASSES} passes`, () => {
+  /** `count` Pass nodes in a chain (the first `opts` set on each), on to the Output. */
+  const chain = (count: number, params: Record<string, unknown> = {}): GraphNode[] => {
     const nodes: GraphNode[] = [n('uv', 'node_1', 0, 0), n('floatToVec3', 'node_2', 0, 0)];
     let prev: [string, string] = ['node_2', 'rgb'];
-    for (let i = 0; i < MAX_PASSES + 1; i++) { nodes.push(n('pass', `node_${100 + i}`, 0, 0, {}, { color: prev })); prev = [`node_${100 + i}`, 'color']; }
-    nodes.push(n('output', 'node_9', 0, 0, {}, { color: prev }));
-    const r = compileGraph({ nodes });
-    expect(r.success).toBe(false);
-    expect(r.errors![0]).toMatch(/^This graph needs 9 of 8 passes: Pass ×9\. /);
-    const ok = compileGraph({ nodes: nodes.filter(x => x.id !== `node_${100 + MAX_PASSES}`).map(x => x.type === 'output' ? n('output', 'node_9', 0, 0, {}, { color: [`node_${100 + MAX_PASSES - 1}`, 'color'] }) : x) });
+    for (let i = 0; i < count; i++) { nodes.push(n('pass', `node_${100 + i}`, 0, 0, params, { color: prev })); prev = [`node_${100 + i}`, 'color']; }
+    return [...nodes, n('output', 'node_9', 0, 0, {}, { color: prev })];
+  };
+
+  it(`allows up to ${MAX_PASSES} passes at full quality`, () => {
+    const ok = compileGraph({ nodes: chain(MAX_PASSES) });
     expect(ok.errors).toBeUndefined();
     expect(ok.passes).toHaveLength(MAX_PASSES);
+    expect(ok.passes!.every(p => p.scale === 1 && !p.full)).toBe(true);
+  });
+
+  it(`grace: ${MAX_PASSES + 1} and ${HARD_MAX_PASSES} passes compile, each full-size pass halved in the preview`, () => {
+    for (const count of [MAX_PASSES + 1, HARD_MAX_PASSES]) {
+      const r = compileGraph({ nodes: chain(count) });
+      expect(r.errors, String(count)).toBeUndefined();
+      expect(r.passes).toHaveLength(count);
+      // Half size in the preview; full size kept for exports.
+      expect(r.passes!.every(p => p.scale === 0.5 && p.full?.scale === 1)).toBe(true);
+    }
+  });
+
+  it(`more than ${HARD_MAX_PASSES} passes fail, itemised`, () => {
+    const r = compileGraph({ nodes: chain(HARD_MAX_PASSES + 1) });
+    expect(r.success).toBe(false);
+    expect(r.errors![0]).toMatch(/^This graph needs 11 passes, and 10 is the most \(8 at full quality\): Pass ×11\. /);
+  });
+
+  it('grace leaves passes already at ½ or below alone', () => {
+    const r = compileGraph({ nodes: chain(MAX_PASSES + 1, { scale: '0.5' }) });
+    expect(r.errors).toBeUndefined();
+    expect(r.passes!.every(p => p.scale === 0.5 && !p.full)).toBe(true);
+  });
+
+  it('a grace pass reads the picture\'s size, so one shader is right at half size and at full', () => {
+    // A Texture Input sampled with an offset inside a pass: its pixel is the picture's (u_pictureRes), not the pass's.
+    const nodes = chain(MAX_PASSES + 1);
+    nodes.splice(2, 0, n('textureInput', 'node_50', 0, 0), n('sampleTexture', 'node_51', 0, 0, { offsetX: 1, offsetY: 0 }, { texture: ['node_50', 'texture'] }));
+    nodes[nodes.findIndex(x => x.id === 'node_100')] = n('pass', 'node_100', 0, 0, {}, { color: ['node_51', 'color'] });
+    const grace = compileGraph({ nodes });
+    expect(grace.errors).toBeUndefined();
+    const fs = grace.passes!.find(p => p.nodeId === 'node_100')!.fragmentShader;
+    expect(fs).toMatch(/_px \(vec2\(1\.0\) \/ u_pictureRes\)/);
+    // Outside grace the same pass keeps today's text.
+    const plain = compileGraph({ nodes: nodes.filter(x => x.id !== 'node_108').map(x => x.type === 'output' ? n('output', 'node_9', 0, 0, {}, { color: ['node_107', 'color'] }) : x) });
+    expect(plain.passes!.find(p => p.nodeId === 'node_100')!.fragmentShader).not.toMatch(/u_pictureRes/);
   });
 
   it('counts samplers per program', () => {

@@ -678,6 +678,11 @@ export interface ShaderAssemblerOptions {
    */
   pictureRes?: boolean;
   /**
+   * A pass program the grace zone draws at half size in the preview and full size in exports (compiler/passGraph.ts):
+   * the Mouse and a Texture Input's `<sampler>_px` read the picture's size (u_pictureRes), so one shader is right at both.
+   */
+  anySize?: boolean;
+  /**
    * The Value at point Pass (compiler/probeExpand.ts): GLSL that sets g_uv to each texel's point before the graph
    * runs. Its u_resolution reads as the picture's (u_pictureRes), so aspect-dependent nodes see the picture.
    */
@@ -862,6 +867,7 @@ export class ShaderAssembler {
   /** Pass programs: the picture's scale (ShaderAssemblerOptions.pictureScale). */
   private pictureScale = 1;
   private pictureRes = false;
+  private anySize = false;
   private pinUv = '';
   /** Texture Input / Video nodes (original ids) whose Texture output something reads (phase 7). */
   private textureOutWired: Set<string> = new Set();
@@ -898,7 +904,8 @@ export class ShaderAssembler {
     this.agentProgram = opts?.agentProgram;
     this.agentEye = opts?.agentEye === true;
     this.pictureScale = opts?.pictureScale ?? 1;
-    this.pictureRes = opts?.pictureRes === true;
+    this.anySize = opts?.anySize === true;
+    this.pictureRes = opts?.pictureRes === true || this.anySize;
     this.pinUv = opts?.pinUv ?? '';
     if (this.pinUv) { this.declarations.add('uniform vec2 u_pictureRes;'); this.declarations.add('#define u_resolution u_pictureRes'); }
     this.textureOutWired = wiredTextureOutputs(allNodes);
@@ -4350,6 +4357,11 @@ export class ShaderAssembler {
   private declareTexturePx(node: GraphNode, origId: string, slug: string): void {
     if ((node.type !== 'textureInput' && node.type !== 'videoInput') || !this.textureOutWired.has(origId)) return;
     const sampler = node.type === 'textureInput' ? `u_tex_${slug}` : `u_vid_${slug}`;
+    if (this.anySize) {
+      this.declarations.add('uniform vec2 u_pictureRes;');
+      this.declarations.add(`#define ${sampler}_px (vec2(1.0) / u_pictureRes)`);
+      return;
+    }
     this.declarations.add(`#define ${sampler}_px (vec2(${formatGlslLiteral(this.pictureScale, 'float')}) / u_resolution)`);
   }
 

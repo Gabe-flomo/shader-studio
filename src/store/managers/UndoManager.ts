@@ -102,6 +102,18 @@ export class UndoManager {
     this.changed();
   }
 
+  /**
+   * Drop the newest step when it holds exactly `nodes` and nothing else: an action pushed its step, then its
+   * write was refused (the pass lock, store/passLock.ts), so the step would undo nothing.
+   */
+  dropTopIfNodes(nodes: GraphNode[]): void {
+    const top = this.history[this.history.length - 1];
+    if (!top?.nodes || top.play) return;
+    if (JSON.stringify(top.nodes) !== JSON.stringify(nodes)) return;
+    this.history.pop();
+    this.changed();
+  }
+
   /** The newest done step, if any. */
   top(): UndoEntry | undefined { return this.history[this.history.length - 1]; }
 

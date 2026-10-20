@@ -24,6 +24,7 @@ import { migrateNodeParams, GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import { LAYOUT_VERSION, needsLayoutSpread, spreadLegacyLayout } from './legacyLayout';
 import { askText } from '../components/ui/dialogStore';
 import { toast } from '../components/ui/toastStore';
+import { passLocked, withPassLockOff } from './passLock';
 import { LIGHTING_CATEGORY, MARCH_GROUP_TYPES, planSceneGroupAdd, planSmart3DAdd } from '../nodes/smart3d';
 import { TIME_CUBE_AUTO_TYPES, planTimeCubeAdd } from '../lib/timeCube/autoWire';
 import { switchTextureKind, textureKindOf, type TextureKind } from '../lib/texture/textureSource';
@@ -1928,7 +1929,8 @@ function webMedia(st: Pick<NodeGraphState, 'nodes' | 'textureUniforms' | 'nodeTe
   return { textures, videos, audio, ...(audioTools ? { audioTools } : {}), ...(Object.keys(layerVideos).length ? { layerVideos } : {}), ...(Object.keys(layerPads).length ? { layerPads } : {}), ...(Object.keys(rackSamples).length ? { rackSamples } : {}), ...(Object.keys(tracks).length ? { tracks } : {}) };
 }
 
-export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
+// passLocked: the pass lock (store/passLock.ts) refuses any write that would take the graph past HARD_MAX_PASSES.
+export const useNodeGraphStore = create<NodeGraphState>(passLocked((set, get) => ({
   nodes: [],
   looseGroups: [],
   vertexShader: '',
@@ -3328,7 +3330,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     endPlayBurst();
     // Restore counter so new nodes after undo don't collide
     if (graph) idGenerator.syncFromGraph(nodes);
-    set({ ...(graph ? { nodes, nodeProbeValues: null } : {}), ...(playChanged ? { play } : {}) });
+    // Undo puts back a graph that was there: never refused by the pass lock.
+    withPassLockOff(() => set({ ...(graph ? { nodes, nodeProbeValues: null } : {}), ...(playChanged ? { play } : {}) }));
     if (graph) get().compile();
     return n;
   },
@@ -3346,7 +3349,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     if (!n) return 0;
     endPlayBurst();
     if (graph) idGenerator.syncFromGraph(nodes);
-    set({ ...(graph ? { nodes, nodeProbeValues: null } : {}), ...(playChanged ? { play } : {}) });
+    withPassLockOff(() => set({ ...(graph ? { nodes, nodeProbeValues: null } : {}), ...(playChanged ? { play } : {}) }));
     if (graph) get().compile();
     return n;
   },
@@ -6076,7 +6079,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     }
     return out.sort((a, b) => a.savedAt - b.savedAt);
   },
-}));
+}), kept => undoManager.dropTopIfNodes(kept)));
 
 // Entering or leaving a Shader Texture, or flipping what the preview shows while inside, changes what the
 // main preview compiles (shownShaderTexture).

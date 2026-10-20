@@ -9,7 +9,7 @@ vi.hoisted(() => {
 });
 
 import { compileGraph } from '../graphCompiler';
-import { MAX_HIDDEN_PASSES, MAX_PASSES, budgetLevel, budgetSummary, nodePassNote, overBudgetMessage, passBudget } from '../passBudget';
+import { GRACE_MIN_SIZE, HARD_MAX_PASSES, MAX_HIDDEN_PASSES, MAX_PASSES, budgetLevel, budgetSummary, graceScale, nodePassNote, overBudgetMessage, passBudget, passesLocked, wouldExceedPasses } from '../passBudget';
 import { n, group } from '../../store/graphBuilder';
 import { makeShaderTexture } from '../../nodes/shaderTextureStarters';
 import { retypeDataTexture } from '../../nodes/definitions/dataTexture';
@@ -126,12 +126,44 @@ describe('Pass budget: hidden passes apart', () => {
 });
 
 describe('Pass budget: levels, summary and the over-limit error', () => {
-  it('levels: amber with one pass (or none) left, red over', () => {
+  it('levels: amber with one pass (or none) left, grace past 8, red past 10', () => {
     expect(budgetLevel(1)).toBe('ok');
     expect(budgetLevel(MAX_PASSES - 2)).toBe('ok');
     expect(budgetLevel(MAX_PASSES - 1)).toBe('warn');
     expect(budgetLevel(MAX_PASSES)).toBe('warn');
-    expect(budgetLevel(MAX_PASSES + 1)).toBe('over');
+    expect(budgetLevel(MAX_PASSES + 1)).toBe('grace');
+    expect(budgetLevel(HARD_MAX_PASSES)).toBe('grace');
+    expect(budgetLevel(HARD_MAX_PASSES + 1)).toBe('over');
+    expect(HARD_MAX_PASSES).toBe(10);
+    expect([9, 10].map(passesLocked)).toEqual([false, true]);
+  });
+
+  it('graceScale: full-size passes halve; fixed sizes halve down to 128; ½ and below, data and simulations stay', () => {
+    const p = (o: Partial<Parameters<typeof graceScale>[0]>) => graceScale({ id: 'p', scale: 1, size: null, format: 'half', ...o });
+    expect(p({})).toEqual({ scale: 0.5 });
+    expect(p({ format: 'byte' })).toEqual({ scale: 0.5 });
+    expect(p({ scale: 0.5 })).toBeNull();
+    expect(p({ scale: 0.25 })).toBeNull();
+    expect(p({ size: 512 })).toEqual({ scale: 1, size: 256 });
+    expect(p({ size: 200 })).toEqual({ scale: 1, size: GRACE_MIN_SIZE });
+    expect(p({ size: GRACE_MIN_SIZE })).toBeNull();
+    expect(p({ format: 'float' })).toBeNull();
+    expect(p({ data: true })).toBeNull();
+    for (const id of ['__memory', 'gr__cells', 'gr__pic', 'of__ofluma', 'of__ofpass']) expect(p({ id }), id).toBeNull();
+  });
+
+  it('wouldExceedPasses: only a change that takes the graph past 10, and adds passes', () => {
+    const chain = (count: number) => {
+      const nodes: GraphNode[] = [...picture()];
+      let from: [string, string] = ['rgb', 'output'];
+      for (let i = 0; i < count; i++) { nodes.push(n('pass', `p${i}`, 0, 0, {}, { color: from })); from = [`p${i}`, 'color']; }
+      return [...nodes, out(from)];
+    };
+    expect(wouldExceedPasses(chain(10), chain(9))).toBeNull();
+    expect(wouldExceedPasses(chain(11), chain(10))).toEqual({ used: 11, before: 10 });
+    // Loaded past the limit: removing one is fine, adding one isn't.
+    expect(wouldExceedPasses(chain(11), chain(12))).toBeNull();
+    expect(wouldExceedPasses(chain(13), chain(12))).toEqual({ used: 13, before: 12 });
   });
 
   it('the compile error lists everything that counts', () => {
@@ -141,14 +173,21 @@ describe('Pass budget: levels, summary and the over-limit error', () => {
     nodes.push(n('opticalFlow', 'of', 0, 0, {}, { texture: ['img', 'texture'] }));
     nodes.push(n('textureFeedback', 'fb1', 0, 0, {}, { texture: ['p4', 'texture'] }), n('textureFeedback', 'fb2', 0, 0, {}, { texture: ['fb1', 'texture'] }));
     nodes.push(n('lag', 'm1', 0, 0, {}, { input: ['lfo', 'value'] }));
-    nodes.push(n('addColor', 'mix', 0, 0, {}, { a: ['fb2', 'color'], b: ['of', 'color'] }), out(['mix', 'result']));
+    nodes.push(n('textureFeedback', 'fb3', 0, 0, {}, { texture: ['fb2', 'texture'] }));
+    nodes.push(n('addColor', 'mix', 0, 0, {}, { a: ['fb3', 'color'], b: ['of', 'color'] }), out(['mix', 'result']));
     const b = passBudget(nodes);
-    expect(b.used).toBe(10);
-    expect(budgetSummary(b.items)).toEqual(['Pass ×5', 'Optical Flow ×1 (2 passes)', 'Feedback (texture) ×2', 'Memory nodes (1, shared by 1)']);
+    expect(b.used).toBe(11);
+    expect(budgetSummary(b.items)).toEqual(['Pass ×5', 'Optical Flow ×1 (2 passes)', 'Feedback (texture) ×3', 'Memory nodes (1, shared by 1)']);
     const r = compileGraph({ nodes });
     expect(r.success).toBe(false);
     expect(r.errors![0]).toBe(overBudgetMessage(b));
-    expect(r.errors![0]).toMatch(/^This graph needs 10 of 8 passes: Pass ×5, Optical Flow ×1 \(2 passes\), Feedback \(texture\) ×2, Memory nodes \(1, shared by 1\)\. Remove some/);
+    expect(r.errors![0]).toMatch(/^This graph needs 11 passes, and 10 is the most \(8 at full quality\): Pass ×5, Optical Flow ×1 \(2 passes\), Feedback \(texture\) ×3, Memory nodes \(1, shared by 1\)\. Remove some/);
+    // One fewer is the grace zone: it compiles, and the Memory and Optical Flow passes keep their size.
+    const ten = compileGraph({ nodes: nodes.filter(x => x.id !== 'fb3').map(x => (x.id === 'mix' ? n('addColor', 'mix', 0, 0, {}, { a: ['fb2', 'color'], b: ['of', 'color'] }) : x)) });
+    expect(ten.errors).toBeUndefined();
+    const passes = ten.passes!.filter(p => !p.hidden);
+    expect(passes).toHaveLength(10);
+    expect(passes.filter(p => p.full).map(p => p.nodeId).sort()).toEqual(['fb1', 'fb2', 'p0', 'p1', 'p2', 'p3', 'p4']);
   });
 });
 

@@ -24,6 +24,7 @@ import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
 import { useViewport } from '../../../lib/viewport';
 import { n } from '../../../store/graphBuilder';
 import { passBudget } from '../../../compiler/passBudget';
+import { requestShowPasses } from '../../../store/passLock';
 import type { GraphNode } from '../../../types/nodeGraph';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -57,12 +58,43 @@ describe('Pass budget chip', () => {
     expect(chip(host!)!.textContent).toBe('Passes 3/8');
   });
 
-  it('colours: plain, amber with one left (and at the limit), red over', () => {
-    for (const [count, level] of [[6, 'ok'], [7, 'warn'], [8, 'warn'], [9, 'over']] as const) {
+  it('colours: plain, amber with one left (and at the limit), amber ½ in grace, red past 10', () => {
+    for (const [count, level] of [[6, 'ok'], [7, 'warn'], [8, 'warn'], [9, 'grace'], [10, 'grace'], [11, 'over']] as const) {
       act(() => useNodeGraphStore.getState().replaceGraph(passes(count)));
       if (!host) render(<PassBudgetChip />);
       expect(chip(host!)!.getAttribute('data-pass-budget'), String(count)).toBe(level);
+      expect(!!chip(host!)!.querySelector('[data-pass-grace-badge]'), String(count)).toBe(level === 'grace');
     }
+  });
+
+  it('grace: the chip and its panel say lower quality, and lock at 10', () => {
+    useNodeGraphStore.getState().replaceGraph(passes(9));
+    const h = render(<PassBudgetChip />);
+    expect(chip(h)!.textContent).toBe('Passes 9/8½');
+    expect(chip(h)!.querySelector('button')!.getAttribute('aria-label')).toBe('Passes 9 of 8: Passes 9/8 · lower quality (grace 1 of 2)');
+    act(() => chip(h)!.querySelector('button')!.click());
+    let panel = document.querySelector('[data-pass-budget-panel]')!;
+    expect(panel.querySelector('[data-pass-budget-headline]')!.textContent).toBe('9 of 8 · lower quality (grace 1 of 2)');
+    expect(panel.querySelector('[data-pass-budget-grace]')!.textContent).toMatch(/half resolution\. Exports still render at full quality\.$/);
+    act(() => useNodeGraphStore.getState().replaceGraph(passes(10)));
+    panel = document.querySelector('[data-pass-budget-panel]')!;
+    expect(panel.querySelector('[data-pass-budget-headline]')!.textContent).toBe('10 of 8 · lower quality (grace 2 of 2) · passes locked');
+    expect(panel.querySelector('[data-pass-budget-grace]')!.textContent).toContain('10 is the most');
+  });
+
+  it('past 10 (a graph loaded that way): red, and over the limit of 10', () => {
+    useNodeGraphStore.getState().replaceGraph(passes(12));
+    const h = render(<PassBudgetChip />);
+    act(() => chip(h)!.querySelector('button')!.click());
+    expect(document.querySelector('[data-pass-budget-headline]')!.textContent).toBe('12 passes: 2 over the limit of 10');
+  });
+
+  it("the lock's Show passes opens the panel", () => {
+    useNodeGraphStore.getState().replaceGraph(passes(10));
+    render(<PassBudgetChip />);
+    expect(document.querySelector('[data-pass-budget-panel]')).toBeNull();
+    act(() => requestShowPasses());
+    expect(document.querySelector('[data-pass-budget-panel]')).not.toBeNull();
   });
 
   it('the popover: a row per node (jumps to it), shared rows, the hidden passes line, why', () => {
@@ -101,8 +133,19 @@ describe('Pass budget chip', () => {
 
 describe('Library note', () => {
   it('says what a node costs, and nothing for one that costs none', () => {
+    useNodeGraphStore.getState().replaceGraph(passes(0));
     expect(render(<PassCostNote type="opticalFlow" />).textContent).toBe('Uses 2 passes (of 8)');
     act(() => root!.render(<PassCostNote type="circleSDF" />));
     expect(host!.textContent).toBe('');
+  });
+
+  it('at 10 passes, a node that adds one is locked', () => {
+    useNodeGraphStore.getState().replaceGraph(passes(10));
+    const h = render(<PassCostNote type="pass" />);
+    expect(h.textContent).toBe('Locked: 10 of 10 passes');
+    expect(h.querySelector('[data-pass-locked]')).not.toBeNull();
+    // Removing one unlocks it at once.
+    act(() => useNodeGraphStore.getState().removeNode('p3'));
+    expect(h.textContent).toBe('Uses 1 pass (of 8)');
   });
 });

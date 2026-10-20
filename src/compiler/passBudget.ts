@@ -1,6 +1,11 @@
 /**
  * passBudget.ts — the pass account: how many of a graph's MAX_PASSES it uses, and what for.
  *
+ * Up to MAX_PASSES (8) every pass draws at full quality. The next GRACE_PASSES (2) are the grace zone: the
+ * compile still runs, and in the live preview each full-size pass draws at half size (graceScale);
+ * exports render at full size. HARD_MAX_PASSES (10) is the compile's limit and the lock line: the store
+ * refuses any change that would take a graph past it (store/passLock.ts). docs/pass-node-plan.md.
+ *
  * Many nodes are passes once compiled (a Pass, a Shader Texture, a Feedback (texture), a Data Texture,
  * Render Targets, each Grid Rules board, Optical Flow's two, the shared Memory and value-probe passes,
  * a Smooth lens, a Sprite from a picture that isn't a Pass's). The count here is the count the compile
@@ -11,7 +16,7 @@
  * Cheap: no shader is generated. Memoised by the node list (the store replaces it on every change).
  */
 import type { GraphNode } from '../types/nodeGraph';
-import { MAX_PASSES, PASS_TYPE, expandPassNodes } from './passExpand';
+import { GRACE_PASSES, HARD_MAX_PASSES, MAX_PASSES, PASS_TYPE, expandPassNodes } from './passExpand';
 import { MEMORY_PASS_ID, isMemoryNode } from './memoryExpand';
 import { PROBE_PASS_ID, isProbe, textNeedsProbe } from './probeExpand';
 import { MAX_HIDDEN_PASSES } from './blurPasses';
@@ -19,7 +24,7 @@ import { hiddenPlanOf } from './hiddenBlurs';
 import { getNodeDefinition, getNodeDefinitionFor } from '../nodes/definitions';
 import { instantiateNode } from '../nodes/scene3dDefaults';
 
-export { MAX_PASSES, MAX_HIDDEN_PASSES };
+export { GRACE_PASSES, HARD_MAX_PASSES, MAX_PASSES, MAX_HIDDEN_PASSES };
 
 /** One line of the account: a node of the graph (or, shared, a set of them) and the passes it costs. */
 export interface PassBudgetItem {
@@ -166,9 +171,65 @@ function computeBudget(nodes: GraphNode[]): PassBudget {
   return { used, max: MAX_PASSES, items, hidden: { used: hiddenUsed, max: MAX_HIDDEN_PASSES, items: hiddenItems } };
 }
 
-/** "ok" below the last pass, "warn" with one (or none) left, "over" past the limit. */
-export function budgetLevel(used: number, max = MAX_PASSES): 'ok' | 'warn' | 'over' {
-  return used > max ? 'over' : used >= max - 1 ? 'warn' : 'ok';
+/** The chip's state: the pass budget's level for `used` passes. */
+export type BudgetLevel = 'ok' | 'warn' | 'grace' | 'over';
+
+/**
+ * "ok" below the last full-quality pass, "warn" with one (or none) left, "grace" past `max` (lower quality in
+ * the preview, up to `hard`), "over" past `hard` (the compile fails).
+ */
+export function budgetLevel(used: number, max = MAX_PASSES, hard = max + GRACE_PASSES): BudgetLevel {
+  return used > hard ? 'over' : used > max ? 'grace' : used >= max - 1 ? 'warn' : 'ok';
+}
+
+/** Adding a pass is locked: the graph is at (or past) HARD_MAX_PASSES. */
+export const passesLocked = (used: number): boolean => used >= HARD_MAX_PASSES;
+
+/**
+ * The lock (docs/pass-node-plan.md, "Grace and the lock"): would going from `prev` to `next` take the graph
+ * past HARD_MAX_PASSES? Only a change that adds passes is refused, so a graph loaded already over the limit
+ * can still have passes removed. Memoised through passBudget.
+ */
+export function wouldExceedPasses(next: GraphNode[], prev?: GraphNode[]): { used: number; before: number } | null {
+  const used = passBudget(next).used;
+  if (used <= HARD_MAX_PASSES) return null;
+  const before = prev ? passBudget(prev).used : 0;
+  return used > before ? { used, before } : null;
+}
+
+/** The lock's refusal, for a toast. */
+export function passLockMessage(used: number): string {
+  return `Locked: this would need ${used} passes, and ${HARD_MAX_PASSES} is the most.`;
+}
+
+/** The smallest size grace halves a fixed-size Shader Texture to. */
+export const GRACE_MIN_SIZE = 128;
+
+/** What graceScale needs to know about one expanded Pass node. */
+export interface GraceCandidate {
+  id: string;
+  /** Its Scale (1, 0.5, …). */
+  scale: number;
+  /** A Shader Texture's fixed size in pixels, or null. */
+  size: number | null;
+  format: string;
+  /** Its target holds data, not a picture (a Data Texture's pack, a 32-bit float MRT target): never resized. */
+  data?: boolean;
+}
+
+/** Expanded passes that hold a simulation at a set size: grace never resizes them (Grid Rules, Optical Flow). */
+const KEEP_SIZE = /__(cells|pic|ofluma|ofpass)$/;
+
+/**
+ * In the grace zone, the size one pass draws at in the live preview, or null when it is left as it is.
+ * A full-size pass (Scale 1) draws at half; a fixed-size Shader Texture halves, never below GRACE_MIN_SIZE.
+ * Left alone: passes already at ½ or below, Memory and Values at points, Grid Rules boards, Optical Flow's
+ * passes, Data Textures and 32-bit float (data) targets. Blur / Glow hidden passes are never Pass nodes.
+ */
+export function graceScale(p: GraceCandidate): { scale: number; size?: number } | null {
+  if (p.id === MEMORY_PASS_ID || p.id === PROBE_PASS_ID || KEEP_SIZE.test(p.id) || p.data || p.format === 'float') return null;
+  if (p.size !== null) return p.size > GRACE_MIN_SIZE ? { scale: p.scale, size: Math.max(GRACE_MIN_SIZE, Math.round(p.size / 2)) } : null;
+  return p.scale === 1 ? { scale: 0.5 } : null;
 }
 
 /** The items summed by kind: "Pass ×5", "Optical Flow ×1 (2 passes)", "Memory nodes (1, shared)". */
@@ -185,11 +246,14 @@ export function budgetSummary(items: PassBudgetItem[]): string[] {
     : k.cost === k.count ? `${kind} ×${k.count}` : `${kind} ×${k.count} (${k.cost} passes)`));
 }
 
-/** The over-limit error, itemised from the same account. */
-export function overBudgetMessage(b: Pick<PassBudget, 'used' | 'max' | 'items'>): string {
+/** The over-limit error (past HARD_MAX_PASSES), itemised from the same account. */
+export function overBudgetMessage(b: Pick<PassBudget, 'used' | 'items'>): string {
   const repeat = b.items.some(i => i.type === PASS_TYPE) ? ', or let one Pass draw several steps with its Repeat setting' : '';
-  return `This graph needs ${b.used} of ${b.max} passes: ${budgetSummary(b.items).join(', ')}. Remove some of them${repeat}. (Blur and Glow use hidden passes of their own and don't count.)`;
+  return `This graph needs ${b.used} passes, and ${HARD_MAX_PASSES} is the most (${MAX_PASSES} at full quality): ${budgetSummary(b.items).join(', ')}. Remove some of them${repeat}. (Blur and Glow use hidden passes of their own and don't count.)`;
 }
+
+/** What the grace zone means (the chip's panel, the docs). */
+export const GRACE_WHY = `Past ${MAX_PASSES}, up to ${GRACE_PASSES} more passes are allowed at lower quality: in the preview, each full-size pass draws at half resolution. Exports still render at full quality.`;
 
 /** Why there is a limit, in one sentence (the toolbar popover and docs). */
 export const PASS_LIMIT_WHY = 'Each pass renders the whole picture into a texture of its own every frame, and a shader can only read so many textures at once.';

@@ -16,8 +16,13 @@ export interface PassProgram {
   reads: string[];
   /** Slugs of the passes whose previous frame this program samples. */
   readsPrevious: string[];
-  /** Size relative to the picture: 1, 0.5, 0.25 or 0.125. */
+  /** Size relative to the picture: 1, 0.5, 0.25 or 0.125 (in the grace zone, the live preview's: see `full`). */
   scale: number;
+  /**
+   * The grace zone (more than MAX_PASSES passes, compiler/passBudget.ts graceScale): the live preview draws this
+   * pass smaller (`scale` / `size`), and exports draw it at this, its full size. Only present when it was halved.
+   */
+  full?: { scale: number; size?: number };
   /** Float: 32-bit (RGBA32F), for data such as positions; half where the GPU can't draw into it. */
   format: 'half' | 'byte' | 'float';
   /** MRT (docs/render-targets.md): more targets drawn in the same draw, each with its own precision and filter. */

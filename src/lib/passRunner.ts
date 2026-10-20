@@ -79,16 +79,27 @@ const WRAP: Record<PassProgram['wrap'], THREE.Wrapping> = {
   clamp: THREE.ClampToEdgeWrapping, repeat: THREE.RepeatWrapping, mirror: THREE.MirroredRepeatWrapping,
 };
 
+/**
+ * A pass's size for a set of targets: the live preview's (`scale` / `size`, smaller in the pass grace zone), or,
+ * with `full` (an export), the size it has outside grace (PassProgram.full).
+ */
+export function passTargetSize(p: PassProgram, full: boolean): PassProgram {
+  return full && p.full ? { ...p, scale: p.full.scale, size: p.full.size } : p;
+}
+
 /** One set of textures for the passes: the live preview's, or an offline render's. */
 export class PassTargets {
   private targets = new Map<string, Target>();
   private renderer: THREE.WebGLRenderer;
   private halfFloat: boolean;
+  /** An export's: passes the grace zone halves in the preview draw at full size here. */
+  private full: boolean;
 
-  constructor(renderer: THREE.WebGLRenderer, halfFloat: boolean) { this.renderer = renderer; this.halfFloat = halfFloat; }
+  constructor(renderer: THREE.WebGLRenderer, halfFloat: boolean, opts?: { full?: boolean }) { this.renderer = renderer; this.halfFloat = halfFloat; this.full = opts?.full === true; }
 
   /** The pass's targets for a picture of w × h, made (and cleared) when its size or settings change. */
-  ensure(p: PassProgram, w: number, h: number): Target {
+  ensure(spec: PassProgram, w: number, h: number): Target {
+    const p = passTargetSize(spec, this.full);
     const key = ppTargetKey(p, w, h);
     let t = this.targets.get(p.slug);
     if (t && t.key === key) return t;
