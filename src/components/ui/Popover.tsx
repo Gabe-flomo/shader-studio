@@ -14,9 +14,12 @@ const MARGIN = 8;
  * `clearRef` names an element the panel must not cover (a node card whose sockets and
  * footer would otherwise disappear under it): the panel then opens beside that element,
  * level with the anchor, and only falls back to below it when neither side has room.
+ *
+ * `keepInView`: for a panel whose content grows after it opens (sections that unfold), it moves
+ * up as it grows so its bottom stays on screen.
  */
 export function Popover({
-  anchorRef, clearRef, onClose, align = 'start', width, children, padding = 4,
+  anchorRef, clearRef, onClose, align = 'start', width, children, padding = 4, keepInView = false,
 }: {
   anchorRef: RefObject<HTMLElement | null>;
   clearRef?: RefObject<HTMLElement | null>;
@@ -25,6 +28,7 @@ export function Popover({
   width?: number;
   children: ReactNode;
   padding?: number;
+  keepInView?: boolean;
 }) {
   const tk = useTokens();
   const ref = useRef<HTMLDivElement>(null);
@@ -58,6 +62,18 @@ export function Popover({
     ref.current!.style.left = `${left}px`;
     ref.current!.style.top = `${top}px`;
   }, [anchorRef, clearRef, align]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!keepInView || !el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => {
+      const r = el.getBoundingClientRect();
+      const vh = window.innerHeight;
+      if (r.bottom > vh - MARGIN) el.style.top = `${Math.max(MARGIN, vh - MARGIN - r.height)}px`;
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [keepInView]);
 
   useEffect(() => {
     const onDown = (e: PointerEvent) => {

@@ -22,6 +22,7 @@ if (typeof document !== 'undefined' && !document.getElementById('gs-anim')) {
 }
 import type { GraphNode, DataType, NodeDefinition, ParamDef } from '../../types/nodeGraph';
 import { TYPE_COLORS } from './typeColors';
+import { NodeInfoCard } from './NodeInfoCard';
 import { ShapeCostNote } from './ShapeCostNote';
 import { getNodeDefinitionFor } from '../../nodes/definitions';
 import { extendRangePatch, hasCustomRange, paramSliderRange, resetRangePatch } from '../../nodes/sliderRange';
@@ -100,7 +101,6 @@ import type { SurfacedParam, SubgraphData } from '../../types/nodeGraph';
 import { Menu } from '../ui/Menu';
 import { computeNodeSlug } from '../../compiler/nodeSlug';
 import { getUserNode } from '../../nodes/userNodes/userNodeRegistry';
-import { DocText } from '../ui/DocText';
 import { InsertLinkButton, LinkedText } from '../ui/Links';
 import { CreditLink } from '../ui/Credit';
 import { CreditEditor } from '../ui/CreditEditor';
@@ -296,11 +296,12 @@ function formatVal(v: number | number[] | undefined, type: string): string | nul
   return (v as number).toFixed(3);
 }
 
-function NodeTooltip({ def, node, allNodes }: { def: NodeDefinition; node: GraphNode; allNodes: GraphNode[] }) {
+function NodeTooltip({ def, node, allNodes, anchorRef, clearRef, onClose }: {
+  def: NodeDefinition; node: GraphNode; allNodes: GraphNode[];
+  anchorRef: React.RefObject<HTMLElement | null>; clearRef: React.RefObject<HTMLElement | null>; onClose: () => void;
+}) {
   const tc = useCtp();
-  const tk = useTokens();
-  const inputEntries  = Object.entries(def.inputs);
-  const outputEntries = Object.entries(Object.keys(node.outputs).length ? node.outputs : def.outputs);
+  const outputs = Object.keys(node.outputs).length ? node.outputs : def.outputs;
 
   function getInputInfo(k: string, type: string): React.ReactNode {
     const sock = node.inputs[k];
@@ -333,116 +334,16 @@ function NodeTooltip({ def, node, allNodes }: { def: NodeDefinition; node: Graph
     return null;
   }
 
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        top: '100%',
-        left: 0,
-        zIndex: 1000,
-        background: tk.bg.panel,
-        borderRadius: radius.lg,
-        padding: '12px 14px',
-        width: 340,
-        boxSizing: 'border-box',
-        font: `12px/1.45 ${fontFamily.ui}`,
-        color: tk.text.primary,
-        pointerEvents: 'none',
-        boxShadow: tk.shadow.popover,
-        marginTop: 6,
-      }}
-    >
-      <div style={{ fontWeight: 600, marginBottom: 4, fontSize: 13.5 }}>{def.label}</div>
-      {def.brief ? (
-        // A short card (NodeDefinition.brief): what it is, how to start; sockets by name; settings explain themselves.
-        <>
-          <DocText text={def.brief.summary} style={{ color: tc.subtext0, marginBottom: 8 }} />
-          <div style={{ color: tk.text.faint, fontSize: 10, fontWeight: 700, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.08em' }}>How to start</div>
-          <DocText text={def.brief.start.map(s => `- ${s}`).join('\n')} style={{ color: tc.subtext0, marginBottom: 8 }} />
-          <div style={{ color: tk.text.faint, fontSize: 10, fontWeight: 700, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Sockets</div>
-          <div style={{ color: tc.subtext0, fontSize: 11.5, marginBottom: 6 }}>
-            In: {inputEntries.filter(([k]) => !def.socketsOnDemand || !(k in def.socketsOnDemand)).map(([, s]) => s.label).join(', ')}. Right-click a setting → Control from outside to give it a socket too.
-            {' '}Out: {outputEntries.map(([, s]) => s.label).join(', ')}.
-          </div>
-          <div style={{ color: tk.text.faint, fontSize: 11 }}>Hover a setting's ? for what it does.</div>
-        </>
-      ) : <>
-      {def.description && (
-        <DocText text={Array.isArray(def.description) ? (def.description as string[]).join('\n') : def.description} style={{ color: tc.subtext0, marginBottom: 8 }} />
-      )}
-      {inputEntries.length > 0 && (
-        <div style={{ marginBottom: 5 }}>
-          <div style={{ color: tk.text.faint, fontSize: 10, fontWeight: 700, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Inputs</div>
-          {inputEntries.map(([k, s]) => {
-            const info = getInputInfo(k, s.type);
-            return (
-              <div key={k} style={{ paddingLeft: 4, marginBottom: s.hint ? 4 : 1 }}>
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                  <span style={{ color: tc.blue, fontFamily: fontFamily.mono, fontSize: 11, minWidth: 60 }}>{s.label}</span>
-                  <span style={{ color: tc.surface2, fontSize: 11, minWidth: 34 }}>{s.type}</span>
-                  {info}
-                </div>
-                {s.hint && <DocText text={s.hint} style={{ color: tc.subtext0, fontSize: 11.5, paddingLeft: 8, marginTop: 1 }} />}
-              </div>
-            );
-          })}
-        </div>
-      )}
-      {outputEntries.length > 0 && (
-        <div style={{ marginBottom: def.glslFunction ? 8 : 0 }}>
-          <div style={{ color: tk.text.faint, fontSize: 10, fontWeight: 700, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Outputs</div>
-          {outputEntries.map(([k, s]) => {
-            // Show probed float output value if available
-            const probed = s.type === 'float' ? floatValueRegistry.get(`__preview__${node.id}`) : undefined;
-            const liveVal = probed !== undefined ? probed.toFixed(3) : null;
-            return (
-              <div key={k} style={{ paddingLeft: 4, marginBottom: s.hint ? 4 : 1 }}>
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                  <span style={{ color: tc.green, fontFamily: fontFamily.mono, fontSize: 11, minWidth: 60 }}>{s.label}</span>
-                  <span style={{ color: tc.surface2, fontSize: 11, minWidth: 34 }}>{s.type}</span>
-                  {liveVal && <span style={{ color: tc.yellow, fontFamily: fontFamily.mono, fontSize: 11 }}>{liveVal}</span>}
-                </div>
-                {s.hint && <DocText text={s.hint} style={{ color: tc.subtext0, fontSize: 11.5, paddingLeft: 8, marginTop: 1 }} />}
-              </div>
-            );
-          })}
-        </div>
-      )}
-      {(() => {
-        // Sliders that aren't also sockets, with their docstrings (user nodes
-        // document these in the publish dialog; built-ins via paramDef.hint).
-        const sliders = Object.entries(def.paramDefs ?? {}).filter(([k, pd]) => !(k in def.inputs) && pd.hint);
-        if (sliders.length === 0) return null;
-        return (
-          <div style={{ marginBottom: def.glslFunction ? 8 : 0 }}>
-            <div style={{ color: tk.text.faint, fontSize: 10, fontWeight: 700, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Sliders</div>
-            {sliders.map(([k, pd]) => (
-              <div key={k} style={{ paddingLeft: 4, marginBottom: 4 }}>
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                  <span style={{ color: tc.mauve, fontFamily: fontFamily.mono, fontSize: 11, minWidth: 60 }}>{pd.label}</span>
-                  {pd.min !== undefined && pd.max !== undefined && <span style={{ color: tc.surface2, fontSize: 11 }}>{pd.min} – {pd.max}</span>}
-                </div>
-                <DocText text={pd.hint!} style={{ color: tc.subtext0, fontSize: 11.5, paddingLeft: 8, marginTop: 1 }} />
-              </div>
-            ))}
-          </div>
-        );
-      })()}
-      {def.glslFunction && (
-        <div>
-          <div style={{ color: tk.text.faint, fontSize: 10, fontWeight: 700, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.08em' }}>GLSL</div>
-          <pre style={{
-            background: tk.bg.field, borderRadius: radius.sm, padding: '6px 8px',
-            fontSize: 10.5, color: tk.text.secondary, margin: 0,
-            maxHeight: '120px', overflowY: 'auto', whiteSpace: 'pre', fontFamily: fontFamily.mono,
-          }}>
-            {def.glslFunction.slice(0, 500)}
-          </pre>
-        </div>
-      )}
-      </>}
-    </div>
-  );
+  // Live values beside each row: an input's wire or value, a float output's probe.
+  const extras = {
+    inputs: Object.fromEntries(Object.entries(def.inputs).map(([k, s]) => [k, getInputInfo(k, s.type)])),
+    outputs: Object.fromEntries(Object.entries(outputs).map(([k, s]) => {
+      const probed = s.type === 'float' ? floatValueRegistry.get(`__preview__${node.id}`) : undefined;
+      return [k, probed !== undefined ? <span style={{ color: tc.yellow, fontFamily: fontFamily.mono, fontSize: 11 }}>{probed.toFixed(3)}</span> : null];
+    })),
+  };
+  const title = node.type === 'customFn' && typeof node.params.label === 'string' && node.params.label ? node.params.label : def.label;
+  return <NodeInfoCard def={def} outputs={outputs} extras={extras} title={title} anchorRef={anchorRef} clearRef={clearRef} onClose={onClose} onExampleOpened={onClose} />;
 }
 
 // ─── Socket tooltip ──────────────────────────────────────────────────────────
@@ -871,22 +772,16 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   // eslint-disable-next-line react-hooks/exhaustive-deps -- once per request
   }, [codeJump]);
   const [zIndex, setZIndex] = useState(1);
-  // Info tooltip: close on any click outside the tooltip itself or the info
-  // button that opened it (button is excluded so its own onClick toggle isn't
-  // immediately undone by this — mousedown fires before click).
+  // Node info (NodeInfoCard): a pop-up beside the card, anchored on the ⓘ; it closes itself on
+  // Esc or a press outside (the ⓘ excluded, so its own toggle isn't undone). On closing, focus
+  // goes back to the ⓘ when it was inside the pop-up.
   const infoButtonRef = useRef<HTMLSpanElement>(null);
-  const nodeTooltipRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!showNodeTooltip) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (infoButtonRef.current?.contains(target)) return;
-      if (nodeTooltipRef.current?.contains(target)) return;
-      setShowNodeTooltip(false);
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showNodeTooltip]);
+  const infoCardElRef = useRef<HTMLElement | null>(null);
+  const closeNodeInfo = useCallback(() => {
+    const back = document.activeElement?.closest?.('[data-node-info]');
+    setShowNodeTooltip(false);
+    if (back) infoButtonRef.current?.querySelector('button')?.focus({ preventScroll: true });
+  }, []);
   // Comment text lives in node.params.__comment — same "__-prefixed metadata,
   // not a real shader param" convention already used by __codeOverride.
   const nodeComment = typeof node.params.__comment === 'string' ? (node.params.__comment as string) : '';
@@ -3089,7 +2984,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         {/* From the GLSL → nodes converter: code it kept as code, or a node that isn't quite the GLSL it stands for */}
         {!!node.params.__importedCode && <span title="From imported GLSL: the converter kept this part as code. Open it to keep refactoring by hand."><CardBadge tone="muted">FROM CODE</CardBadge></span>}
         {typeof node.params.__importWarning === 'string' && <span title={`From imported GLSL, not quite the same: ${node.params.__importWarning}`}><CardBadge>≈</CardBadge></span>}
-        {showNodeTooltip && <div ref={nodeTooltipRef}><NodeTooltip def={def} node={node} allNodes={nodes} /></div>}
+        {showNodeTooltip && <NodeTooltip def={def} node={node} allNodes={nodes} anchorRef={infoButtonRef} clearRef={infoCardElRef} onClose={closeNodeInfo} />}
         <div style={{ display: 'flex', gap: 1, alignItems: 'center', flexShrink: 0 }} onDoubleClick={e => e.stopPropagation()}>
           {plan.eye && (
             <CardButton icon="eye" tint="success" on={isPreviewActive}
@@ -4418,7 +4313,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       >
         <span ref={infoButtonRef} style={{ display: 'inline-flex' }}>
           <CardButton icon="info" on={showNodeTooltip} label={showNodeTooltip ? 'Hide node info' : 'Node info'}
-            onClick={() => (showNodeTooltip ? setShowNodeTooltip(false) : toggleNodeCard(infoButtonRef.current?.querySelector('button') ?? null, node.id, () => setShowNodeTooltip(true)))} />
+            onClick={() => (showNodeTooltip ? setShowNodeTooltip(false) : toggleNodeCard(infoButtonRef.current?.querySelector('button') ?? null, node.id, () => { infoCardElRef.current = infoButtonRef.current?.closest<HTMLElement>('[data-node-id]') ?? null; setShowNodeTooltip(true); }))} />
         </span>
         <CardButton icon="comment" tint="success" on={showCommentEditor || !!nodeComment}
           label={nodeComment ? 'Edit comment' : 'Add a comment'}
