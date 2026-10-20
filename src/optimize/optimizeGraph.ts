@@ -69,7 +69,7 @@ const NEVER = new Set(['output', 'vec4Output', 'group', 'sceneGroup', 'spaceWarp
   'agentsGroup', 'agentInputs', 'agentOutput', 'agentStepOut', 'agentSense', 'agentSteer', 'agentMove', 'agentBySpecies', 'agentEmit', 'agentDeposit', 'trailField', 'drawAgents', 'slimeMoldPreset',
   'agentGravity', 'agentWind', 'agentCurl', 'agentAttract', 'agentVortex', 'agentFlow', 'agentSoundKick', 'agentIntegrate', 'agentAge', 'agentCollide', 'agentChladni',
   'particlesPreset', 'curlSmokePreset', 'soundBurstPreset',
-  'trailStepOut', 'agentProbeOut', 'splatProbeOut', 'agentCollideScene', 'agentGridOut', 'agentNeighbours', 'agentRideCurve', 'agentRidePath', 'multiSlimePreset', 'antsPreset', 'boidsPreset', 'strandsPreset', 'growPicturePreset',
+  'trailStepOut', 'agentProbeOut', 'splatProbeOut', 'agentCollideScene', 'agentFollowScene', 'agentGridOut', 'agentNeighbours', 'agentRideCurve', 'agentRidePath', 'multiSlimePreset', 'antsPreset', 'boidsPreset', 'strandsPreset', 'growPicturePreset',
   'galaxyPreset', 'myceliumPreset', 'sandPlatePreset',
   'agentTurnToward', 'agentFollowTrail', 'agentWander', 'agentOrbit', 'agentAvoidWalls', 'agentApplyForce', 'agentDrag', 'agentSlowInCrowd', 'agentLeaveTrail', 'agentFadeWithAge',
   // Per-splat modifiers (docs/splat-scene.md): they read a modifier program's per-splat globals

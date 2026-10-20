@@ -91,6 +91,8 @@ const CONNECTION_GATED = new Set([
   'agentFlow.strength', 'agentFlow.step', 'agentCollide.margin', 'agentCollide.cushion', 'agentCollide.bounce', 'agentCollide.friction',
   // Collide (3D scene) works only in a 3D group (alone it passes the walker through); the engine reads its place (x, y, z, reach)
   ...Object.keys(NODE_REGISTRY.agentCollideScene.paramDefs ?? {}).map(k => `agentCollideScene.${k}`),
+  // … and so does Follow surface (3D Scene), on the same grid
+  ...Object.keys(NODE_REGISTRY.agentFollowScene.paramDefs ?? {}).map(k => `agentFollowScene.${k}`),
   // Time Cube View and Time Slice (docs/time-cube.md) draw only their background / black, and read none of
   // their other settings, until a Time Cube's Volume is wired
   ...Object.keys(NODE_REGISTRY.timeCubeView.paramDefs ?? {}).filter(k => k !== 'background').map(k => `timeCubeView.${k}`),

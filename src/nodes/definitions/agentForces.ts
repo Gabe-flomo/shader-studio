@@ -677,6 +677,8 @@ export const AgentCollideNode: NodeDefinition = {
     shape: { type: 'float', label: 'Shape ƒ', field: true, hint: 'A signed distance: negative inside the shape (an SDF node\'s Distance).' },
     position: { type: 'vec2', label: 'Position', hint: 'Integrate\'s Position. ' + THIS_AGENT },
     velocity: { type: 'vec2', label: 'Velocity', hint: 'Integrate\'s Velocity. ' + THIS_AGENT },
+    bounce: { type: 'float', label: 'Bounce', hint: 'Overrides Bounce (a number chain: Combine\'s one-line expression goes here).' },
+    friction: { type: 'float', label: 'Friction', hint: 'Overrides Friction.' },
   },
   outputs: {
     position: { type: 'vec2', label: 'Position' },
@@ -708,7 +710,7 @@ export const AgentCollideNode: NodeDefinition = {
           ...gradientLines(id, fn, `${id}_p.xy`, '0.002'),
           `    float ${id}_gl = length(${id}_gr);\n`,
           `    vec3 ${id}_n = ${id}_gl > 1e-6 ? vec3(${id}_gr / ${id}_gl, 0.0) : vec3(0.0);\n`,
-          ...collideLines(id, margin, cushion, p(node.params.bounce, 0), p(node.params.friction, 0.03)),
+          ...collideLines(id, margin, cushion, v.bounce ?? p(node.params.bounce, 0), v.friction ?? p(node.params.friction, 0.03)),
         ].join(''),
         outputVars: { position: `${id}_p`, velocity: `${id}_v`, hit: `${id}_hit`, distance: `${id}_dd` },
       };
@@ -726,8 +728,8 @@ export const AgentCollideNode: NodeDefinition = {
         // Out to the surface, the inward part of the velocity gone (or turned round by Bounce), a little friction.
         `        ${id}_p += ${id}_n * (${margin} - ${id}_dd);\n`,
         `        float ${id}_vn = dot(${id}_v, ${id}_n);\n`,
-        `        if (${id}_vn < 0.0) ${id}_v -= (1.0 + ${p(node.params.bounce, 0)}) * ${id}_vn * ${id}_n;\n`,
-        `        ${id}_v *= 1.0 - ${p(node.params.friction, 0.03)};\n`,
+        `        if (${id}_vn < 0.0) ${id}_v -= (1.0 + ${v.bounce ?? p(node.params.bounce, 0)}) * ${id}_vn * ${id}_n;\n`,
+        `        ${id}_v *= 1.0 - ${v.friction ?? p(node.params.friction, 0.03)};\n`,
         `        ${id}_hit = 1.0;\n`,
         `    } else if (${id}_dd < ${cushion} && ${id}_gl > 1e-6) {\n`,
         // A cushion just outside, so a stream parts before it touches.
@@ -772,6 +774,8 @@ export const AgentCollideSceneNode: NodeDefinition = {
     scene: { type: 'scene3d', label: 'Scene', hint: 'A Scene Group\'s Scene, through a port added to the group (Agent Inputs → + Add an input from outside → Scene). The same Scene the March Loop draws.' },
     position: { type: 'vec3', label: 'Position', hint: 'Integrate\'s Position. ' + THIS_AGENT },
     velocity: { type: 'vec3', label: 'Velocity', hint: 'Integrate\'s Velocity. ' + THIS_AGENT },
+    bounce: { type: 'float', label: 'Bounce', hint: 'Overrides Bounce (a number chain: Combine\'s one-line expression goes here).' },
+    friction: { type: 'float', label: 'Friction', hint: 'Overrides Friction.' },
   },
   outputs: {
     position: { type: 'vec3', label: 'Position' },
@@ -823,8 +827,8 @@ export const AgentCollideSceneNode: NodeDefinition = {
         `            if (${id}_dd < ${margin}) {\n`,
         `                ${id}_p += ${id}_n * (${margin} - ${id}_dd);\n`,
         `                float ${id}_vn = dot(${id}_v, ${id}_n);\n`,
-        `                if (${id}_vn < 0.0) ${id}_v -= (1.0 + ${p(node.params.bounce, 0)}) * ${id}_vn * ${id}_n;\n`,
-        `                ${id}_v *= 1.0 - ${p(node.params.friction, 0.03)};\n`,
+        `                if (${id}_vn < 0.0) ${id}_v -= (1.0 + ${v.bounce ?? p(node.params.bounce, 0)}) * ${id}_vn * ${id}_n;\n`,
+        `                ${id}_v *= 1.0 - ${v.friction ?? p(node.params.friction, 0.03)};\n`,
         `                ${id}_hit = 1.0;\n`,
         `            } else ${id}_v += ${id}_n * (${cushion} - ${id}_dd) * 5.0 * a_dt;\n`,
         `        }\n`,

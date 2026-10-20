@@ -5,9 +5,10 @@
  * The spec lives on the top glue node's params (`combine`, apply.ts); the products keep their own builders' specs, so
  * "Edit product" opens the 3D builder on a 3D layer as it would anywhere. Combine owns only the glue between them.
  *
- * Phase 1 builds two verbs: Place in (every pair of docs/combine-plan.md §2.1 but "on a shape"), and Replace mask
- * with, one fill for all. The other verbs are in the matrix (VERB_MATRIX) but not offered yet (`built: false`).
- * Pure: no store, no graph.
+ * Phase 1 built two verbs: Place in (every pair of docs/combine-plan.md §2.1 but "on a shape"), and Replace mask
+ * with, one fill for all. Phase 2 adds Collide with and Follow the shape (points on a 2D shape or in a 3D scene) and
+ * one-line expressions on a verb's numbers (`exprs`, `sliders`). The other verbs are in the matrix (verbsFor) but not
+ * offered yet (`built: false`). Pure: no store, no graph.
  */
 import type { SceneKind } from '../builders/sceneKinds';
 import type { DepthBakeInfo } from '../nodes/definitions/depth';
@@ -53,8 +54,10 @@ export interface CombineLayer {
   on?: string;
   /** The verb's own settings (VERB_SETTINGS lists them per verb and pair). */
   settings: Record<string, SettingValue>;
-  /** Param → a one-line expression (phase 2, docs/combine-plan.md §2.8). */
+  /** Setting → a one-line expression in its place (docs/combine-plan.md §2.8): build.ts makes it a Simple Expression. */
   exprs?: Record<string, string>;
+  /** Setting → its expression's sliders (Make a slider): name → value, each a Constant wired into the expression. */
+  sliders?: Record<string, Record<string, number>>;
   fills?: FillSpec;
   muted?: boolean;
   /** A picture's depth, generated once with Generate depth (builders/depthPicture.ts): the layer's Depth node plays it. */
@@ -84,8 +87,8 @@ export const VERBS: Record<VerbId, VerbInfo> = {
   placeIn: { id: 'placeIn', label: 'Place in', reads: 'Put it in the layer below', built: true },
   replaceMask: { id: 'replaceMask', label: 'Replace mask with', reads: 'Fill what the mask finds with it', built: true },
   relight: { id: 'relight', label: 'Relight with', reads: 'Light a photo with it', built: false },
-  collide: { id: 'collide', label: 'Collide with', reads: 'Its points bounce, slide or settle on it', built: false },
-  follow: { id: 'follow', label: 'Follow the shape', reads: 'Its points trace or cling to it', built: false },
+  collide: { id: 'collide', label: 'Collide with', reads: 'Its points bounce, slide or settle on it', built: true },
+  follow: { id: 'follow', label: 'Follow the shape', reads: 'Its points trace or cling to it', built: true },
   spawn: { id: 'spawn', label: 'Spawn from', reads: 'Its points are born from it', built: false },
   toPoints: { id: 'toPoints', label: 'Turn into points', reads: 'It becomes a point cloud', built: false },
 };
@@ -96,10 +99,14 @@ export const PRODUCT_LABEL: Record<ProductKind, string> = {
 };
 
 /**
- * Which verbs join a new layer of kind `a` to a layer of kind `b` (docs/combine-plan.md §1.1). Splats count as a 3D
- * scene; `splat` says the new layer is one (Splats → 3D is Place in; two 3D builds are the 3D builder's job).
+ * What the picker knows about the pair besides their kinds: `splat`, the new layer is a splat build (Splats → 3D is
+ * Place in; two 3D builds are the 3D builder's job); `shape`, the layer below has a shape's distance (a 2D build), so
+ * points can collide with it and follow it; `flatScene`, the 3D layer below has no Scene Group to collide with (splats).
  */
-export function verbsFor(a: ProductKind, b: ProductKind, o: { splat?: boolean } = {}): VerbId[] {
+export interface PairInfo { splat?: boolean; shape?: boolean; flatScene?: boolean }
+
+/** Which verbs join a new layer of kind `a` to a layer of kind `b` (docs/combine-plan.md §1.1). */
+export function verbsFor(a: ProductKind, b: ProductKind, o: PairInfo = {}): VerbId[] {
   const out: VerbId[] = [];
   const pic = (k: ProductKind) => k === 'picture' || k === 'pictureDepth';
   if (a === 'mask') return pic(b) ? ['replaceMask'] : [];
@@ -122,13 +129,25 @@ export function verbsFor(a: ProductKind, b: ProductKind, o: { splat?: boolean } 
     if (pic(b) || b === 'scene3d') out.push('placeIn', 'spawn');
     if (b === 'scene3d') out.push('collide', 'follow');
     if (b === 'picture' || b === 'motion') out.push('follow');
+    if (pic(b) && o.shape) out.push('collide', 'follow');
     return [...new Set(out)];
   }
   return out;
 }
 
-/** The verbs the picker offers for the pair: valid and built in this phase. */
-export const offeredVerbs = (a: ProductKind, b: ProductKind, o: { splat?: boolean } = {}): VerbId[] => verbsFor(a, b, o).filter(v => VERBS[v].built);
+/**
+ * The verbs the picker offers for the pair: valid and built in this phase. Collide and Follow are built for points on a
+ * shape (a 2D build) and in a 3D scene with a Scene Group; on a mask, a picture's brightness or Motion they come later.
+ */
+const VERB_ORDER: readonly VerbId[] = ['placeIn', 'collide', 'follow', 'spawn', 'replaceMask', 'relight', 'toPoints'];
+
+export function offeredVerbs(a: ProductKind, b: ProductKind, o: PairInfo = {}): VerbId[] {
+  return [...verbsFor(a, b, o)].sort((x, y) => VERB_ORDER.indexOf(x) - VERB_ORDER.indexOf(y)).filter(v => {
+    if (!VERBS[v].built) return false;
+    if (v !== 'collide' && v !== 'follow') return true;
+    return (b === 'scene3d' && !o.flatScene) || ((b === 'picture' || b === 'pictureDepth') && !!o.shape);
+  });
+}
 
 // ── Settings ─────────────────────────────────────────────────────────────────
 
@@ -162,6 +181,22 @@ export const MASK_DEFAULTS = {
 
 export const REPLACE_DEFAULTS = {
   stick: 'blobs' as Stick, fit: 'square', padding: 0.15, scale: 1, spin: 0, amount: 1,
+} satisfies Record<string, SettingValue>;
+
+/** Collide with: how points meet the shape (docs/combine-plan.md §2.3). Settle adds gravity, no bounce, high friction. */
+export type CollideMode = 'bounce' | 'slide' | 'settle';
+export const COLLIDE_DEFAULTS = {
+  mode: 'slide' as CollideMode, bounce: 0.6, friction: 0.03, gravity: 0.6, margin: 0.015, cushion: 0.06, amount: 1,
+  /** 3D: the grid round the scene (Collide (3D Scene)'s Scene size). */
+  reach: 2,
+} satisfies Record<string, SettingValue>;
+
+/** Follow the shape: Trace (along the outline), Cling (on it, drifting), Flow along, Orbit (round it at a distance). */
+export type FollowHow = 'trace' | 'cling' | 'flow' | 'orbit';
+export const FOLLOW_DEFAULTS = {
+  how: 'trace' as FollowHow, speed: 0.35, offset: 0.02, width: 0.03, orbit: 0.25, axis: 'y', amount: 1, reach: 2,
+  /** Flow along (2D): how hard it is pushed along the outline. Cling (2D): how much it drifts. */
+  push: 1.2, drift: 0.5,
 } satisfies Record<string, SettingValue>;
 
 export const num = (v: SettingValue | undefined, d: number): number => (typeof v === 'number' && Number.isFinite(v) ? v : d);
@@ -220,6 +255,11 @@ export function removeLayer(spec: CombineSpec, id: string): CombineSpec {
 export function verbLine(layer: CombineLayer): string {
   if (layer.verb === 'base') return 'Base';
   if (layer.verb === 'replaceMask') return layer.product.kind === 'mask' ? `Find ${layer.product.find}` : 'Replace the mask';
+  if (layer.verb === 'collide') return `Collide · ${str(layer.settings.mode, ['bounce', 'slide', 'settle'] as const, 'slide')}`;
+  if (layer.verb === 'follow') {
+    const how = str(layer.settings.how, ['trace', 'cling', 'flow', 'orbit'] as const, 'trace');
+    return `Follow · ${how === 'flow' ? 'flow along' : how}`;
+  }
   if (layer.verb === 'placeIn') {
     const how = layer.settings.how3d ?? layer.settings.howPic ?? layer.settings.blend;
     return `Place in${typeof how === 'string' && how !== 'normal' && how !== 'over' ? ` · ${how === 'depth' ? 'by depth' : how}` : ''}`;

@@ -3,7 +3,9 @@
 Put two things the builders made together without wiring the graph: a photo in a 3D scene, particles
 sliding round a shape, people replaced by a 3D scene. Each join is a **verb**. A verb builds the same
 graph you would wire by hand, from the nodes that already exist. Every node has a note, and nothing is
-a monolithic node. Planning only: nothing here is built yet.
+a monolithic node. Phases 0–2 are built (docs/combine.md says what each does); the rest is still the plan. Phase 2
+leaves for later: Collide / Follow on a mask (the Jump Flood route), Follow by a picture's brightness and pushed by
+Motion (`agentPushTexture`), expressions on the Place in card's numbers (they are params, not sockets).
 
 User decisions (2026-10-20) are marked **[D1]–[D9]**.
 

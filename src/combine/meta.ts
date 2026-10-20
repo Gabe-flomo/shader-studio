@@ -24,6 +24,11 @@ export interface CombineMeta {
    * before every rebuild, and when the build is taken away.
    */
   patched?: Record<string, NodeRef | null>;
+  /**
+   * Inside products' Agents groups (Collide with, Follow the shape), per group: the ports added (keys) and Agent
+   * Output's wires before ("input" → what was there): put back before every rebuild, and when the build goes.
+   */
+  inner?: Record<string, { ports: string[]; out: Record<string, NodeRef | null> }>;
 }
 
 /** The Combine meta on `node` (the anchor), or null. */

@@ -574,6 +574,20 @@ exports[`2D agents and pass graphs compile as they did before 3D > agentsHandBea
 }
 `;
 
+exports[`2D agents and pass graphs compile as they did before 3D > combineSparksTrace 1`] = `
+{
+  "agents": "0072550000da7a0c23bb9e761835:29473",
+  "errors": null,
+  "fragmentShader": "00a58d98c4cc351d0804628853fb:7083",
+  "paramBindings": "1931836ab1f2de0bf9b1b09fc5dd:2474",
+  "paramUniforms": "08c8246299202019070d2bb86096:1925",
+  "passes": "167d269bbddad80189e9f9473b28:2",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": "1e429a260072880af46affc5cb73:29711",
+}
+`;
+
 exports[`2D agents and pass graphs compile as they did before 3D > comboBloomDots 1`] = `
 {
   "agents": "1fe1f0024152e81521f99e5e13c1:4",

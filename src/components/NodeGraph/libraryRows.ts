@@ -241,7 +241,7 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
     { label: 'Outside the group', types: ['agentEmit', 'agentDeposit', 'trailField', 'drawAgents'] },
     { label: 'Inside: walkers', types: ['agentSense', 'agentNeighbours', 'agentSteer', 'agentMove', 'agentBySpecies'] },
     { label: 'Inside: forces', types: ['agentGravity', 'agentWind', 'agentCurl', 'agentAttract', 'agentVortex', 'agentFlow', 'agentSoundKick'] },
-    { label: 'Inside: moving', types: ['agentIntegrate', 'agentAge', 'agentCollide', 'agentCollideScene', 'agentChladni', 'agentRidePath'] },
+    { label: 'Inside: moving', types: ['agentIntegrate', 'agentAge', 'agentCollide', 'agentCollideScene', 'agentFollowScene', 'agentChladni', 'agentRidePath'] },
     { label: 'Inside: rule steps', types: ['agentTurnToward', 'agentFollowTrail', 'agentWander', 'agentOrbit', 'agentAvoidWalls', 'agentApplyForce', 'agentDrag', 'agentSlowInCrowd', 'agentLeaveTrail', 'agentFadeWithAge'] },
   ],
   Effects: [
