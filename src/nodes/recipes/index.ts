@@ -29,7 +29,7 @@ const each = (types: string[], recipes: StarterRecipe[]) => Object.fromEntries(t
 export const STARTER_RECIPES: Readonly<Record<string, StarterRecipe[]>> = {
   gridLayout: GRID_RECIPES,
   gridPattern: GRID_PATTERN_RECIPES,
-  ...each(['fbm', 'noiseFloat', 'waveTexture'], NOISE_RECIPES),
+  ...each(['fbm', 'noiseFloat'], NOISE_RECIPES),
   voronoi: VORONOI_RECIPES,
   palette: PALETTE_RECIPES,
   ...each(['circleSDF', 'boxSDF', 'ringSDF', 'shapeSDF'], SDF_SHAPE_RECIPES),

@@ -118,3 +118,35 @@ Each iteration folds the UV domain into a smaller, more distorted version of its
 - Vary the fold scale (`1.5` above) — values closer to `1.0` produce tight, dense rings; larger values produce sparse, widely-spaced ones.
 - Offset the UV before the loop (`uv - 0.5`) to center the pattern on the canvas.
 - Mix a `*=` accumulator on a separate brightness node to darken outer folds.
+
+## Loop Carry, Loop Index and Loop Break
+
+The three loop nodes sit in the node library's **Loops** row (Math & Logic). Inside a group with Iterations above 1:
+
+- **Loop Carry** holds a value across passes: Init before the first pass, Next is what this pass writes, Value is what
+  this pass reads. Pick its Type (float, vec2, vec3, vec4) on the card. Several can run side by side (an
+  escape-time fractal carries z and a pass count).
+- **Loop Index** is the pass number, 0, 1, 2…
+- **Loop Break** stops the loop early: when its When input is above 0.5 at the end of a pass, the compiler emits
+  `if (when > 0.5) break;` after every carry, `+=` accumulator and group output has taken that pass's value. So a
+  carry keeps what it had in the pass that tripped the break. Unwired, or outside an iterated group, it does nothing.
+  Wire a Compare's Mask into When.
+
+An escape-time fractal from small nodes (examples `learnFractal`, `groupJuliaBreak`):
+
+```glsl
+vec2 z = vec2(0.0); float n = 0.0;               // two Loop Carries
+for (float i = 0.0; i < 128.0; i++) {
+    vec2 zNext = cmul(z, z) + c;                 // Complex Mul → Add
+    float nNext = n + 1.0;                       // Add 1
+    float out = step(16.0, length(zNext));       // Length → Compare
+    z = zNext; n = nNext;                        // the carries take this pass's values
+    if (out > 0.5) break;                        // Loop Break
+}
+float smoothN = n - log2(log2(dot(z, z)));       // Dot → Log (base 2) → Log (base 2) → Subtract
+```
+
+Without Loop Break the same picture comes from freezing: Compare → Select keeps z (and the count) unchanged once
+|z| has passed the bailout, so later passes change nothing. It works, but every pixel then runs every pass and each
+carry needs its own Select; Loop Break is one node and skips the passes. Newton's method (`newtonFractalZ5`) breaks
+when the step (Complex Divide of f by f′) is shorter than 0.001.

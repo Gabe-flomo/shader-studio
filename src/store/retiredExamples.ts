@@ -11,7 +11,7 @@
  * list (src/store/__tests__/examples.test.ts checks).
  */
 export const RETIRED_EXAMPLE_KEYS: readonly string[] = [
-  'raymarchSpheres', 'gravitationalLens', 'chladniFieldQuickDemo', 'groupCarryFBM', 'groupCarryDomainWarp',
+  'gravitationalLens', 'chladniFieldQuickDemo', 'groupCarryFBM', 'groupCarryDomainWarp',
   'waveTextureDemo', 'magicTextureDemo', 'waveInterference', 'shapesAndGround3D', 'spiralWorld3D', 'softMetaballs3D',
   'neonFloorGrid', 'particleRain', 'tiltShiftScene', 'sdfPolarRepeat', 'sdfBend3D', 'sdCrossScene3D', 'infinitePillars3D',
   'gyroidWarped', 'glowMarcher', 'dofOrbitOrbs', 'fresnelSchlickRim', 'refractDirFakeGlass', 'glassPhysical',

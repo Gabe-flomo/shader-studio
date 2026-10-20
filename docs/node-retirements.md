@@ -143,6 +143,39 @@ Shapes row; they are **3D Transforms** now, in its Warp and Fold groups.
 
 Examples changed: curvedReverse, learn3dCombine and learn3dOrbit (Rounded Box → Box SDF 3D, Edges Rounded).
 
+## Whole-shader nodes (2026-10-19)
+
+Hidden (still registered, so a saved graph loads and renders as before; no DEPRECATED badge), the user's call: a
+look is built up from small nodes, not one node with a loop, a palette and a wall of sliders inside
+(`src/nodes/notOffered.ts`, `MONOLITH_RETIRED_TYPES`):
+
+- Fractal and loop looks: Fractal Loop, Rotating Lines, Accumulate Loop, For Loop, Flow Field, Circle Pack,
+  Mandelbrot / Julia, Fold Fractal (IFS), Newton Fractal, Lyapunov Fractal, Apollonian Gasket, Spherical Fold
+  Fractal, Raymarch 3D, Volume Clouds, Mandelbulb 3D.
+- Fixed looks: Chaos Layers, Magic Texture, Metaballs 2D, and the borderline four: Gravitational Lens, Attract
+  Circles, Glass Scene, Wave Texture.
+
+Seven of them (Rotating Lines, Accumulate Loop, For Loop, Flow Field, Circle Pack, Raymarch 3D, Volume Clouds) were
+only half hidden before: out of the desktop rows but still offered by search, the Do bar and the phone browser. They
+are on the one list now, and a test checks that anything hidden from the rows is hidden from the others too
+(`src/nodes/__tests__/monolithRetirement.test.ts`). Quick add's learned next nodes skip retired types as well.
+
+Kept on purpose: Quaternion Julia / Mandelbrot (3D Scene Builder shape kinds), Truchet, Lissajous, CMYK Halftone,
+Noisy Grid SDF, Chladni. The 3D Scene Builder's Glass look still writes a Glass Scene as its renderer
+(`BUILDER_WRITTEN_TYPES`); it is just not offered by hand.
+
+New small nodes, so the fractals build from parts: **Log** (natural, base 2 or 10, works on vectors), **Complex
+Divide**, and **Loop Break** (stops an iterated group early: docs/iterated-groups.md). **Loop Carry** and **Loop
+Index** are no longer hidden: with Loop Break they make the library's Loops row (Math & Logic).
+
+Examples rebuilt from small nodes, same keys: Fractal Rings (the startup example and Play layer: an iterated Group
+with Loop Carry, Tile, Sin → Abs → Divide and a `+=` Palette), Motion Blur Trails (the same rings into Feedback),
+Learn's Fractals lesson (Mandelbrot: Complex Mul, Loop Break, smooth colour with Log), Newton z⁵−1 (Complex Pow,
+Complex Divide, Loop Break), and the retired-list Gravity Lens, Combo: Star layers, Magic Texture, Wave Texture,
+Wave Interference and Combo: Rings + Blur. Groups & Code's Group: Fractal Rings (Carry) was the same rings, so it
+opens Fractal Rings now (`MERGED_EXAMPLES`), and the folder shows Group: Julia set (Loop Break) instead; Raymarch
+Spheres (one Raymarch 3D node) opens Learn 3D's first ray march.
+
 ## Radiance Cascades 2D
 
 Hidden (still registered, so a saved graph loads and renders as before): it was too slow for what it gave. No example,

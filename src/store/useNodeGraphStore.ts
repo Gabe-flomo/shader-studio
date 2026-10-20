@@ -313,6 +313,9 @@ export const MERGED_EXAMPLES: Record<string, string> = {
   // The ants examples were deleted (2026-10-19, the user: they looked terrible). An old link opens the nearest teacher:
   // Memory per walker (the 2D Galaxy), and the same rule kind's other example (Termites).
   agentAnts: 'agentGalaxy', agentRulesAnts: 'agentRulesTermites',
+  // The whole-shader nodes were retired (2026-10-19, nodes/notOffered.ts): Raymarch Spheres was one Raymarch 3D node, so
+  // it opens Learn's first ray march; Group: Fractal Rings (Carry) became Fractal Rings itself (both were the same rings).
+  raymarchSpheres: 'learn3dMarch', groupCarryRings: 'fractalRings',
 };
 
 export function migrateLoadedNodes(nodes: GraphNode[]): GraphNode[] {

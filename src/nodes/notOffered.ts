@@ -61,12 +61,42 @@ export const CATALOGUE_RETIRED_TYPES: readonly string[] = [
 ];
 
 /**
+ * The 2026-10-19 monolith retirement (docs/node-retirements.md, "Whole-shader nodes"): the user's call that a look is
+ * built up from small nodes, not one "whole shader" node with a palette and a loop inside. These drew a finished
+ * picture (a fractal, a raymarched scene, a fixed texture) behind a wall of sliders. They stay registered, so a saved
+ * graph that uses one loads and renders exactly as before; nothing offers them, and no example uses them. The
+ * examples that did are rebuilt from small nodes: an iterated Group with Loop Carry, Loop Index and Loop Break, and
+ * Complex Mul / Complex Divide / Log for the fractal maths (examples: fractalRings, learnFractal, newtonFractalZ5).
+ *
+ * Glass Scene is retired from offering too, but the 3D Scene Builder's Glass look still writes one as its renderer
+ * (sceneBuilder/build.ts): see BUILDER_WRITTEN_TYPES.
+ */
+export const MONOLITH_RETIRED_TYPES: readonly string[] = [
+  // Fractal and loop "whole shaders".
+  'fractalLoop', 'rotatingLinesLoop', 'accumulateLoop', 'forLoop', 'flowField', 'circlePack',
+  'mandelbrot', 'ifs', 'newtonFractal', 'lyapunov', 'apollonian', 'sphericalFoldFractal',
+  'raymarch3d', 'volumeClouds', 'mandelbulb',
+  // Other fixed looks.
+  'chaosLayers', 'magicTexture', 'metaballs',
+  // The borderline four (the user's call): a lens warp with its looks built in, attractor circles, glass that marches
+  // its own scenes, and a bands / rings texture (Length or a Split → Sin builds it).
+  'gravitationalLens', 'neighborAttractCircles', 'glassScene', 'waveTexture',
+];
+
+/**
+ * Not offered by hand, but a builder still writes them as part of what it makes (its renderer): the 3D Scene
+ * Builder's Glass look is a Glass Scene. A builder-made node carries its role (params._sbRole), so a test can tell
+ * it from one added by hand.
+ */
+export const BUILDER_WRITTEN_TYPES: readonly string[] = ['glassScene'];
+
+/**
  * Retired for good: Ride a curve (its curves built in) gave way on 2026-10-15 to Ride a path, which rides
  * any wired shape's outline (agentRidePath.ts); saved graphs with a Ride a curve still load and run.
  * Audio Input (a file with per-band floats) gave way on 2026-10-17 to the Audio nodes (docs/audio-tools.md): Audio
  * Source wired into Band level, Hit, Spectrum…; saved graphs with an Audio Input still load and play.
  */
-export const RETIRED_TYPES: readonly string[] = ['agentRideCurve', 'audioInput', ...SWEPT_EFFECT_TYPES, ...CATALOGUE_RETIRED_TYPES];
+export const RETIRED_TYPES: readonly string[] = ['agentRideCurve', 'audioInput', ...SWEPT_EFFECT_TYPES, ...CATALOGUE_RETIRED_TYPES, ...MONOLITH_RETIRED_TYPES];
 
 /** Registered types that are never offered for adding (their saved nodes still work). */
 export const NOT_OFFERED: ReadonlySet<string> = new Set([...(OFFER_PIECES ? [] : PIECES_TYPES), ...RETIRED_TYPES]);

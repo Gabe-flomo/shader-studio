@@ -64,7 +64,9 @@ The all-in-one grid. Its field sockets (Shape, Picture) are powerful but not dis
 | Per-cell colours | Cell → Noise Float (Hash) → Palette → Picture | Shows the Cell node inside a field chain |
 | A wave across the cells | Cell → Length → Wave Radius → Circle SDF → Shape; wave → Palette → Picture | A wired shape, sized per cell (the Grid 4 example, shorter) |
 
-### Noise: Fractal Noise, Noise Float, Wave Texture (`fbm`, `noiseFloat`, `waveTexture`): Built
+### Noise: Fractal Noise, Noise Float (`fbm`, `noiseFloat`): Built
+
+(Wave Texture had these too until it was retired on 2026-10-19; the polar spiral recipe draws its stripes with Split Vec2 → Add → Sin now.)
 
 Greyscale and frozen until Time is wired, which is the first surprise.
 
@@ -192,7 +194,7 @@ Particles / Slime (with a Trail) / Empty group, asked before the add (see above)
 | Texture Input / Video Input | Fit (cover / contain) via the node's Fit, Pixelate, Halftone, Edges via a Pass | Needs a picture loaded to look like anything; best with a sample image |
 | Time | "Speed" (× k), "Loop every N s" (mod), "Ping-pong 0…1" (sin → remap) | Time on its own drives nothing visible; better offered on a slider's right-click |
 | Hit | Envelope → a ring that bursts on each hit | Band level already smooths (Attack / Release); Hit's Envelope needs its own recipe |
-| Mandelbrot / Julia, Newton, IFS | Mouse → Julia C; Time → zoom | Already full pictures; recipes would be "make it interactive" |
+| Loop Break, Complex Mul | An escape-time Julia around them (Loop Carry z + count, Compare, Log smooth colour) | The fractal nodes were retired 2026-10-19; a recipe could build the escape loop the examples use |
 | Truchet, Chladni | Palette on the field output; Time on a parameter | Complete generators; small gain |
 | Field Accumulate / Metaball Threshold | Grid → Field Accumulate → Threshold → palette (a metaball grid) | Good teaching recipe; a few more params to tune |
 | Domain Warp | → Fractal Noise → Palette (the reverse of Noise's Marbled) | Easy to add |

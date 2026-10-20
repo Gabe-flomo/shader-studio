@@ -471,6 +471,13 @@ exports[`golden shaders: every Play example exports the same bundle > fourDThree
 }
 `;
 
+exports[`golden shaders: every Play example exports the same bundle > fractalRings 1`] = `
+{
+  "bundle": "068ee3fa2465291e1aa0768982a8:8109",
+  "missing": [],
+}
+`;
+
 exports[`golden shaders: every Play example exports the same bundle > granulator 1`] = `
 {
   "bundle": "1d4edea5c8487201a4917eb1f344:10495",
@@ -621,6 +628,13 @@ exports[`golden shaders: every Play example exports the same bundle > gridTourOv
 exports[`golden shaders: every Play example exports the same bundle > gridTourRipple 1`] = `
 {
   "bundle": "114374c9ac3d6d0a7097685d2990:12670",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > groupJuliaBreak 1`] = `
+{
+  "bundle": "0e79789ab9e62311b1a7b46f95d6:9750",
   "missing": [],
 }
 `;
@@ -795,7 +809,7 @@ exports[`golden shaders: every Play example exports the same bundle > learnFract
 
 exports[`golden shaders: every Play example exports the same bundle > learnFractal 1`] = `
 {
-  "bundle": "1216eb189c69b40ece536734cc18:5131",
+  "bundle": "13ae848d8a19f40c84dc7839f172:8176",
   "missing": [],
 }
 `;
@@ -1167,6 +1181,13 @@ exports[`golden shaders: every Play example exports the same bundle > memReadout
 exports[`golden shaders: every Play example exports the same bundle > motionReveal 1`] = `
 {
   "bundle": "09cdf70a4f73981c567bf746720c:118532",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > newtonFractalZ5 1`] = `
+{
+  "bundle": "1020f681a5076610b13b9b4d67ee:10028",
   "missing": [],
 }
 `;
@@ -1859,7 +1880,7 @@ exports[`golden shaders: every Play example exports the same bundle > waterLayer
 
 exports[`golden shaders: every Play example exports the same bundle > waveInterference 1`] = `
 {
-  "bundle": "19dd8f891321901bff26c886afc6:3895",
+  "bundle": "01710e261ba52d139cd70a601af0:5497",
   "missing": [],
 }
 `;
@@ -2929,26 +2950,36 @@ exports[`golden shaders: every example compiles as it did > comboChaosStars 1`] 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "0098a9f840bca619070c5adec67f:3656",
+  "fragmentShader": "1225df2917c8eb04d3b4864ae0fa:5556",
   "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "18d3250de88289053d9b6d27e4a7:128",
-  "paramBindings": "1e3ec67421c0a90b7616cd1236d6:563",
+  "nodeSlugs": "10709ddddf1a071a15464c668a4b:618",
+  "paramBindings": "02cb36813372b410f0387f640941:1031",
   "paramUniforms": [
-    "u_p_chaoslayerx0_brightness",
-    "u_p_chaoslayerx0_cutout",
-    "u_p_chaoslayerx0_layerScale",
-    "u_p_chaoslayerx0_parallaxX",
-    "u_p_chaoslayerx0_parallaxY",
-    "u_p_chaoslayerx0_scale",
-    "u_p_chaoslayerx0_shift",
-    "u_p_chaoslayerx0_size",
-    "u_p_chaoslayerx0_waves",
     "u_p_glowtocolox0_exposure",
-    "u_p_palx0_scale",
-    "u_p_palx0_speed",
+    "u_p_glowtocolox0_tint",
+    "u_p_mulx0_b",
+    "u_p_starxlayersx0xgxaddx1_b",
+    "u_p_starxlayersx0xgxcstx0_value",
+    "u_p_starxlayersx0xgxdivx0_b",
+    "u_p_starxlayersx0xgxfractx0_scale",
+    "u_p_starxlayersx0xgxlenx0_scale",
+    "u_p_starxlayersx0xgxmkv2x0_x",
+    "u_p_starxlayersx0xgxmkv2x0_y",
+    "u_p_starxlayersx0xgxmulx0xc2_b",
+    "u_p_starxlayersx0xgxmulx0xc3_b",
+    "u_p_starxlayersx0xgxmulx0xc4_b",
+    "u_p_starxlayersx0xgxmulx0xc5_b",
+    "u_p_starxlayersx0xgxmulx0xc6_b",
+    "u_p_starxlayersx0xgxsstepx0_edge0",
+    "u_p_starxlayersx0xgxsstepx0_edge1",
+    "u_p_starxlayersx0xgxtransformx0_rotate",
+    "u_p_starxlayersx0xgxtransformx0_scale",
+    "u_p_starxlayersx0xgxtransformx0_spin",
+    "u_p_starxlayersx0xgxtransformx0_x",
+    "u_p_starxlayersx0xgxtransformx0_y",
   ],
-  "paramValues": "1fc475d1c29ea800e9db37e8e7a3:381",
+  "paramValues": "16aebd99ccd9581f1a441e9bc167:846",
   "passes": null,
   "success": true,
   "textureUniforms": {},
@@ -6685,25 +6716,37 @@ exports[`golden shaders: every example compiles as it did > fractalRings 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "12459a068e79050890f8381cf314:3600",
+  "fragmentShader": "19f1a1458cf4ed0c6d10a322306d:5362",
   "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "03b87978b0bb1315d6f4e25fe63a:87",
-  "paramBindings": "12be166a752a6c0b88281c042c2b:569",
+  "nodeSlugs": "0fa4624cbec5560e3cc52ffd3a10:706",
+  "paramBindings": "09e43582697020091a94f749dcdb:1145",
   "paramUniforms": [
-    "u_p_fractalloox2_amplitude",
-    "u_p_fractalloox2_fract_scale",
-    "u_p_fractalloox2_freq",
-    "u_p_fractalloox2_glow",
-    "u_p_fractalloox2_glow_pow",
-    "u_p_fractalloox2_iter_offset",
-    "u_p_fractalloox2_offset",
-    "u_p_fractalloox2_phase",
-    "u_p_fractalloox2_ring_freq",
-    "u_p_fractalloox2_scale_exp",
-    "u_p_fractalloox2_time_scale",
+    "u_p_fractalxringsx0xgxaddx0_b",
+    "u_p_fractalxringsx0xgxaddx0xc2_b",
+    "u_p_fractalxringsx0xgxcstx0_value",
+    "u_p_fractalxringsx0xgxdivx0_b",
+    "u_p_fractalxringsx0xgxexpx0_scale",
+    "u_p_fractalxringsx0xgxfractx0_scale",
+    "u_p_fractalxringsx0xgxlenx0_scale",
+    "u_p_fractalxringsx0xgxlenx0xc2_scale",
+    "u_p_fractalxringsx0xgxmulx0_b",
+    "u_p_fractalxringsx0xgxmulx0xc2_b",
+    "u_p_fractalxringsx0xgxmulx0xc3_b",
+    "u_p_fractalxringsx0xgxmulx0xc4_b",
+    "u_p_fractalxringsx0xgxpalx0_amplitude",
+    "u_p_fractalxringsx0xgxpalx0_anim",
+    "u_p_fractalxringsx0xgxpalx0_freq",
+    "u_p_fractalxringsx0xgxpalx0_offset",
+    "u_p_fractalxringsx0xgxpalx0_phase",
+    "u_p_fractalxringsx0xgxpalx0_scale",
+    "u_p_fractalxringsx0xgxpalx0_speed",
+    "u_p_fractalxringsx0xgxpalx0_value",
+    "u_p_fractalxringsx0xgxsinx0_amp",
+    "u_p_fractalxringsx0xgxsinx0_freq",
+    "u_p_fractalxringsx0xgxsinx0_input",
   ],
-  "paramValues": "07a1b2afc886f7088c42d0df70c1:402",
+  "paramValues": "1dc01965a1f1c218a344cdf464a6:966",
   "passes": null,
   "success": true,
   "textureUniforms": {},
@@ -7047,17 +7090,37 @@ exports[`golden shaders: every example compiles as it did > gravitationalLens 1`
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "0760c1b85e602908ddb83d7fad85:5423",
+  "fragmentShader": "1e6bad717b6f561c8c57a9abccc6:6839",
   "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "0f0445c2bd9a52041a96ece3c678:134",
-  "paramBindings": "050f6f45ee654f10a48b5dd59550:162",
+  "nodeSlugs": "02a748318fa1bd0c590019c43130:597",
+  "paramBindings": "0f063f9104b39917a1da73c9b914:828",
   "paramUniforms": [
-    "u_p_gravitatiox4_horizon_radius",
-    "u_p_gravitatiox4_softening",
-    "u_p_gravitatiox4_strength",
+    "u_p_addx0_b",
+    "u_p_addx0xc2_b",
+    "u_p_comparex0xc2_smoothing",
+    "u_p_cstx0_x",
+    "u_p_cstx0_y",
+    "u_p_cstx0xc2_value",
+    "u_p_gravityfiex0_min_dist",
+    "u_p_gravityfiex0_strength",
+    "u_p_mulx0_b",
+    "u_p_mulx0xc2_b",
+    "u_p_mulx0xc3_b",
+    "u_p_palx0_anim",
+    "u_p_palx0_scale",
+    "u_p_palx0_speed",
+    "u_p_palx0_value",
+    "u_p_sstepx0_edge0",
+    "u_p_sstepx0_edge1",
+    "u_p_subx0_b",
+    "u_p_zxzxcx0xgxaddx0xc3_b",
+    "u_p_zxzxcx0xgxaddx0xc4_b",
+    "u_p_zxzxcx0xgxcomparex0_smoothing",
+    "u_p_zxzxcx0xgxcstx0xc3_value",
+    "u_p_zxzxcx0xgxlenx0_scale",
   ],
-  "paramValues": "15d70f4a7923470846643625c939:117",
+  "paramValues": "0ef9402f5360aa01f1bb0bf429c6:601",
   "passes": null,
   "success": true,
   "textureUniforms": {},
@@ -10609,26 +10672,44 @@ exports[`golden shaders: every example compiles as it did > groupCarryFBM 1`] = 
 }
 `;
 
-exports[`golden shaders: every example compiles as it did > groupCarryRings 1`] = `
+exports[`golden shaders: every example compiles as it did > groupJuliaBreak 1`] = `
 {
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "0ecc2da7e18d4300210333e16e87:4316",
+  "fragmentShader": "1830c0deb57bb9151915ec0f6382:7557",
   "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "1f95449cae82851a158276a4c4fc:610",
-  "paramBindings": "1f06e82dee47371f1acd262e21ef:368",
+  "nodeSlugs": "0e3e799a7d91cb1c9a65f36b3551:758",
+  "paramBindings": "1dc1847c9f35780c25293aed78ad:947",
   "paramUniforms": [
-    "u_p_ringxiterationx1xgxexpx0_scale",
-    "u_p_ringxiterationx1xgxfractx0_scale",
-    "u_p_ringxiterationx1xgxlenx0_scale",
-    "u_p_ringxiterationx1xgxlenx0xc2_scale",
-    "u_p_ringxiterationx1xgxmulx04_b",
-    "u_p_ringxiterationx1xgxmulx04xc2_b",
-    "u_p_ringxiterationx1xgxmulx0xc2_b",
+    "u_p_angletovecx0_angle",
+    "u_p_comparex0xc2_smoothing",
+    "u_p_cstx0_value",
+    "u_p_mixx0_t",
+    "u_p_mulx0_b",
+    "u_p_mulx0xc2_b",
+    "u_p_mulx0xc3_b",
+    "u_p_mulx0xc4_b",
+    "u_p_mulx0xc5_b",
+    "u_p_palx0_anim",
+    "u_p_palx0_scale",
+    "u_p_palx0_speed",
+    "u_p_palx0_value",
+    "u_p_palx0xc2_anim",
+    "u_p_palx0xc2_scale",
+    "u_p_palx0xc2_speed",
+    "u_p_palx0xc2_value",
+    "u_p_subx0_b",
+    "u_p_zxzxcxjuliax0xgxaddx0_b",
+    "u_p_zxzxcxjuliax0xgxaddx0xc2_b",
+    "u_p_zxzxcxjuliax0xgxcomparex0_smoothing",
+    "u_p_zxzxcxjuliax0xgxcstx0xc2_value",
+    "u_p_zxzxcxjuliax0xgxcstx0xc3_value",
+    "u_p_zxzxcxjuliax0xgxlenx0_scale",
+    "u_p_zxzxcxjuliax0xgxminx0_b",
   ],
-  "paramValues": "0716a73bbe6c091f5f4f6eb60b75:296",
+  "paramValues": "0128638eb75b0c178e957c4d2f96:704",
   "passes": null,
   "success": true,
   "textureUniforms": {},
@@ -11684,17 +11765,33 @@ exports[`golden shaders: every example compiles as it did > learnFractal 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "0f0c0ff4a7e0e118bdf7b50ec803:4532",
+  "fragmentShader": "118f523b4e1bde04100aa6eb0015:6425",
   "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "1b9605df3e0ba71a2112f904eca0:103",
-  "paramBindings": "1f227a6fda91ae0970fec42d90ef:95",
+  "nodeSlugs": "07d195f2c88a0316b0fbda4a4bd4:624",
+  "paramBindings": "0bfd940d8f0b660622c02cbdef9f:732",
   "paramUniforms": [
+    "u_p_addx0_b",
+    "u_p_comparex0xc2_smoothing",
     "u_p_cstx0_value",
+    "u_p_cstx0xc2_x",
+    "u_p_cstx0xc2_y",
+    "u_p_cstx0xc3_value",
     "u_p_expx0_scale",
     "u_p_mulx0_b",
+    "u_p_mulx0xc2_b",
+    "u_p_palx0_anim",
+    "u_p_palx0_scale",
+    "u_p_palx0_speed",
+    "u_p_palx0_value",
+    "u_p_subx0_b",
+    "u_p_zxzxcxmandelbrotx0xgxaddx0xc2_b",
+    "u_p_zxzxcxmandelbrotx0xgxaddx0xc3_b",
+    "u_p_zxzxcxmandelbrotx0xgxcomparex0_smoothing",
+    "u_p_zxzxcxmandelbrotx0xgxcstx0xc4_value",
+    "u_p_zxzxcxmandelbrotx0xgxlenx0_scale",
   ],
-  "paramValues": "017f74533024e209e60bb3953613:69",
+  "paramValues": "1a0b728f6da5640615f826b21f45:553",
   "passes": null,
   "success": true,
   "textureUniforms": {},
@@ -13254,16 +13351,26 @@ exports[`golden shaders: every example compiles as it did > magicTextureDemo 1`]
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "17fc37def6d9c5199baa1d4fe617:2327",
+  "fragmentShader": "0af3e6fdfbb24a0dc284236d2e8b:3987",
   "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "0030952e1c0b700e12f5a389ece2:80",
-  "paramBindings": "0f2ee75f1578141a2c8147970e43:89",
+  "nodeSlugs": "18c2077142431810eb00b74444de:450",
+  "paramBindings": "045b436c2831b00999f1eef0e9db:443",
   "paramUniforms": [
-    "u_p_magicx2_distortion",
-    "u_p_magicx2_scale",
+    "u_p_addx0_b",
+    "u_p_addx0xc4_b",
+    "u_p_huerotatex0_angle",
+    "u_p_mulx0_b",
+    "u_p_mulx0xc2_b",
+    "u_p_mulx0xc4_b",
+    "u_p_sinexfoldsx0xgxaddx0xc2_b",
+    "u_p_sinexfoldsx0xgxaddx0xc3_b",
+    "u_p_sinexfoldsx0xgxmulx0xc3_b",
+    "u_p_sinexfoldsx0xgxsinx0_amp",
+    "u_p_sinexfoldsx0xgxsinx0_freq",
+    "u_p_sinexfoldsx0xgxsinx0_input",
   ],
-  "paramValues": "11109c0889a5e312948c1517d10f:54",
+  "paramValues": "1c0f3f3b26608b06d3a815fe6386:355",
   "passes": null,
   "success": true,
   "textureUniforms": {},
@@ -14230,23 +14337,35 @@ exports[`golden shaders: every example compiles as it did > motionBlurTrails 1`]
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "125c0e3c43b86b0b542f735f01da:1546",
+  "fragmentShader": "0a6fa6e27220281e4e27ef2c84f0:1573",
   "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "1c478b0bbb0f4a02fbefdfed292e:145",
-  "paramBindings": "1f8d655291001f132865df431310:1077",
+  "nodeSlugs": "160ffe1caedf54015abb1ae521ca:128",
+  "paramBindings": "1de6290e23b61d0032007296ed50:1675",
   "paramUniforms": [
-    "u_p_fractalloox0_amplitude",
-    "u_p_fractalloox0_fract_scale",
-    "u_p_fractalloox0_freq",
-    "u_p_fractalloox0_glow",
-    "u_p_fractalloox0_glow_pow",
-    "u_p_fractalloox0_iter_offset",
-    "u_p_fractalloox0_offset",
-    "u_p_fractalloox0_phase",
-    "u_p_fractalloox0_ring_freq",
-    "u_p_fractalloox0_scale_exp",
-    "u_p_fractalloox0_time_scale",
+    "u_p_fractalxringsx0xgxaddx0_b",
+    "u_p_fractalxringsx0xgxaddx0xc2_b",
+    "u_p_fractalxringsx0xgxcstx0_value",
+    "u_p_fractalxringsx0xgxdivx0_b",
+    "u_p_fractalxringsx0xgxexpx0_scale",
+    "u_p_fractalxringsx0xgxfractx0_scale",
+    "u_p_fractalxringsx0xgxlenx0_scale",
+    "u_p_fractalxringsx0xgxlenx0xc2_scale",
+    "u_p_fractalxringsx0xgxmulx0_b",
+    "u_p_fractalxringsx0xgxmulx0xc2_b",
+    "u_p_fractalxringsx0xgxmulx0xc3_b",
+    "u_p_fractalxringsx0xgxmulx0xc4_b",
+    "u_p_fractalxringsx0xgxpalx0_amplitude",
+    "u_p_fractalxringsx0xgxpalx0_anim",
+    "u_p_fractalxringsx0xgxpalx0_freq",
+    "u_p_fractalxringsx0xgxpalx0_offset",
+    "u_p_fractalxringsx0xgxpalx0_phase",
+    "u_p_fractalxringsx0xgxpalx0_scale",
+    "u_p_fractalxringsx0xgxpalx0_speed",
+    "u_p_fractalxringsx0xgxpalx0_value",
+    "u_p_fractalxringsx0xgxsinx0_amp",
+    "u_p_fractalxringsx0xgxsinx0_freq",
+    "u_p_fractalxringsx0xgxsinx0_input",
     "u_p_trailsx0xc2_amount",
     "u_p_trailsx0xc2_clean",
     "u_p_trailsx0xc2_flowAmount",
@@ -14260,7 +14379,7 @@ exports[`golden shaders: every example compiles as it did > motionBlurTrails 1`]
     "u_p_trailsx0xc2_turn",
     "u_p_trailsx0xc2_zoom",
   ],
-  "paramValues": "114af9bef830430b8393b7b443b2:766",
+  "paramValues": "02a1e5f93705381ca5ab5eba0d03:1330",
   "passes": [
     {
       "filter": "linear",
@@ -14273,17 +14392,29 @@ uniform vec2 u_resolution;
 uniform float u_time;
 uniform vec2 u_mouse;
 uniform sampler2D u_fontTexture;
-uniform float u_p_fractalloox0_fract_scale;
-uniform float u_p_fractalloox0_scale_exp;
-uniform float u_p_fractalloox0_ring_freq;
-uniform float u_p_fractalloox0_glow;
-uniform float u_p_fractalloox0_glow_pow;
-uniform float u_p_fractalloox0_iter_offset;
-uniform float u_p_fractalloox0_time_scale;
-uniform vec3 u_p_fractalloox0_offset;
-uniform vec3 u_p_fractalloox0_amplitude;
-uniform vec3 u_p_fractalloox0_freq;
-uniform vec3 u_p_fractalloox0_phase;
+uniform float u_p_fractalxringsx0xgxfractx0_scale;
+uniform float u_p_fractalxringsx0xgxlenx0xc2_scale;
+uniform float u_p_fractalxringsx0xgxcstx0_value;
+uniform float u_p_fractalxringsx0xgxlenx0_scale;
+uniform float u_p_fractalxringsx0xgxexpx0_scale;
+uniform float u_p_fractalxringsx0xgxmulx0xc3_b;
+uniform float u_p_fractalxringsx0xgxmulx0_b;
+uniform float u_p_fractalxringsx0xgxaddx0xc2_b;
+uniform float u_p_fractalxringsx0xgxmulx0xc2_b;
+uniform float u_p_fractalxringsx0xgxpalx0_value;
+uniform float u_p_fractalxringsx0xgxpalx0_anim;
+uniform float u_p_fractalxringsx0xgxpalx0_scale;
+uniform float u_p_fractalxringsx0xgxpalx0_speed;
+uniform vec3 u_p_fractalxringsx0xgxpalx0_offset;
+uniform vec3 u_p_fractalxringsx0xgxpalx0_amplitude;
+uniform vec3 u_p_fractalxringsx0xgxpalx0_freq;
+uniform vec3 u_p_fractalxringsx0xgxpalx0_phase;
+uniform float u_p_fractalxringsx0xgxaddx0_b;
+uniform float u_p_fractalxringsx0xgxsinx0_input;
+uniform float u_p_fractalxringsx0xgxsinx0_freq;
+uniform float u_p_fractalxringsx0xgxsinx0_amp;
+uniform float u_p_fractalxringsx0xgxdivx0_b;
+uniform float u_p_fractalxringsx0xgxmulx0xc4_b;
 uniform float u_p_trailsx0xc2_tail;
 uniform float u_p_trailsx0xc2_clean;
 uniform vec3 u_p_trailsx0xc2_tint;
@@ -14334,27 +14465,36 @@ vec3 palette(float t, vec3 offset, vec3 amplitude, vec3 freq, vec3 phase) {
 void main() {
     vec2 g_uv = (vUv - 0.5) * 2.0;
     g_uv.x *= u_resolution.x / u_resolution.y;
-    // Seconds since start. The fractal runs it at Time Scale 0.6, fast enough for the trails to show.
-    float time_0_time = u_time;
-    // The canvas position, for the fractal.
+    // UV: the canvas position, for the rings.
     vec2 uv_0_uv = (vUv - 0.5) * 2.0;
     uv_0_uv.x *= u_resolution.x / u_resolution.y;
-    // The moving picture: the Fractal Rings loop (4 passes) at Time Scale 0.6. The Feedback node after it smears its motion into trails.
-    vec2 fractalloo_0_uv0 = uv_0_uv;
-    vec2 fractalloo_0_uv = uv_0_uv;
-    vec3 fractalloo_0_color = vec3(0.0);
-    for (float fractalloo_0_i = 0.0; fractalloo_0_i < 4.0; fractalloo_0_i++) {
-        fractalloo_0_uv = fract(fractalloo_0_uv * (u_p_fractalloox0_fract_scale * pow(u_p_fractalloox0_scale_exp, fractalloo_0_i))) - 0.5;
-        float fractalloo_0_d = length(fractalloo_0_uv) * exp(-length(fractalloo_0_uv0));
-        float fractalloo_0_t = length(fractalloo_0_uv0) + fractalloo_0_i * u_p_fractalloox0_iter_offset + time_0_time * u_p_fractalloox0_time_scale;
-        vec3 fractalloo_0_col = palette(fractalloo_0_t, u_p_fractalloox0_offset, u_p_fractalloox0_amplitude, u_p_fractalloox0_freq, u_p_fractalloox0_phase);
-        fractalloo_0_d = sin(fractalloo_0_d * u_p_fractalloox0_ring_freq + time_0_time) / u_p_fractalloox0_ring_freq;
-        fractalloo_0_d = abs(fractalloo_0_d);
-        fractalloo_0_d = pow(u_p_fractalloox0_glow / max(fractalloo_0_d, 0.0001), u_p_fractalloox0_glow_pow);
-        fractalloo_0_color += fractalloo_0_col * fractalloo_0_d;
+    vec3 fractal_rings_0_out_out_color = vec3(0.0);
+    vec3 fractal_rings_0_ao_mul_0_c4_result = vec3(0.0);
+    vec2 fractal_rings_0_lc_loopcarry_0 = uv_0_uv;
+    for (float fractal_rings_0_i = 0.0; fractal_rings_0_i < 4.0; fractal_rings_0_i++) {
+    vec2 fractal_rings_0_g_fract_0_cid = floor(fractal_rings_0_lc_loopcarry_0 * u_p_fractalxringsx0xgxfractx0_scale);
+    vec2 fractal_rings_0_g_fract_0_output = fract(fractal_rings_0_lc_loopcarry_0 * u_p_fractalxringsx0xgxfractx0_scale) - 0.5;
+    float fractal_rings_0_g_len_0_c2_output = length(uv_0_uv) * u_p_fractalxringsx0xgxlenx0xc2_scale;
+    float fractal_rings_0_g_time_0_time = u_time;
+    float fractal_rings_0_g_cst_0_value = u_p_fractalxringsx0xgxcstx0_value;
+    float fractal_rings_0_g_len_0_output = length(fractal_rings_0_g_fract_0_output) * u_p_fractalxringsx0xgxlenx0_scale;
+    float fractal_rings_0_g_exp_0_output = exp(fractal_rings_0_g_len_0_c2_output * u_p_fractalxringsx0xgxexpx0_scale);
+    float fractal_rings_0_g_mul_0_c3_result = fractal_rings_0_i * u_p_fractalxringsx0xgxmulx0xc3_b;
+    float fractal_rings_0_g_mul_0_result = fractal_rings_0_g_len_0_output * fractal_rings_0_g_exp_0_output;
+    float fractal_rings_0_g_add_0_c2_result = fractal_rings_0_g_len_0_c2_output + fractal_rings_0_g_mul_0_c3_result;
+    float fractal_rings_0_g_mul_0_c2_result = fractal_rings_0_g_mul_0_result * u_p_fractalxringsx0xgxmulx0xc2_b;
+    vec3 fractal_rings_0_g_pal_0_color = palette((fractal_rings_0_g_add_0_c2_result * u_p_fractalxringsx0xgxpalx0_scale + fractal_rings_0_g_time_0_time * u_p_fractalxringsx0xgxpalx0_speed), u_p_fractalxringsx0xgxpalx0_offset, u_p_fractalxringsx0xgxpalx0_amplitude, u_p_fractalxringsx0xgxpalx0_freq, u_p_fractalxringsx0xgxpalx0_phase);
+    float fractal_rings_0_g_add_0_result = fractal_rings_0_g_mul_0_c2_result + fractal_rings_0_g_time_0_time;
+    float fractal_rings_0_g_sin_0_output = u_p_fractalxringsx0xgxsinx0_amp * sin(fractal_rings_0_g_add_0_result * u_p_fractalxringsx0xgxsinx0_freq);
+    float fractal_rings_0_g_abs_0_output = abs(fractal_rings_0_g_sin_0_output);
+    float fractal_rings_0_g_div_0_result = fractal_rings_0_g_cst_0_value / max(fractal_rings_0_g_abs_0_output, 0.0001);
+    vec3 fractal_rings_0_g_mul_0_c4_result = fractal_rings_0_g_pal_0_color * fractal_rings_0_g_div_0_result;
+    fractal_rings_0_lc_loopcarry_0 = fractal_rings_0_g_fract_0_output;
+    fractal_rings_0_ao_mul_0_c4_result += fractal_rings_0_g_mul_0_c4_result;
+    fractal_rings_0_out_out_color = fractal_rings_0_ao_mul_0_c4_result;
     }
-    // Feedback (texture): the fractal (Fresh, at 0.28) added over last frame's trails, which fade to 1% in 0.23 seconds (about 72% kept each frame at 60 fps), blue fastest (Tint): smooth motion trails at any frame rate.
-    vec4 trails_0_c2_src = vec4(fractalloo_0_color, 1.0);
+    // Feedback (texture): the rings (Fresh, at 0.28) added over last frame's trails, which fade to 1% in 0.23 seconds (about 72% kept each frame at 60 fps), blue fastest (Tint): smooth motion trails at any frame rate.
+    vec4 trails_0_c2_src = vec4(fractal_rings_0_out_out_color, 1.0);
     vec3 trails_0_c2_fr = trails_0_c2_src.rgb * u_p_trailsx0xc2_amount;
     vec2 trails_0_c2_rd_pv = vec2(u_p_trailsx0xc2_pivotX, u_p_trailsx0xc2_pivotY);
     float trails_0_c2_rd_a = radians(u_p_trailsx0xc2_turn);
@@ -14380,8 +14520,7 @@ void main() {
       "nodeId": "mb_blur",
       "nodeIds": [
         "mb_blur__fbstep",
-        "mb_frac",
-        "mb_time",
+        "mb_rings",
         "mb_uv",
         "mb_blur",
       ],
@@ -14494,19 +14633,38 @@ exports[`golden shaders: every example compiles as it did > newtonFractalZ5 1`] 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "0dc7060b31b4471582bef9f22acf:4986",
+  "fragmentShader": "0f0d443fd66c511ad0ed6a2b1f01:7665",
   "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "1c2c06ea9eabc600e2bbf5c6a510:86",
-  "paramBindings": "041dded6f6e42e05fd022f6548a6:260",
+  "nodeSlugs": "09e859099d9cca17759990371dbd:832",
+  "paramBindings": "06a5e117f024c01010aa4b8ab144:1028",
   "paramUniforms": [
-    "u_p_newtonfracx2_center_x",
-    "u_p_newtonfracx2_center_y",
-    "u_p_newtonfracx2_convergence",
-    "u_p_newtonfracx2_shade_power",
-    "u_p_newtonfracx2_zoom",
+    "u_p_expx0_scale",
+    "u_p_mulx0_b",
+    "u_p_mulx0xc4_b",
+    "u_p_mulx0xc5_b",
+    "u_p_newtonxstepx0xgxaddx0_b",
+    "u_p_newtonxstepx0xgxaddx0xc2_b",
+    "u_p_newtonxstepx0xgxcomparex0_smoothing",
+    "u_p_newtonxstepx0xgxcomplexpowx4_exponent",
+    "u_p_newtonxstepx0xgxcomplexpowx5_exponent",
+    "u_p_newtonxstepx0xgxcstx0_x",
+    "u_p_newtonxstepx0xgxcstx0_y",
+    "u_p_newtonxstepx0xgxcstx0xc2_value",
+    "u_p_newtonxstepx0xgxlenx0_scale",
+    "u_p_newtonxstepx0xgxmulx0xc2_b",
+    "u_p_newtonxstepx0xgxmulx0xc3_b",
+    "u_p_newtonxstepx0xgxsinx0_amp",
+    "u_p_newtonxstepx0xgxsinx0_freq",
+    "u_p_newtonxstepx0xgxsinx0_input",
+    "u_p_newtonxstepx0xgxsubx0_b",
+    "u_p_newtonxstepx0xgxsubx0xc2_b",
+    "u_p_palx0_anim",
+    "u_p_palx0_scale",
+    "u_p_palx0_speed",
+    "u_p_palx0_value",
   ],
-  "paramValues": "152fa5a89f76f703386ee1bdbf7b:169",
+  "paramValues": "0916ef73a638240198209a687395:807",
   "passes": null,
   "success": true,
   "textureUniforms": {},
@@ -18452,41 +18610,6 @@ exports[`golden shaders: every example compiles as it did > publishAndKeyframes 
 }
 `;
 
-exports[`golden shaders: every example compiles as it did > raymarchSpheres 1`] = `
-{
-  "audioUniforms": {},
-  "echo": null,
-  "errors": null,
-  "fragmentShader": "1977115e4144e8077cdce54c1e5f:7356",
-  "isStateful": false,
-  "liveUniforms": {},
-  "nodeSlugs": "0bcc123bb3dc5117112023ef7277:82",
-  "paramBindings": "17de5f1de6636a1a07879e997058:657",
-  "paramUniforms": [
-    "u_p_raymarch3dx2_ambient",
-    "u_p_raymarch3dx2_cam_dist",
-    "u_p_raymarch3dx2_cam_fov",
-    "u_p_raymarch3dx2_cam_height",
-    "u_p_raymarch3dx2_cam_speed",
-    "u_p_raymarch3dx2_fog_color",
-    "u_p_raymarch3dx2_fog_dist",
-    "u_p_raymarch3dx2_light_x",
-    "u_p_raymarch3dx2_light_y",
-    "u_p_raymarch3dx2_light_z",
-    "u_p_raymarch3dx2_max_dist",
-    "u_p_raymarch3dx2_shape_r",
-    "u_p_raymarch3dx2_specular",
-    "u_p_raymarch3dx2_surf_dist",
-  ],
-  "paramValues": "1a014b31364f77126bb5caf11c06:478",
-  "passes": null,
-  "success": true,
-  "textureUniforms": {},
-  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
-  "videoUniforms": {},
-}
-`;
-
 exports[`golden shaders: every example compiles as it did > refractDirFakeGlass 1`] = `
 {
   "audioUniforms": {},
@@ -19916,19 +20039,32 @@ exports[`golden shaders: every example compiles as it did > waveInterference 1`]
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "0ad5267cfa7eff03fb8dc6671804:2424",
+  "fragmentShader": "15d1c66b9f12ea0e1e839f222137:3853",
   "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "17ad8b2ded20bc01bb27190d34be:130",
-  "paramBindings": "0ad9a486813d7f08d384fd134f47:196",
+  "nodeSlugs": "1f18c1dd1a6e76054250402c6eb7:263",
+  "paramBindings": "1e8623a43b146812418ea0ffac26:544",
   "paramUniforms": [
-    "u_p_palx5_scale",
-    "u_p_wavex2_distortion",
-    "u_p_wavex2_scale",
-    "u_p_wavex3_distortion",
-    "u_p_wavex3_scale",
+    "u_p_addx0_b",
+    "u_p_addx0xc2_b",
+    "u_p_lenx0_scale",
+    "u_p_mulx0_b",
+    "u_p_mulx0xc2_b",
+    "u_p_mulx0xc3_b",
+    "u_p_mulx0xc4_b",
+    "u_p_palx0_anim",
+    "u_p_palx0_scale",
+    "u_p_palx0_speed",
+    "u_p_palx0_value",
+    "u_p_sinx0_amp",
+    "u_p_sinx0_freq",
+    "u_p_sinx0_input",
+    "u_p_sinx0xc2_amp",
+    "u_p_sinx0xc2_freq",
+    "u_p_sinx0xc2_input",
+    "u_p_subx0_b",
   ],
-  "paramValues": "00016096eb1ccc1021221a8e25ce:131",
+  "paramValues": "0508a57c68b17114423cc52becfb:394",
   "passes": null,
   "success": true,
   "textureUniforms": {},
@@ -19942,18 +20078,24 @@ exports[`golden shaders: every example compiles as it did > waveTextureDemo 1`] 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1dffef1bb219470c0db0893f27b1:2121",
+  "fragmentShader": "03f34f97357b800af1d3982fb9ee:2723",
   "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "0f29e7404c8ebe1171459ec3e89b:96",
-  "paramBindings": "15033252e558df0e47c504cf01fc:157",
+  "nodeSlugs": "05d9b44d24421c13c8652f8b04fe:124",
+  "paramBindings": "1aa974a5da7b1719405e0aa340a4:298",
   "paramUniforms": [
-    "u_p_palx3_scale",
-    "u_p_wavex2_distortion",
-    "u_p_wavex2_scale",
-    "u_p_wavex2_speed",
+    "u_p_lenx0_scale",
+    "u_p_mulx0_b",
+    "u_p_palx0_anim",
+    "u_p_palx0_scale",
+    "u_p_palx0_speed",
+    "u_p_palx0_value",
+    "u_p_sinx0_amp",
+    "u_p_sinx0_freq",
+    "u_p_sinx0_input",
+    "u_p_subx0_b",
   ],
-  "paramValues": "0fc1d139474d0b13539b3ca34e53:101",
+  "paramValues": "04a9943fed888a0a56335094540b:213",
   "passes": null,
   "success": true,
   "textureUniforms": {},

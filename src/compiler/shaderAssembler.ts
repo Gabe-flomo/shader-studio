@@ -1964,6 +1964,14 @@ export class ShaderAssembler {
               }
             }
 
+            // 4c. Loop Break: stop here when its When is on. Last in the pass, so every carry, accumulator and
+            //     output already holds this pass's value (an escape-time fractal keeps the z that escaped).
+            for (const sn of subgraph.nodes) {
+              if (sn.type !== 'loopBreak' || !sn.inputs.when?.connection) continue;
+              const when = this.nodeOutputs.get(prefix + (subSlugMap.get(sn.id) ?? sn.id))?.when;
+              if (when && when !== '0.0') this.mainCode.push(`    if (${when} > 0.5) break;\n`);
+            }
+
             // 5. Close the for loop
             this.mainCode.push(`    }\n`);
 

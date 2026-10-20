@@ -99,7 +99,7 @@ export {
   ChromaShiftNode,
 } from './effects';
 export { LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode, LoopColorRingStepNode } from './loopPair';
-export { LoopCarryNode } from './loop';
+export { LoopCarryNode, LoopBreakNode } from './loop';
 
 // Noise
 export { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode, NoiseFloatNode, ScatterNode } from './noise';
@@ -198,7 +198,7 @@ export {
   FractRawNode, SmoothstepNode,
   NormalizeVec2Node,
   RemapNode,
-  CrossProductNode, ReflectNode, ComplexMulNode, ComplexPowNode,
+  CrossProductNode, ReflectNode, ComplexMulNode, ComplexDivNode, ComplexPowNode, LogNode,
   AngleToVec2Node, LuminanceNode, SignNode, StepNode,
   WeightedAverageNode,
   CompareNode, SelectNode,
@@ -249,7 +249,7 @@ import {
   GaussianBlurNode, BloomNode, RadialBlurNode, TiltShiftBlurNode, LensBlurNode, MotionBlurNode, DepthOfFieldNode, DofTextureNode, TiltShiftTextureNode,
   ChromaShiftNode, GlowToColorNode, NormalToColorNode, CrtMaskNode } from './effects';
 import { LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode, LoopColorRingStepNode } from './loopPair';
-import { LoopCarryNode } from './loop';
+import { LoopCarryNode, LoopBreakNode } from './loop';
 import { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode, NoiseFloatNode, ScatterNode } from './noise';
 import { MandelbrotNode, IFSNode, NewtonFractalNode, LyapunovNode, ApollonianNode, SphericalFoldFractalNode } from './fractals';
 import { ChladniFieldNode, ChladniModeFreqNode } from './physics';
@@ -297,7 +297,7 @@ import {
   FractRawNode, SmoothstepNode,
   NormalizeVec2Node,
   RemapNode,
-  CrossProductNode, ReflectNode, RefractDirNode, ComplexMulNode, ComplexPowNode,
+  CrossProductNode, ReflectNode, RefractDirNode, ComplexMulNode, ComplexDivNode, ComplexPowNode, LogNode,
   AngleToVec2Node, LuminanceNode, SignNode, StepNode,
   WeightedAverageNode,
   CompareNode, SelectNode,
@@ -554,6 +554,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   chromaShift: ChromaShiftNode,
   // Loops
   loopCarry:             LoopCarryNode,
+  loopBreak:             LoopBreakNode,
   loopRippleStep:        LoopRippleStepNode,
   loopRotateStep:        LoopRotateStepNode,
   loopDomainFold:        LoopDomainFoldNode,
@@ -827,6 +828,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   cos: CosNode,
   tan: TanNode,
   exp: ExpNode,
+  log: LogNode,
   pow: PowNode,
   negate: NegateNode,
   length: LengthNode,
@@ -864,6 +866,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   reflect: ReflectNode,
   refractDir: RefractDirNode,
   complexMul: ComplexMulNode,
+  complexDiv: ComplexDivNode,
   complexPow: ComplexPowNode,
   angleToVec2: AngleToVec2Node,
   luminance: LuminanceNode,

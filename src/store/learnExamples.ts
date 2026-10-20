@@ -23,6 +23,7 @@ import { VECTORIZABLE_NODES } from '../nodes/definitions/math';
 import { ctl, colourCtl, group, n, out, play, port, time, uv } from './graphBuilder';
 import type { ExampleGraph } from './exampleIndex';
 import { LEARN_EXAMPLE_INDEX, LEARN_MOVED_INDEX } from './learnExampleIndex';
+import { escapeGroup, smoothEscapeColour } from './builtUpExamples';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -747,18 +748,24 @@ lesson('learnWarp', [
 
 // ── Fractals (chapter 14, not yet written in the Book) ──────────────────────
 
-lesson('learnFractal', [
-  noted(uv(), 'The canvas position, shrunk below before it becomes c.'),
-  n('constant', 'zoom', 40, 440, { value: 8, ...note('How many times the view has doubled in magnification.') }),
-  n('exp', 'size', 280, 440, { scale: -0.6931, ...note('exp(−zoom × ln 2) = 2^−zoom: the size of the view.') }, { input: ['zoom', 'value'] }),
-  vt(n('multiply', 'view', 280, 220, { ...note('UV × the view size: each extra zoom step halves the area the pixels cover.') }, { a: ['uv', 'uv'], b: ['size', 'output'] }), 'vec2'),
-  n('mandelbrot', 'm', 520, 220, { center_x: -0.7453, center_y: 0.1127, zoom: 0.7, color_scale: 3, ...note('For each pixel: z = z² + c, over and over, with c the pixel\'s position. The colour is how many steps z took to escape.') }, { uv: ['view', 'result'] }),
-  out(['m', 'color'], 820),
-], [ctl('z', 'zoom::value', 'Zoom (doublings)', 0, 16, 0.01)], `**What it shows.** A fractal is a shape made of smaller copies of itself, and the most famous one comes from one line of maths. Take the pixel's position as a complex number c, start z at 0, and repeat z = z² + c. For some pixels z stays small forever: they are the black **Mandelbrot set**. For the rest it flies off, and colouring by how quickly draws the glowing border, which is infinitely detailed.
+lesson('learnFractal', (() => {
+  const colour = smoothEscapeColour('m', 1000, 120, { preset: '0', scale: 0.022 });
+  return [
+    noted(uv(), 'The canvas position, shrunk below before it becomes c.'),
+    n('constant', 'zoom', 40, 440, { value: 8, ...note('How many times the view has doubled in magnification.') }),
+    n('exp', 'size', 280, 440, { scale: -0.6931, ...note('exp(−zoom × ln 2) = 2^−zoom: the size of the view.') }, { input: ['zoom', 'value'] }),
+    vt(n('multiply', 'view', 280, 220, { ...note('UV × the view size: each extra zoom step halves the area the pixels cover.') }, { a: ['uv', 'uv'], b: ['size', 'output'] }), 'vec2'),
+    vt(n('constant', 'centre', 280, 600, { x: -0.7453, y: 0.1127, ...note('Constant (vec2): the point the zoom heads into, in the "seahorse valley" on the set\'s edge.') }), 'vec2'),
+    vt(n('add', 'c', 520, 220, { ...note('Add: the pixel\'s point on the complex plane, c.') }, { a: ['view', 'result'], b: ['centre', 'value'] }), 'vec2'),
+    escapeGroup('m', 760, 160, { c: ['c', 'result'], iterations: 128, label: 'z = z² + c (Mandelbrot)' }),
+    ...colour.nodes,
+    out(colour.color, 2480, 280),
+  ];
+})(), [ctl('z', 'zoom::value', 'Zoom (doublings)', 0, 16, 0.01), ctl('cyc', 'pal::scale', 'Colour cycles', 0.005, 0.2, 0.001)], `**What it shows.** A fractal is a shape made of smaller copies of itself, and the most famous one comes from one line of maths. Take the pixel's position as a complex number c, start z at 0, and repeat z = z² + c. For some pixels z stays small forever: they are the black **Mandelbrot set**. For the rest it flies off, and colouring by how quickly draws the glowing border, which is infinitely detailed.
 
-**How it is built.** UV → **Mandelbrot / Julia** → Output. The node runs the loop and colours it with a cosine palette. The UV is shrunk by 2^−zoom before the node reads it, so each step of Zoom doubles the magnification, here into the "seahorse valley" on the set's edge.
+**How it is built.** Every step is a node. The UV is shrunk by 2^−zoom and moved to a point on the set's edge: that is c. The **Group** repeats up to 128 times (Iterations): **Loop Carry** holds z, **Complex Mul** squares it, **Add** adds c, and a second Loop Carry counts the passes. **Loop Break** stops a pixel as soon as |z| passes 16, so z and the count keep the values from the pass that escaped. After the group, **Log** (base 2) twice turns the count into a smooth number, n − log₂ log₂ |z|², so the colours flow instead of stepping, and a **Palette** colours it. Points that never escaped stay black.
 
-**Try.** Zoom out to 0 to see the whole set, then back in slowly: the valley, then seahorses and spirals, then tiny copies of the whole set. Switch Mode to Julia and wire the Mouse into C Pos: every mouse position is a different Julia set. The Book's chapter on fractals isn't written yet; the next lesson builds a fractal from nodes instead.`);
+**Try.** Zoom out to 0 to see the whole set, then back in slowly: the valley, then seahorses and spirals, then tiny copies of the whole set. Lower Iterations on the group to 32: the edge goes blurry, because detail needs passes. Wire the Mouse's UV into the centre instead and fly around. The next lesson builds a different fractal, by folding space.`);
 
 lesson('learnLoop', [
   uv(40, 260),

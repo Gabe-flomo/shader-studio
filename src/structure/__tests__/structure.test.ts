@@ -110,7 +110,7 @@ describe('flow detection', () => {
   });
 
   it('agrees with the bundled examples', () => {
-    const want: Record<string, FlowId> = { ringGlow: '2d', neonGlow: '2d', learn3dLight: '3d', raymarchSpheres: '3d', gridRulesLife: 'pass', passFeedbackTrails: 'pass', slimeMold: 'agents', agentBoids: 'agents' };
+    const want: Record<string, FlowId> = { ringGlow: '2d', neonGlow: '2d', learn3dLight: '3d', learn3dMarch: '3d', gridRulesLife: 'pass', passFeedbackTrails: 'pass', slimeMold: 'agents', agentBoids: 'agents' };
     for (const [k, f] of Object.entries(want)) {
       const nodes = (EXAMPLE_GRAPHS[k] as { nodes: GraphNode[] }).nodes;
       expect([k, detectFlow(nodes)]).toEqual([k, f]);

@@ -166,7 +166,7 @@ These categories show sub-group chips inside the browser. Clicking a chip filter
 | Warp | displace, uvWarp (Kind: Smooth, Jitter, Curl, Swirl) |
 | Repeat | fract, infiniteRepeat, mirroredRepeat2D, limitedRepeat2D, angularRepeat2D |
 | Distort | polarSpace, logPolarSpace, hyperbolicSpace, inversionSpace, mobiusSpace, kaleidoSpace, sphericalSpace, rippleSpace, perspective2d, shear |
-| Texture | waveTexture, magicTexture, grid |
+| Texture | grid (waveTexture and magicTexture retired 2026-10-19) |
 
 ### Math
 | Sub-group | Contents |
@@ -174,13 +174,15 @@ These categories show sub-group chips inside the browser. Clicking a chip filter
 | Arithmetic | add, subtract, multiply, divide |
 | Trig | sin, cos, **tan**, atan2 |
 | Rounding | abs, negate, ceil, floor, round, fract |
-| Algebra | pow, sqrt, exp, tanh |
+| Algebra | pow, sqrt, exp, log, tanh |
 | Interp | clamp, mix, mixVec3, smoothstep, mod |
 | Compare | min, max, step, sign |
 | Geometry | length, dot, crossProduct, reflect, luminance |
 | Vec2 | vec2Const, makeVec2, splitVec2, and more |
 | Vec3 | vec3Const, makeVec3, splitVec3, and more |
-| Complex | complexMul, complexPow |
+| Complex | complexMul, complexDiv, complexPow |
+
+The **Loops** row (Math & Logic) holds loopCarry, loopIndex and loopBreak, the parts of an iterated Group (docs/iterated-groups.md). The Fractals row is gone: its whole-shader nodes were retired on 2026-10-19 (docs/node-retirements.md, "Whole-shader nodes"), and fractals are built from these.
 | Remap | remap |
 
 ---

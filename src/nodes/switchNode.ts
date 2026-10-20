@@ -38,11 +38,11 @@ export const SWITCH_FAMILIES: readonly SwitchFamily[] = [
   { id: 'sdf-combine', label: 'SDF combiners', types: ['sdfUnion', 'sdfIntersect', 'sdfSubtract', 'minMath', 'max'] },
   { id: 'rounding', label: 'Rounding', types: ['floor', 'ceil', 'round', 'fractRaw', 'quantize', 'mod', 'abs', 'sign'] },
   { id: 'trig', label: 'Trigonometry', types: ['sin', 'cos', 'tan', 'tanh'] },
-  { id: 'unary-math', label: 'One-input math', types: ['abs', 'negate', 'sqrt', 'exp', 'sign', 'floor', 'ceil', 'round', 'fractRaw', 'tanh'] },
+  { id: 'unary-math', label: 'One-input math', types: ['abs', 'negate', 'sqrt', 'exp', 'log', 'sign', 'floor', 'ceil', 'round', 'fractRaw', 'tanh'] },
   { id: 'sdf-modify', label: 'SDF modifiers', types: ['sdfOffset', 'sdfOnion', 'sdfSharpen', 'abs', 'negate'] },
   { id: 'arith', label: 'Arithmetic', types: ['add', 'subtract', 'multiply', 'divide', 'pow', 'minMath', 'max', 'mod'] },
   { id: 'interp', label: 'Interpolation', types: ['mix', 'smoothstep', 'remap', 'clamp', 'step'] },
-  { id: 'noise', label: 'Noise', types: ['fbm', 'noiseFloat', 'voronoi', 'scatter', 'waveTexture'] },
+  { id: 'noise', label: 'Noise', types: ['fbm', 'noiseFloat', 'voronoi', 'scatter'] },
   { id: 'colour-adjust', label: 'Colour adjustments', types: [
     'brightnessContrast', 'colorSaturation', 'hueRotate', 'liftGammaGain', 'shadowsHighlights', 'toneCurve', 'toneMap',
     'invert', 'posterize', 'hsv', 'hueRange', 'grain',

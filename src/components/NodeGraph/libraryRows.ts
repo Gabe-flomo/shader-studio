@@ -13,15 +13,16 @@ export const HIDDEN_NODES = new Set([
   ...NOT_OFFERED,
   // Texture (textureInput) is the one card for pictures, videos and the webcam; its Source switch makes a videoInput.
   'videoInput',
-  'output', 'vec4Output', 'loopIndex',
+  'output', 'vec4Output',
   'groupOutput', 'groupInput', 'marchLoopInputs', 'marchLoopOutput', 'scope',
-  'forLoop', 'loopRippleStep', 'loopRotateStep', 'loopDomainFold',
+  'loopRippleStep', 'loopRotateStep', 'loopDomainFold',
   'loopFloatAccumulate', 'loopColorRingStep', 'loopRingStep',
   'forwardCamera',
   'marchPos', 'marchDist', 'marchOutput',
   'scenePos', 'sceneOutput', 'spaceWarpGroup',
-  'rotatingLinesLoop', 'accumulateLoop', 'flowField', 'circlePack',
-  'raymarch3d', 'volumeClouds', 'rayMarch', 'loopCarry', 'loop',
+  // The whole-shader looks (For Loop, Rotating Lines, Flow Field, Raymarch 3D…) are retired: NOT_OFFERED above.
+  // Loop Carry, Loop Index and Loop Break are offered (the Loops row): fractals are built from them.
+  'rayMarch', 'loop',
   'grid',
   // Made by the compiler at the end of a Pass's program (compiler/passGraph.ts).
   'passOutput',
@@ -53,13 +54,13 @@ export const HIDDEN_NODES = new Set([
 
 const CATEGORY_SECTIONS_RAW: Array<{ label: string; categories: string[] }> = [
   { label: '2D tools',         categories: ['2D Primitives', '2D Space', 'Grid', 'Field', 'Halftone'] },
-  { label: '3D tools',         categories: ['3D Primitives', '3D Transforms', '3D Boolean Ops', '3D Scene', '3D Lighting', 'Loops', '4D Shapes', '4D Space', '4D Projection', 'Splats'] },
+  { label: '3D tools',         categories: ['3D Primitives', '3D Transforms', '3D Boolean Ops', '3D Scene', '3D Lighting', '4D Shapes', '4D Space', '4D Projection', 'Splats'] },
   { label: 'Shape operations', categories: ['SDF'] },
   { label: 'Colour',           categories: ['Color', 'Color Grading', 'Combiners'] },
   { label: 'Effects',          categories: ['Effects', 'Texture tools'] },
   { label: 'Agents',           categories: ['Agents', 'Agent presets', 'Particles & Fields'] },
-  { label: 'Generators',       categories: ['Noise', 'Fractals', 'Science'] },
-  { label: 'Math & Logic',     categories: ['Sources', 'Audio', 'Animation', 'Math', 'Matrix', 'Shapers', 'Conditionals'] },
+  { label: 'Generators',       categories: ['Noise', 'Science'] },
+  { label: 'Math & Logic',     categories: ['Sources', 'Audio', 'Animation', 'Math', 'Matrix', 'Shapers', 'Conditionals', 'Loops'] },
   { label: 'Functions',        categories: ['My Nodes', 'Functions'] },
   { label: 'Utility',          categories: ['Utility', 'Output'] },
 ];
@@ -131,7 +132,7 @@ export const CATEGORY_INFO: Record<string, string> = {
   '3D Scene': 'The 3D pipeline: a March Camera makes the rays, a Scene Group holds the shapes, a March Loop finds where each ray hits.',
   Splats: 'Change every splat of a Splat Scene before it is drawn: Dissolve, Explode, Wave, Colour, Crop, Size & Opacity and Points, or Splat Attributes → your own nodes → Set Splat. Chain them into the Splat Scene\'s Modifier; the chain runs once per splat.',
   '3D Lighting': 'Light what the march loop hit: shading, shadows, ambient occlusion, glass and fog. Wire them from the loop\'s outputs.',
-  Loops: 'Repeat a chain of nodes several times inside one shader.',
+  Loops: 'Inside a Group with Iterations above 1 (a for loop): Loop Carry keeps a value from pass to pass, Loop Index says which pass this is, Loop Break stops early. Fractals are built from these.',
   '4D Shapes': 'Shapes in four dimensions, measured at a 4D point (from Lift to 4D): hypersphere, tesseract, duocylinder, the regular polytopes and quaternion fractals. What you see is their 3D slice.',
   '4D Space': 'Get a point into 4D and change it there: Lift to 4D turns the 3D point into a 4D one (choosing how the slice cuts), then move, turn in any of the six 4D planes, scale, repeat, fold, twist or add noise, before a 4D shape measures it.',
   '4D Projection': 'See a whole 4D shape at once instead of a slice: project it into 3D (perspective or stereographic), draw its wireframe, or go straight to the flat picture.',
@@ -148,7 +149,6 @@ export const CATEGORY_INFO: Record<string, string> = {
   Particles: 'GPU particles: emit, move and draw thousands of points.',
   'Texture tools': 'Everything that makes or works on a texture (a Pass, a picture, a video): the Pass that renders part of the graph to a texture (feedback, trails, multi-step simulations), then blur, glow, edges, lens effects, reading it elsewhere, masks and levels, its channels, trails and time, depth and tracking.',
   Noise: 'Smooth random patterns (value, Perlin, simplex, fBm, Voronoi) for textures, warps and motion.',
-  Fractals: 'Shapes that repeat at every scale: Mandelbrot, Julia, kaleidoscopic folds.',
   Sources: 'Inputs from outside the graph: UV, time, mouse, resolution, video, constants (sound: the Audio row).',
   Audio: 'Sound into pictures: an Audio Source (a file or the microphone, with its own frequency bands) and the nodes that listen to it: how loud a band is, when a drum hits, the spectrum, its history and the wave itself.',
   Animation: 'Values that move over time: LFOs, envelopes and keyframes.',
@@ -184,7 +184,7 @@ export const CATEGORY_ORDER = [...CATEGORY_SECTIONS.flatMap(s => s.categories.fl
 export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>> = {
   '2D Primitives': [
     { label: 'SDF',      types: ['circleSDF', 'boxSDF', 'ringSDF', 'shapeSDF', 'sdSegment', 'sdEllipse'] },
-    { label: 'Patterns', types: ['truchet', 'metaballs', 'lissajous'] },
+    { label: 'Patterns', types: ['truchet', 'lissajous'] },
     { label: 'Lines & text', types: ['curveTrace', 'text'] },
   ],
   '3D Primitives': [
@@ -225,13 +225,13 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
     { label: 'Arithmetic', types: ['add', 'subtract', 'multiply', 'divide'] },
     { label: 'Trig',       types: ['sin', 'cos', 'tan', 'atan2'] },
     { label: 'Rounding',   types: ['abs', 'negate', 'ceil', 'floor', 'round', 'fractRaw', 'quantize'] },
-    { label: 'Algebra',    types: ['pow', 'sqrt', 'exp', 'tanh'] },
+    { label: 'Algebra',    types: ['pow', 'sqrt', 'exp', 'log', 'tanh'] },
     { label: 'Interp',     types: ['clamp', 'bounds', 'mix', 'smoothstep', 'mod', 'modSelect'] },
     { label: 'Compare',    types: ['minMath', 'max', 'step', 'sign'] },
     { label: 'Geometry',   types: ['length', 'dot', 'crossProduct', 'reflect', 'refractDir'] },
     { label: 'Vec2',       types: ['makeVec2', 'splitVec2', 'transformVec', 'normalizeVec2', 'angleToVec2'] },
     { label: 'Vec3 & Vec4', types: ['makeVec3', 'splitVec3', 'makeVec4', 'splitVec4', 'swizzle'] },
-    { label: 'Complex',    types: ['complexMul', 'complexPow'] },
+    { label: 'Complex',    types: ['complexMul', 'complexDiv', 'complexPow'] },
     { label: 'Remap',      types: ['remap', 'weightedAverage'] },
   ],
   // The Agents family (docs/agents-plan.md): the inside nodes only go into an open Agents group.
@@ -245,9 +245,9 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
     { label: 'Inside: rule steps', types: ['agentTurnToward', 'agentFollowTrail', 'agentWander', 'agentOrbit', 'agentAvoidWalls', 'agentApplyForce', 'agentDrag', 'agentSlowInCrowd', 'agentLeaveTrail', 'agentFadeWithAge'] },
   ],
   Effects: [
-    { label: 'Lighting', types: ['light', 'glowToColor'] },
+    // Float Warp shaped a value here beside the Gravitational Lens (Warp) until the lens was retired (2026-10-19).
+    { label: 'Light and values', types: ['light', 'glowToColor', 'floatWarp'] },
     { label: 'Screen',   types: ['crtMask', 'scanlines', 'vignette', 'echo', 'glitch'] },
-    { label: 'Warp',     types: ['gravitationalLens', 'floatWarp'] },
   ],
   // Effects also shows the Post Processing nodes (MERGED_CATEGORIES); anything not listed here goes under More.
   'Color Grading': [
@@ -263,7 +263,6 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
     { label: 'Repeat',  types: ['infiniteRepeatSpace', 'limitedRepeat2D', 'mirroredRepeat2D', 'angularRepeat2D', 'kaleidoSpace', 'grid'] },
     { label: 'Warp',    types: ['uvWarp', 'rippleSpace', 'sphericalSpace', 'lensDistortion', 'crtScreen', 'turbulence', 'uvReciprocal', 'gravityField', 'spiralField', 'vectorField'] },
     { label: 'Map',     types: ['polarSpace', 'logPolarSpace', 'hyperbolicSpace', 'inversionSpace', 'mobiusSpace', 'cornerPin'] },
-    { label: 'Pattern', types: ['waveTexture', 'magicTexture', 'chaosLayers'] },
   ],
   Combiners: [
     { label: 'Blend',   types: ['mask', 'addColor', 'alphaBlend', 'combineRGB'] },
@@ -271,7 +270,7 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
   Grid: [
     { label: 'Layout',   types: ['gridPattern', 'gridPaint', 'arrayField', 'gridLayout', 'cellPicture', 'pieces'] },
     { label: 'Motion',   types: ['waveRadius', 'animatedCellCenter'] },
-    { label: 'Displace & warp', types: ['neighborDist', 'cellDisplace', 'neighborAttractCircles', 'gridDensityWarp'] },
+    { label: 'Displace & warp', types: ['neighborDist', 'cellDisplace', 'gridDensityWarp'] },
     { label: 'Filter',   types: ['cellFilter', 'cellPattern', 'neighborOffset2d'] },
   ],
   // Every node that works on a texture (the "(texture)" ones), in one row (docs/node-retirements.md).
