@@ -2,6 +2,33 @@
 
 **Status:** phases 0 to 7 built (Pass node, Sample / Edges / Blur / Glow / Displace (texture), Previous feedback, live and offline rendering, exported web pages, inspecting a pass, Particles born from a Pass, and phase 7's Passes in plain groups, Repeat and image textures: see the "What shipped" sections below).
 
+## How many passes (the pass account, 2026-10-19)
+
+A graph has **8 passes** (`MAX_PASSES`). A Pass node is one, and so are the nodes that open into passes when the graph compiles:
+
+| Node | Passes |
+|---|---|
+| Pass, Shader Texture, Feedback (texture), Data Texture, Render Targets | 1 each |
+| Grid Rules | 1 for its board, +1 when its Texture is wired |
+| Curve Trace, Draw: Beam | 1 (its screen) |
+| Optical Flow | 2 (its luma and its flow) |
+| Memory nodes (Lag, Spring, Envelope…) | 1, shared by all of them |
+| Value at Point, and a Text whose Value is read at a point | 1, shared by all of them |
+| March Camera, Lens Smooth or Soft grain | 1 |
+| Draw agents' Sprite from a picture that isn't a Pass's | 1 each |
+
+**Don't count:** Blur, Glow, Radial Fast Blur and Deep Glow draw *hidden passes* with their own budget of 48 (`MAX_HIDDEN_PASSES`, docs/blur-and-glow.md), and Agents groups have their own limits.
+
+**Why a limit:** each pass renders the whole picture into a texture of its own every frame, and a shader can only read so many textures at once.
+
+**Where you see it:**
+- **The toolbar chip** "Passes 3/8", beside the node count, once the graph uses a pass. Amber with one pass (or none) left, red when over. A click opens the account: one row per node that costs passes ("Pass · Feedback blur 1", "Optical Flow 2", "Memory nodes (3) 1 shared"); a row jumps to its node (inside a group too). Under them: "Blur and Glow use their own hidden passes: 5 of 48 (they don't count)", and why there is a limit. On a narrow canvas the chip is one of the last to fold into the toolbar's ⋯, and from there it opens the same account.
+- **On a phone**, the same chip sits at the right of the graph's header row (beside Select) and opens the account as a sheet.
+- **In the node library** (node browser preview, search palette preview, phone Browse): "Uses 1 pass (of 8)", "Uses 2 passes (of 8)", "Shares 1 pass (of 8)…", or when it applies ("Draw: Beam uses 1 pass").
+- **Over the limit**, the compile error lists everything that counts, from the same account: "This graph needs 10 of 8 passes: Pass ×5, Optical Flow ×1 (2 passes), Feedback (texture) ×2, Memory nodes (1, shared by 1). Remove some of them, or let one Pass draw several steps with its Repeat setting."
+
+**One source of truth.** `compiler/passExpand.ts` `expandPassNodes` is the expansion the pass compile runs (groups with a Pass, Shader Textures, Grid Rules, Beams, Feedback, Data Textures, Render Targets, Sprites, Memory, Optical Flow, probes, Smooth lens). `compiler/passBudget.ts` `passBudget(nodes)` runs it, counts the Pass nodes that come out (the number the compile checks) and traces each back to the graph node it came from; hidden passes come from `hiddenPlanOf` (compiler/hiddenBlurs.ts), the plan the compile draws. No shader is generated, and the result is memoised by the node list. `nodePassNote(type)` gives the library's note from a fresh node of the type, with its Texture inputs wired. Tests: `compiler/__tests__/passBudget.test.ts` (each kind's count equals the compiled passes) and `components/shell/__tests__/passBudgetChip.test.tsx`.
+
 ## What shipped (phase 7, 2026-10-04)
 
 **In plain words.**
@@ -237,7 +264,7 @@ This depends on the GPU Particles node (on `claude/release-oct-particles`, not o
 - **Memory:** half-float RGBA is 8 bytes per pixel. At 1080p that's ≈16.6 MB per full-size pass, ×2 with Previous. At ½ Scale it's ¼ of that.
 - **Draws:** each pass is one full-screen draw at scale² of the pixels. Taps dominate: Sobel 9, Blur 13–37, Glow ≈25.
 - **Limits:**
-  - Up to **8 passes** per graph (error past that).
+  - Up to **8 passes** per graph, counting the nodes that open into passes (see "How many passes" above; the error past that lists them).
   - Each program is checked against WebGL2's guaranteed 16 texture units: font, video, images, Data, echo up to 6, `u_prevFrame`, passes and particles together. Over the limit is a compile error naming the program and listing what it samples.
 - **Guidance:** a Blur or Glow card set more than about 12 px with no lower-Scale Pass upstream shows a "set the Pass to ½ for speed" tip. The Performance panel's per-pass rows make cost visible.
 - **Unread passes:** a pass nothing reads (directly or through other passes or particles) isn't drawn.
