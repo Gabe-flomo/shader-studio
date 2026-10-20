@@ -33,6 +33,7 @@ import { ParticlePresets } from './ParticlePresets';
 import { DataTextureCardBody } from './DataTextureCardBody';
 import { RenderTargetsCardBody } from './RenderTargetsCardBody';
 import { SendReceiveCardBody } from './SendReceiveCardBody';
+import { SimpleExprCardBody } from './SimpleExprCard';
 import { DepthCardBody } from '../depth/DepthCardBody';
 import { BlobTrackCardBody } from '../blobs/BlobTrackCardBody';
 import { CacheCardBody } from '../cache/CacheCardBody';
@@ -89,6 +90,7 @@ export function MobileNodeExtras({ node, nodes }: { node: GraphNode; nodes: Grap
       {node.type === 'dataTexture' && <div style={box}><DataTextureCardBody node={node} touch /></div>}
       {node.type === 'renderTargets' && <div style={box}><RenderTargetsCardBody node={node} touch /></div>}
       {(node.type === 'send' || node.type === 'receive') && <div style={box}><SendReceiveCardBody node={node} touch /></div>}
+      {node.type === 'simpleExpr' && <div style={box}><SimpleExprCardBody node={node} touch rows /></div>}
       {node.type === 'depth' && <div style={box}><DepthCardBody node={node} touch /></div>}
       {node.type === 'blobTrack' && <div style={box}><BlobTrackCardBody node={node} /></div>}
       {node.type === 'cache' && <div style={box}><CacheCardBody node={node} /></div>}

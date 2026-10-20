@@ -52,6 +52,7 @@ export const GLOSSARY: readonly GlossaryTerm[] = [
   { name: 'Library', means: 'What you saved that goes on the graph (group presets first, My nodes, functions, Expression Blocks, transforms, palettes) and your media, drawn like the Nodes list: the sidebar entry, Files → Library. Saved graphs are the top bar’s Load', avoid: ['Saved Graphs', 'Saved Keyframes'] },
   { name: 'Storage', means: 'How much is saved and where: the workspace folder, backups, the browser’s room (the Files page only)', avoid: ['Library (for the space meter)'] },
   { name: 'Nodes reference', means: 'Every node type with its sockets, picture and GLSL, under Help', avoid: [] },
+  { name: 'Simple Expression', means: 'The one-line GLSL node: inputs added with + Input take the type of the wire into them; Convert to Expression Block grows it into a full block, Simplify to Simple Expression goes back', avoid: ['One-liner', 'Formula', 'Quick expression (search aliases, not labels)'] },
   { name: 'colour', means: 'UI copy spells it the British way (node labels such as “Color Ramp” are a later pass)', avoid: ['color'] },
 ];
 

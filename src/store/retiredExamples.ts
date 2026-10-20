@@ -43,4 +43,7 @@ export const RETIRED_EXAMPLE_KEYS: readonly string[] = [
   'gridRulesLifeLike', 'gridRulesBrain', 'gridRulesCave', 'gridRulesHeat', 'gridRulesFire', 'gridRulesSand',
   'gridRulesCrystal', 'gridRulesGas', 'agentRulesBoids', 'agentRulesSir', 'agentRulesTermites', 'agentRulesFireflies',
   'agentRulesParticles', 'agentRulesCrowd', 'agentRulesScan',
+  // Not retired but not in a folder either (each folder holds its curated five): Simple Expression's own example,
+  // shown under the node in the node list (Used in) and opened by key.
+  'simpleExprBlend',
 ];

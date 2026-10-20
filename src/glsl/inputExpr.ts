@@ -41,7 +41,7 @@ export function getInputExpr(node: GraphNode, inputKey: string): string | null {
 export function canHaveInputExpr(node: GraphNode, inputKey: string, def?: NodeDefinition): boolean {
   const s = node.inputs[inputKey];
   if (def?.inputs[inputKey]?.field) return false;
-  return !!s && s.type === 'float' && !['output', 'vec4Output', 'group', 'loopCarry'].includes(node.type);
+  return !!s && s.type === 'float' && !['output', 'vec4Output', 'group', 'loopCarry', 'simpleExpr'].includes(node.type);
 }
 
 /** The built-ins an expression may call or name. */

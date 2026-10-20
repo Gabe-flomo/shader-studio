@@ -110,16 +110,16 @@ export function hasSendOrReceive(nodes: GraphNode[]): boolean {
 }
 
 /** The type a wire carries, read in the scope it is in (`container` owns the scope's group ports). */
-function wireType(c: Wire, scope: GraphNode[], container: GraphNode | undefined): string | undefined {
+export function wireType(c: Wire, scope: GraphNode[], container: GraphNode | undefined): string | undefined {
   if (c.nodeId === GROUP_PORT_SENTINEL) return subOf(container!)?.inputPorts?.find(p => p.key === c.outputKey)?.type ?? container?.inputs?.[c.outputKey]?.type;
   const src = scope.find(n => n.id === c.nodeId);
   if (!src) return undefined;
-  if ((src.type === 'exprNode' || src.type === 'expr' || src.type === 'customFn') && c.outputKey === 'result' && typeof src.params?.outputType === 'string') return src.params.outputType;
+  if ((src.type === 'exprNode' || src.type === 'expr' || src.type === 'customFn' || src.type === 'simpleExpr') && c.outputKey === 'result' && typeof src.params?.outputType === 'string') return src.params.outputType;
   return src.outputs?.[c.outputKey]?.type ?? getNodeDefinitionFor(src)?.outputs?.[c.outputKey]?.type;
 }
 
 /** Map every node of the tree; a node (and each list) is only copied when something in it changed. */
-function mapTree(nodes: GraphNode[], fn: (n: GraphNode, scope: GraphNode[], container?: GraphNode) => GraphNode, container?: GraphNode): GraphNode[] {
+export function mapTree(nodes: GraphNode[], fn: (n: GraphNode, scope: GraphNode[], container?: GraphNode) => GraphNode, container?: GraphNode): GraphNode[] {
   let changed = false;
   const out = nodes.map(n => {
     let m = fn(n, nodes, container);

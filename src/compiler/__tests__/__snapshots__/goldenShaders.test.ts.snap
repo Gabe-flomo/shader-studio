@@ -19367,6 +19367,32 @@ exports[`golden shaders: every example compiles as it did > shapesAndGround3D 1`
 }
 `;
 
+exports[`golden shaders: every example compiles as it did > simpleExprBlend 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "1dbf454bf99e2917fc781daf5a65:3822",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "161f2e4819c71d0b3c532fdf7a7c:163",
+  "paramBindings": "12d7445ff5847d0caccdd21fb644:210",
+  "paramUniforms": [
+    "u_p_circx0_posX",
+    "u_p_circx0_posY",
+    "u_p_circx0_radius",
+    "u_p_colorpickex0_color",
+    "u_p_colorpickex0xc2_color",
+  ],
+  "paramValues": "0e1a53bada005a1911d43546c8ca:162",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
 exports[`golden shaders: every example compiles as it did > softMetaballs3D 1`] = `
 {
   "audioUniforms": {},

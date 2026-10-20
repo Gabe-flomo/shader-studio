@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import { openSwitchPicker, showsSwitchPill } from './switchPickerModel';
 import { createPortal } from 'react-dom';
+import { blockSimplifyProblem, blockToSimpleExpr, simpleExprToBlock } from '../../nodes/definitions/simpleExpr';
 import { useNodeGraphStore, getActiveNodes } from '../../store/useNodeGraphStore';
 import { getNodeDefinition, getNodeDefinitionFor } from '../../nodes/definitions';
 import { canPinAgentParam } from '../../nodes/agentPins';
@@ -2124,6 +2125,25 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                       Delete Group
                     </button>
                   </>
+                )}
+                {/* Simple Expression ↔ Expression Block (docs/simple-expression.md): same id, inputs, wires and expression. */}
+                {clickedNode?.type === 'simpleExpr' && (
+                  <button style={ctxBtnStyle} title="Turn it into a full Expression Block (lines, loops, sliders), with the same inputs, wires and expression" onClick={() => {
+                    const id = clickedNode.id;
+                    setContextMenu(null);
+                    useNodeGraphStore.getState().replaceNodeInScope(id, simpleExprToBlock, 'Converted a Simple Expression to an Expression Block');
+                  }}>
+                    Convert to Expression Block
+                  </button>
+                )}
+                {clickedNode?.type === 'exprNode' && !blockSimplifyProblem(clickedNode) && (
+                  <button style={ctxBtnStyle} title="It is just one result line: make it a Simple Expression, the one-line card (same inputs, wires and expression)" onClick={() => {
+                    const id = clickedNode.id;
+                    setContextMenu(null);
+                    useNodeGraphStore.getState().replaceNodeInScope(id, n => blockToSimpleExpr(n) ?? n, 'Simplified an Expression Block to a Simple Expression');
+                  }}>
+                    Simplify to Simple Expression
+                  </button>
                 )}
                 {/* The old Bloom reads last frame: offer the same-frame Pass → Glow (texture) setup. */}
                 {clickedNode?.type === 'bloom' && (
