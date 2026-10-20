@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.318',
+    date: '2026-10-19',
+    title: "Built from nodes",
+    highlights: [
+      { area: 'Studio', text: "22 whole-shader nodes (Fractal Loop, Mandelbrot, Newton, Mandelbulb…) are retired; saved graphs still open. Their examples are rebuilt from small nodes." },
+      { area: 'Studio', text: "New nodes: Log, Complex Divide and Loop Break (stop a repeating group early). Loop Carry and Loop Index are in the browser again." },
+      { area: 'Studio', text: "13 examples that leaned on Expression Blocks are now built from regular nodes, including the hall, LIGHT text and the 4D shapes." },
+    ],
+  },
+  {
     id: '2026.10.317',
     date: '2026-10-19',
     title: "Passes you can see, Simple Expression",
