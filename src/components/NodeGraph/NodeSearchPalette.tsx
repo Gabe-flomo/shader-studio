@@ -41,7 +41,7 @@ import { alpha, fontFamily, radius, type Tokens } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
 import type { IconName } from '../ui/iconPaths';
 import { Button, IconButton } from '../ui/Button';
-import { DocText } from '../ui/DocText';
+import { DocSummary } from './NodeInfoCard';
 import { NodeInlineViz, INLINE_VIZ_TYPES } from './NodeInlineViz';
 import { nodeBlurb } from '../../nodes/plainDescriptions';
 import { ExamplesStrip } from './ExampleLinks';
@@ -686,7 +686,7 @@ function Preview({ item, tk, pal, favorites, onToggleFavorite, onActivate, onDel
           <div style={{ borderRadius: radius.md, overflow: 'hidden' }}><NodeInlineViz node={syntheticNode(def)} /></div>
         )}
         {item.why && <div style={{ fontSize: 12, color: tk.accent.text }}>{item.why}</div>}
-        {descOf(def) && <DocText text={descOf(def)} style={{ fontSize: 12, color: tk.text.muted }} />}
+        {descOf(def) && <DocSummary text={descOf(def)} />}
         <PassCostNote type={def.type} />
         {(ins.length > 0 || outs.length > 0) && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '6px 8px', borderRadius: radius.md, background: tk.bg.field, fontSize: 11.5 }}>

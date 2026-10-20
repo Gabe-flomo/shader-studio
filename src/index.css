@@ -107,6 +107,10 @@ input, textarea, [contenteditable]:not([contenteditable="false"]), pre, code, [d
 [data-quick-pin]:hover { opacity: 1 !important; }
 @media (hover: none) { [data-quick-pin] { opacity: 0.45; } }
 
+/* Node info (NodeInfoCard.tsx): rows and section headers tint on hover; keyboard focus shows a ring. */
+[data-doc-row] > button:hover, [data-info-section] > button:not(:disabled):hover { background: rgba(127, 127, 127, 0.09) !important; }
+[data-doc-row] > button:focus-visible, [data-info-section] > button:focus-visible, [data-doc-more]:focus-visible { outline: 2px solid rgba(108, 140, 255, 0.75); outline-offset: -2px; border-radius: 6px; }
+
 /* Node card footers (NodeComponent): the buttons show on hover, selection or keyboard focus; on touch
    screens and for a button that is on (aria-pressed) they always show. Layout never changes. */
 @media (hover: hover) {
