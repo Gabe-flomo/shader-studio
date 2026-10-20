@@ -10,7 +10,8 @@
  *  - Splat scene: a point cloud dissolving and coming back (the Splat builder's own mini cloud);
  *  - Time Cube: frames of the Ball action clip stacked into a box, the slice sweeping through (timeCubeBuilder/picture.ts);
  *  - Warp: a grid bent by a moving sine warp (the Warp Builder's warped-grid picture);
- *  - Combine: a photo whose cat is filled with turning rings, a glowing ball passing behind and in front of it.
+ *  - Combine: a photo whose cat is filled with turning rings, a glowing ball passing behind and in front of it;
+ *  - Texture Lab: the Room and cat photo, a divider sweeping across it, thermal on one side (textureLab/picture.ts).
  */
 import { useEffect, useRef } from 'react';
 import type { SceneKind } from '../../builders/sceneKinds';
@@ -23,6 +24,7 @@ import { MiniCloud } from '../splatBuilder/MiniCloud';
 import { animateFor, newEffect } from '../../splatBuilder/spec';
 import { drawTimeCube } from '../../timeCubeBuilder/picture';
 import { presetSpec } from '../../timeCubeBuilder/presets';
+import { drawLook, roomPhoto } from '../../textureLab/picture';
 
 /** The Splat scene's picture: a dissolve sweeping through the cloud, with a glowing edge. */
 const SPLAT_PICTURE = [{ ...newEffect('dissolve', 'k1', { edge: 0.08, glow: 5, drift: 0.4 }), animate: animateFor('dissolve', 'amount', 0.12) }];
@@ -235,6 +237,32 @@ function CombinePicture({ width, height }: { width: number; height: number }) {
   return <canvas ref={ref} width={width} height={height} style={fluid(width, height)} />;
 }
 
+/** Texture Lab: the Room and cat photo, before and after, a divider sweeping between them. */
+function TexturePicture({ width, height }: { width: number; height: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const pics = useRef<{ before: HTMLCanvasElement; after: HTMLCanvasElement } | null>(null);
+  useEffect(() => {
+    let live = true;
+    void roomPhoto().then(img => {
+      if (!live || !img) return;
+      const before = drawLook(img, width, height, 'none'), after = drawLook(img, width, height, 'thermal');
+      if (before && after) pics.current = { before, after };
+    });
+    return () => { live = false; };
+  }, [width, height]);
+  useTicker(20, t => {
+    const g = ref.current?.getContext('2d');
+    const p = pics.current;
+    if (!g || !p) return;
+    const x = Math.round(width * (0.5 + 0.32 * Math.sin(t * 0.7)));
+    g.drawImage(p.before, 0, 0);
+    g.drawImage(p.after, x, 0, width - x, height, x, 0, width - x, height);
+    g.fillStyle = 'rgba(255,255,255,0.9)';
+    g.fillRect(x - 1, 0, 2, height);
+  });
+  return <canvas ref={ref} width={width} height={height} style={fluid(width, height)} />;
+}
+
 /** A kind's picture for the kind page. */
 export function ScenePicture({ kind, width = 240, height = 136 }: { kind: SceneKind; width?: number; height?: number }) {
   if (kind === '2d') return <TwoDPicture width={width} height={height} />;
@@ -245,5 +273,6 @@ export function ScenePicture({ kind, width = 240, height = 136 }: { kind: SceneK
   if (kind === 'timecube') return <TimeCubePicture width={width} height={height} />;
   if (kind === 'warp') return <WarpPicture width={width} height={height} />;
   if (kind === 'combine') return <CombinePicture width={width} height={height} />;
+  if (kind === 'texture') return <TexturePicture width={width} height={height} />;
   return <span style={{ display: 'block', borderRadius: 10, overflow: 'hidden', width: '100%', maxWidth: width }}><KindPicture kind="trail" width={width} height={height} /></span>;
 }

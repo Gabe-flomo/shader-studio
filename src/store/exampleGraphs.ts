@@ -32,6 +32,7 @@ import { buildFourDProjectionExamples } from './fourDProjectionExamples';
 import { buildVoxelExamples } from './voxelExamples';
 import { addExampleNotes3d } from './exampleNotes3d';
 import { buildTextureToolExamples } from './textureToolExamples';
+import { buildTextureLabExamples } from './textureLabExamples';
 import { buildMemoryExamples } from './memoryExamples';
 import { buildSendReceiveExamples } from './sendReceiveExamples';
 import { buildSimpleExprExamples } from './simpleExprExamples';
@@ -11539,7 +11540,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
 };
 
 // The Learn folder is built from the node definitions at load; its last lesson reuses a graph above.
-Object.assign(EXAMPLE_GRAPHS, buildLearnExamples(EXAMPLE_GRAPHS), buildVoxelExamples(), buildLearn3dExamples(), buildCurvedSpaceExamples(), buildRepeatSceneExamples(), buildPiecesExamples(), buildCurveTraceExamples(), buildComboExamples(), buildMatrixExamples(), buildDataExamples(), buildGridExamples(), buildBoundsExamples(), buildConvertExamples(), buildPassExamples(), buildAgentExamples(), buildAgentShaderExamples(), buildAgent3dExamples(), buildSimAgentExamples(), buildRideCurveExamples(), buildAgentSketchExamples(), buildBakeExamples(EXAMPLE_GRAPHS), buildExprLoopExamples(), buildSplatExamples(EXAMPLE_GRAPHS), buildTimeCubeExamples(), buildFrameStackExamples(), buildFourDExamples(), buildFourDProjectionExamples(), buildTextureToolExamples(), buildMemoryExamples(), buildSendReceiveExamples(), buildSimpleExprExamples(), buildCombineExamples(), buildAudioExamples(), buildPictureExamples(), buildPictures3DExamples(), buildRaysExamples(), buildSimGridExamples(), buildSceneBuilderExamples(), buildSceneBuilder2DExamples(), buildAgentRuleExamples(), buildGridRulesExamples(), buildCuratedExamples(), buildBuiltUpExamples());
+Object.assign(EXAMPLE_GRAPHS, buildLearnExamples(EXAMPLE_GRAPHS), buildVoxelExamples(), buildLearn3dExamples(), buildCurvedSpaceExamples(), buildRepeatSceneExamples(), buildPiecesExamples(), buildCurveTraceExamples(), buildComboExamples(), buildMatrixExamples(), buildDataExamples(), buildGridExamples(), buildBoundsExamples(), buildConvertExamples(), buildPassExamples(), buildAgentExamples(), buildAgentShaderExamples(), buildAgent3dExamples(), buildSimAgentExamples(), buildRideCurveExamples(), buildAgentSketchExamples(), buildBakeExamples(EXAMPLE_GRAPHS), buildExprLoopExamples(), buildSplatExamples(EXAMPLE_GRAPHS), buildTimeCubeExamples(), buildFrameStackExamples(), buildFourDExamples(), buildFourDProjectionExamples(), buildTextureToolExamples(), buildTextureLabExamples(), buildMemoryExamples(), buildSendReceiveExamples(), buildSimpleExprExamples(), buildCombineExamples(), buildAudioExamples(), buildPictureExamples(), buildPictures3DExamples(), buildRaysExamples(), buildSimGridExamples(), buildSceneBuilderExamples(), buildSceneBuilder2DExamples(), buildAgentRuleExamples(), buildGridRulesExamples(), buildCuratedExamples(), buildBuiltUpExamples());
 // 3D: Hello Sphere was the same graph as Learn's first ray march (which is built from it above, with notes and
 // Play controls): one copy is kept, in Learn (MERGED_EXAMPLES opens the old key there).
 delete EXAMPLE_GRAPHS.rayMarchOutputs3D;

@@ -39,6 +39,7 @@ import { TIME_CUBE_EXAMPLE_INDEX } from './timeCubeExamples';
 import { FRAME_STACK_EXAMPLE_INDEX } from './frameStackExamples';
 import { FOURD_EXAMPLE_INDEX } from './fourDExamples';
 import { TEXTURE_TOOL_EXAMPLE_INDEX } from './textureToolExamples';
+import { TEXTURE_LAB_EXAMPLE_INDEX } from './textureLabExamples';
 import { MEMORY_EXAMPLE_INDEX } from './memoryExamples';
 import { SEND_RECEIVE_EXAMPLE_INDEX } from './sendReceiveExamples';
 import { SIMPLE_EXPR_EXAMPLE_INDEX } from './simpleExprExamples';
@@ -268,6 +269,8 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...FOURD_EXAMPLE_INDEX,
   // Texture tools (textureToolExamples.ts, docs/texture-tools.md): Mask, Levels, Flow, Neighbours, Change, Outline, Fade, Read.
   ...TEXTURE_TOOL_EXAMPLE_INDEX,
+  // Texture Lab (textureLabExamples.ts, docs/texture-lab.md): stacks Texture Lab built, reopenable in it.
+  ...TEXTURE_LAB_EXAMPLE_INDEX,
   // Pictures (pictureExamples.ts): Channel, Shuffle, Channel Colours, Height Light, Show data, Random (from ID), a pixel sort, Curves, Threshold, on the built-in photos.
   ...PICTURE_EXAMPLE_INDEX,
   // Pictures in 3D (pictures3dExamples.ts): Picture Card and Texture Material in ray-marched scenes.

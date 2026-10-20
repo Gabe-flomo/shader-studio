@@ -39,6 +39,7 @@ import { editSplatSceneInBuilder, openNewSplatScene } from '../splatBuilder/acti
 import { openNewWarpBuilder } from '../warpBuilder/actions';
 import { editTimeCubeInBuilder, openNewTimeCube } from '../timeCubeBuilder/actions';
 import { editCombine, openNewCombine } from '../combine/actions';
+import { editTextureLabInBuilder, openNewTextureLab } from '../textureLab/actions';
 
 /**
  * What a new Grid Rules node starts with (newGridRules): params over its defaults, and a drawn start
@@ -114,6 +115,7 @@ export function startSceneKind(kind: SceneKind, o: { at?: { x: number; y: number
   else if (kind === 'timecube') openNewTimeCube(o.at);
   else if (kind === 'warp') openNewWarpBuilder();
   else if (kind === 'combine') openNewCombine();
+  else if (kind === 'texture') openNewTextureLab(o.at);
   else openAgentBuilder(null, { fromShell: o.fromShell });
 }
 
@@ -127,6 +129,7 @@ export function editBuiltScene(b: Pick<BuiltScene, 'kind' | 'id'>): boolean {
   if (b.kind === 'splat') return editSplatSceneInBuilder(b.id);
   if (b.kind === 'timecube') return editTimeCubeInBuilder(b.id);
   if (b.kind === 'combine') return editCombine(b.id);
+  if (b.kind === 'texture') return editTextureLabInBuilder(b.id);
   if (b.kind === 'grid' && useNodeGraphStore.getState().nodes.some(nd => nd.id === b.id && nd.type !== 'gridRules')) return editGridSceneInBuilder(b.id);
   if (b.kind === 'grid' || b.kind === 'simulation') {
     const st = useNodeGraphStore.getState();

@@ -11,8 +11,8 @@
 import { create, type StoreApi, type UseBoundStore } from 'zustand';
 
 /** The builders that keep presets of their own. */
-export type PresetBuilderKind = '3d' | '2d' | 'grid' | 'warp' | 'gridRules' | 'splat' | 'timecube' | 'agents';
-export const PRESET_BUILDER_KINDS: PresetBuilderKind[] = ['3d', '2d', 'grid', 'warp', 'gridRules', 'splat', 'timecube', 'agents'];
+export type PresetBuilderKind = '3d' | '2d' | 'grid' | 'warp' | 'gridRules' | 'splat' | 'timecube' | 'agents' | 'texture';
+export const PRESET_BUILDER_KINDS: PresetBuilderKind[] = ['3d', '2d', 'grid', 'warp', 'gridRules', 'splat', 'timecube', 'agents', 'texture'];
 
 export interface UserBuilderPreset {
   id: string;

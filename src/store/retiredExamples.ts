@@ -48,4 +48,6 @@ export const RETIRED_EXAMPLE_KEYS: readonly string[] = [
   'simpleExprBlend',
   // Not in a folder either: Combine's two examples (combineExamples.ts), shown under Blob Space and Picture Card (Used in).
   'combinePhotoInRoom', 'combinePeopleRings',
+  // Texture Lab's two (textureLabExamples.ts): the Texture tools folder holds its five; these open by key and from What's new.
+  'texLabThermal', 'texLabTrails',
 ];

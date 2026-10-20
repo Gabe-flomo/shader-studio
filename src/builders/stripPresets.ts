@@ -24,6 +24,8 @@ export const SPLAT_STRIP_KEYS = ['turntable', 'dissolve', 'exploded', 'hologram'
 export const TIMECUBE_STRIP_KEYS = ['box', 'highlights', 'exposure', 'ring'] as const;
 /** Warp builder: none (its built-in blocks are in its Library card). */
 export const WARP_STRIP_KEYS = [] as const;
+/** Texture Lab (textureLab/presets.ts): all four of its built-ins. */
+export const TEXTURE_STRIP_KEYS = ['thermal', 'ink', 'trails', 'relief'] as const;
 
 /** Agents builder, by walker kind. */
 export const AGENT_STRIP_KEYS: Record<WalkerKind, readonly string[]> = {

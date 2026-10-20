@@ -25,6 +25,9 @@ import { buildFromGridBuilder, finishGridBuilder } from '../../../gridScene/acti
 import { finishSplatBuilder, syncSplatBuilder } from '../../../splatBuilder/actions';
 import { finishTimeCubeBuilder, syncTimeCubeBuilder } from '../../../timeCubeBuilder/actions';
 import { finishWarpBuilder } from '../../../warpBuilder/actions';
+import { useTextureLab } from '../../../textureLab/store';
+import { finishTextureLab, syncTextureLab } from '../../../textureLab/actions';
+import { surpriseTextureLab } from '../../../textureLab/presets';
 import { makeAgentGroup } from '../../../agentBuilder/actions';
 import { START_CARDS } from '../../../agentBuilder/kinds';
 import { openAgentBuilder } from '../../../builders/windows';
@@ -80,6 +83,7 @@ async function editAndApply(kind: SceneKind, seed = 3): Promise<void> {
   else if (kind === 'splat') act(() => { useSplatBuilder.getState().surprise(seed); syncSplatBuilder(); });
   else if (kind === 'timecube') act(() => { useTimeCubeBuilder.getState().surprise(seed); syncTimeCubeBuilder(); });
   else if (kind === 'warp') act(() => { useWarpBuilder.getState().surprise(seed); });
+  else if (kind === 'texture') act(() => { useTextureLab.getState().replace(surpriseTextureLab(seed, useTextureLab.getState().spec)); syncTextureLab(); });
   else if (kind === 'agents') act(() => { const g = makeAgentGroup(START_CARDS[0], '2d'); openAgentBuilder(g!.groupId, { fromShell: true }); });
   else if (kind === 'simulation') {
     const id = useBuilderWindows.getState().gridRules!;
@@ -95,6 +99,7 @@ async function done(kind: SceneKind): Promise<void> {
   else if (kind === 'splat') act(() => finishSplatBuilder());
   else if (kind === 'timecube') act(() => finishTimeCubeBuilder());
   else if (kind === 'warp') act(() => finishWarpBuilder());
+  else if (kind === 'texture') act(() => finishTextureLab());
   else if (kind === 'agents') act(() => finishBuilder(closeAgentBuilder));
   else act(() => finishBuilder(closeGridRulesEditor));
 }
