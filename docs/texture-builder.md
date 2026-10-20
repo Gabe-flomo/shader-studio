@@ -1,4 +1,6 @@
-# Shader Texture (the texture builder)
+# Shader Texture
+
+Not to be confused with **Texture Lab** (docs/texture-lab.md), the Scene builder kind that runs a picture through a stack of Texture tools.
 
 A node that holds **its own shader graph, drawn into a texture**. "Load a texture" is the Texture node; "Create a new texture" is this. Its output wires anywhere a texture goes: an Agents group's food or birth picture, Grid Rules' start, a mask, Depth, the Texture tools, Sample / Edges / Blur / Glow (texture).
 

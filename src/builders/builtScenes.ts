@@ -17,6 +17,7 @@ import { EFFECT_INFO, scanName } from '../splatBuilder/spec';
 import { findTcBuild, tcMetaOf, timeCubeOfBuild } from '../timeCubeBuilder/apply';
 import { sourceName } from '../timeCubeBuilder/spec';
 import { combineMetaOf, combineOfBuild, findCombineBuild } from '../combine/meta';
+import { buildDetail as txDetail, findTxBuild, labOfBuild, txBuildIds, txMetaOf } from '../textureLab/meta';
 import { VERBS } from '../combine/spec';
 import { groupRules, isRulesGroup } from '../agentRules/apply';
 import { WALKER_KINDS, kindOf } from '../agentRules/spec';
@@ -62,7 +63,7 @@ export function agentSetupIds(nodes: readonly GraphNode[], groupId: string): Set
   return ids;
 }
 
-export type SceneKind = '2d' | 'agents' | 'grid' | 'simulation' | '3d' | 'splat' | 'timecube' | 'warp' | 'combine';
+export type SceneKind = '2d' | 'agents' | 'grid' | 'simulation' | '3d' | 'splat' | 'timecube' | 'warp' | 'combine' | 'texture';
 
 export interface SceneKindInfo {
   id: SceneKind;
@@ -73,6 +74,8 @@ export interface SceneKindInfo {
   icon: IconName;
   /** The builder's own name (its window and its docs). */
   builder: string;
+  /** False: not offered on a phone. */
+  phone?: false;
 }
 
 export const SCENE_KINDS: readonly SceneKindInfo[] = [
@@ -84,11 +87,12 @@ export const SCENE_KINDS: readonly SceneKindInfo[] = [
   { id: 'splat', title: 'Splat scene', line: 'A Gaussian splat scan, placed, dissolved, exploded or tinted, in a world of its own', icon: 'spark', builder: 'Splat builder' },
   { id: 'timecube', title: 'Time Cube', line: 'A video as a box of time or a stack of cards: slices, flow, colour keys, a camera', icon: 'layers', builder: 'Time Cube builder' },
   { id: 'warp', title: 'Warp', line: 'Bend space by dragging tiles: sin onto X, a slider, the clock. Blocks stack, warp on warp', icon: 'wave', builder: 'Warp Builder' },
-  { id: 'combine', title: 'Combine', line: 'Put what you made together: a photo in 3D, a scene on a photo, people replaced by anything', icon: 'layers', builder: 'Combine' },
+  { id: 'combine', title: 'Combine', line: 'Put what you made together: a photo in 3D, a scene on a photo, people replaced by anything', icon: 'layers', builder: 'Combine', phone: false },
+  { id: 'texture', title: 'Texture Lab', line: 'A photo or video through a stack of texture tools: edges, glow, trails, relief, outlines', icon: 'image', builder: 'Texture Lab', phone: false },
 ];
 
-/** The kinds a phone offers: Combine is off there (docs/combine-plan.md [D9]; a graph it made opens as plain nodes). */
-export const sceneKindsFor = (phone: boolean): readonly SceneKindInfo[] => (phone ? SCENE_KINDS.filter(k => k.id !== 'combine') : SCENE_KINDS);
+/** The kinds a phone offers: Combine and Texture Lab are off there (docs/combine-plan.md [D9]; a graph they made opens as plain nodes). */
+export const sceneKindsFor = (phone: boolean): readonly SceneKindInfo[] => (phone ? SCENE_KINDS.filter(k => k.phone !== false) : SCENE_KINDS);
 
 export const sceneKindInfo = (k: SceneKind): SceneKindInfo => SCENE_KINDS.find(x => x.id === k)!;
 
@@ -142,6 +146,10 @@ export function builtScenes(nodes: readonly GraphNode[]): BuiltScene[] {
     const b = findTcBuild(nodes, n.id);
     out.push({ kind: 'timecube', id: n.id, label: labelOf(n, 'Time Cube'), detail: `${sourceName(n.params)} · ${b?.byRole.has('stack') ? 'a stack of cards' : 'a box of time'}` });
   }
+  for (const n of nodes) {
+    const mt = txMetaOf(n);
+    if (mt) out.push({ kind: 'texture', id: n.id, label: 'Texture Lab', detail: txDetail(mt.spec) });
+  }
   return out;
 }
 
@@ -160,7 +168,8 @@ export function selectedBuiltScene(nodes: readonly GraphNode[], selected: readon
     const ss = splatSceneOfBuild(nodes, id);
     const tc = timeCubeOfBuild(nodes, id);
     const cb = combineOfBuild(nodes, id);
-    const hit = all.find(b => b.id === cb) ?? all.find(b => b.id === s2 || b.id === s3 || b.id === sg || b.id === ss || b.id === tc);
+    const tx = labOfBuild(nodes, id);
+    const hit = all.find(b => b.id === cb) ?? all.find(b => b.id === s2 || b.id === s3 || b.id === sg || b.id === ss || b.id === tc || b.id === tx);
     if (hit) return hit;
   }
   return null;
@@ -194,6 +203,10 @@ export function builtSceneIds(nodes: readonly GraphNode[], b: Pick<BuiltScene, '
     const ids = new Set(found ? [...found.byRole.values()].map(n => n.id) : [b.id]);
     for (const n of nodes) if (n.type === 'output' || n.type === 'vec4Output') ids.delete(n.id);
     return ids;
+  } else if (b.kind === 'texture') {
+    // A source of yours (a picture you had) stays: only the builder's own nodes go.
+    const own = findTxBuild(nodes, b.id) ? txBuildIds(nodes, b.id) : [];
+    return new Set(own.filter(id => top.has(id) && !nodes.some(n => n.id === id && isOutput(n))));
   }
   const ids = new Set<string>();
   for (const s of seeds) for (const id of agentSetupIds(nodes, s)) ids.add(id);

@@ -35,7 +35,7 @@ const builtIn = (kind: string, id: string, name: string, hint: string | undefine
 /** What each builder is called in the app (docs/glossary.md: "Builder" is only the Scene builders). */
 export const BUILDER_LABELS: Record<PresetBuilderKind, string> = {
   '3d': '3D Scene builder', '2d': '2D Scene builder', grid: 'Grid builder', warp: 'Warp builder',
-  gridRules: 'Grid Rules builder', splat: 'Splat builder', timecube: 'Time Cube builder', agents: 'Agents builder',
+  gridRules: 'Grid Rules builder', splat: 'Splat builder', timecube: 'Time Cube builder', agents: 'Agents builder', texture: 'Texture Lab',
 };
 export const builderPresetKind = (k: PresetBuilderKind) => `builder:${k}`;
 

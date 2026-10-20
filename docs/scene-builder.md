@@ -12,6 +12,7 @@ kind you pick turns the window into that kind's builder:
 | **3D scene** | the 3D Scene Builder ([scene-builder-3d.md](scene-builder-3d.md)) | ray-marched shapes, combined, bent, lit and seen through a camera |
 | **Splat scene** | the Splat builder ([splat-builder.md](splat-builder.md)) | a Gaussian splat scan, placed, with stacked effects (dissolve, explode, wave, grade, crop, points), optionally in a ray-marched world |
 | **Warp** | the Warp Builder ([warp-builder.md](warp-builder.md)) | space warps built by dragging tiles (sin onto X, a slider, the clock), stacked block on block; Done makes a small graph, or sends the blocks to the 2D Scene Builder |
+| **Texture Lab** | Texture Lab ([texture-lab.md](texture-lab.md)) | a photo or video through a stack of Texture tools (edges, glow, trails, relief, outlines), each tool's pass cost shown; built as you edit, like the Time Cube. Not on a phone |
 
 Each builder keeps its own code and docs. The Scene builder only routes between them
 (`src/builders/sceneKinds.ts`, `src/components/builders/SceneBuilderShell.tsx`).
@@ -143,6 +144,7 @@ kind offers at most four per kind:
 | Splat builder | Turntable, Dissolve reveal, Exploded view, Hologram |
 | Time Cube | Box of time, Highlights loop, Long exposure, Ring of frames |
 | Warp builder | none (its built-in blocks are in its Library card) |
+| Texture Lab | Thermal, Ink outline, Motion trails, Relief |
 | Agents, per walker kind | Trail: Slime mold, Long veins, Ants with food, Frost (DLA) · Particles: Spark fountain, Smoke, Snow, Burst · Flock: Boids, Glassy streams, Bait balls, Murmuration · Crowd: Two-way lanes, One door, Crossing · Orbit: Swarm, Two arms, Opposite ways, Moths |
 | Grid Rules, per rule type | Count: Life, Seeds, Maze, Caves · Stages: Brian's Brain, Star Wars, Spirals, Lava · Smooth: Ripples, Mitosis, Worms, Labyrinth · Patterns: all three · Blocks: both |
 
@@ -167,6 +169,7 @@ Builder presets are not in the Library (they don't go on the graph): they live i
 | Warp builder | the blocks | the viewport |
 | Splat builder | the scene (the scan too) | the viewport, else a small cloud |
 | Time Cube | the cube or stack (the video too) | the viewport, else the cube's own picture |
+| Texture Lab | the stack (your source stays) | the viewport |
 
 They live in this browser's local storage, one list per builder (`src/builders/userPresets.ts`;
 the 3D list keeps its old key, `playfield:scene-builder-presets`), at most 48 each; a picture that

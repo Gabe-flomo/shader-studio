@@ -13,9 +13,11 @@
  *  - Splat scene → the Splat builder (splatBuilder), on a new scan (built at once: its picture is the main preview's)
  *    or on a build's saved spec;
  *  - Time Cube → the Time Cube builder (timeCubeBuilder): a Time Cube shown as a Time Cube View or a Frame Stack,
- *    built at once like a splat scene, or a build as it is now.
+ *    built at once like a splat scene, or a build as it is now;
  *  - Combine → the Combine window (combine/, docs/combine.md): what the other kinds made, put together by verbs (a
- *    photo in a 3D scene, people replaced by a 2D build), the glue built from ordinary nodes. Not on a phone.
+ *    photo in a 3D scene, people replaced by a 2D build), the glue built from ordinary nodes. Not on a phone;
+ *  - Texture Lab → Texture Lab (textureLab): a picture or video through a stack of Texture tools, built at once. Not
+ *    on a phone.
  *
  * Opening the Scene builder: a graph a builder made reopens that scene ("Edit this one / Start
  * over / Add another", the Agent Builder's prompt for every kind); any other graph goes to the
@@ -39,6 +41,8 @@ import { closeSplatBuilder } from '../splatBuilder/actions';
 import { useWarpBuilder } from '../warpBuilder/store';
 import { useTimeCubeBuilder } from '../timeCubeBuilder/store';
 import { closeTimeCubeBuilder } from '../timeCubeBuilder/actions';
+import { useTextureLab } from '../textureLab/store';
+import { closeTextureLab } from '../textureLab/actions';
 import { useCombine } from '../combine/store';
 
 export {
@@ -61,6 +65,7 @@ export function closeSceneKinds(): void {
   if (useTimeCubeBuilder.getState().open) closeTimeCubeBuilder();
   if (useWarpBuilder.getState().open) useWarpBuilder.getState().close();
   if (useCombine.getState().open) useCombine.getState().close();
+  if (useTextureLab.getState().open) closeTextureLab();
   if (useBuilderWindows.getState().agentBuilder) closeAgentBuilder();
   if (useBuilderWindows.getState().agentRules) closeAgentRulesWindow();
   if (useBuilderWindows.getState().gridRules) closeGridRulesEditor();
