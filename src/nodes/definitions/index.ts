@@ -14,6 +14,7 @@ export { VideoInputNode };
 import { BakedNode } from './baked';
 import { DepthNode } from './depth';
 import { BlobTrackNode } from './blobTrack';
+import { BlobSpaceNode } from './blobSpace';
 import { CacheNode, CacheReadNode } from './cache';
 import { SendNode, ReceiveNode } from './sendReceive';
 import { SimpleExprNode } from './simpleExpr';
@@ -362,6 +363,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   // Depth (docs/depth-node.md): a picture's depth from an on-device model
   depth: DepthNode,
   blobTrack: BlobTrackNode,
+  // Blob Space (docs/combine.md): each pixel's place in its blob, a fill drawn on every blob
+  blobSpace: BlobSpaceNode,
   cache: CacheNode,
   // Send / Receive (docs/send-receive.md): a wireless link across groups
   send: SendNode,

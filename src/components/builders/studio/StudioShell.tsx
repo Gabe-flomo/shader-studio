@@ -34,6 +34,7 @@ import { usePhoneDialog } from '../../ui/phoneDialog';
 import { SidePanel, useNarrowWindow } from '../../code/SidePanels';
 import { BUILDER_RECIPE_EVENT } from '../../../builders/windows';
 import { closeSceneWindow } from '../../../builders/sceneDraft';
+import { AddToThisButton } from '../../combine/AddToThis';
 import { PhoneStudio, type PhonePanel, type PhoneSection } from './PhoneStudio';
 
 // ── The phone's section tabs: the nav's items, registered rather than drawn ──
@@ -185,6 +186,9 @@ export function StudioShell(p: StudioShellProps) {
   // Top bar: Back · name · kind ……… panels · 2D | 3D · actions · primary · close
   // The builder's main action (Done, Add to graph).
   const primary = p.primary ? <Button variant="primary" size="sm" data-studio-primary title={p.primary.title} onClick={p.primary.onClick}>{p.primary.label}</Button> : null;
+  // "Add to this…" (docs/combine.md): in a Scene builder session, beside a kind's Done: Done, then Combine with this
+  // build as its first layer. Not on a phone ([D9]).
+  const addTo = p.primary ? <AddToThisButton done={p.primary.onClick} /> : null;
   const topBar = (
     <div data-studio-topbar style={{ minHeight: phone ? 52 : 60, flexShrink: 0, display: 'flex', alignItems: 'center', gap: phone ? 4 : 8, padding: phone ? '0 6px' : '0 12px', borderBottom: `1px solid ${tk.border.subtle}`, minWidth: 0 }}>
       {p.onBack && <IconButton icon="chevL" label={p.backLabel ?? 'Back'} onClick={p.onBack} data-studio-back />}
@@ -214,7 +218,7 @@ export function StudioShell(p: StudioShellProps) {
         {p.actions}
       </span>
       {/* The actions above scroll sideways when they don't fit; Done stays in view beside them. */}
-      {primary && <span style={{ flexShrink: 0, display: 'flex' }}>{primary}</span>}
+      {primary && <span style={{ flexShrink: 0, display: 'flex', gap: 6 }}>{addTo}{primary}</span>}
       {/* In a Scene builder session × drops the draft (asking first when there are changes): builders/sceneDraft.ts. */}
       <IconButton icon="close" label="Close" shortcut="esc" onClick={() => void closeSceneWindow(() => onCloseRef.current())} data-studio-close />
     </div>

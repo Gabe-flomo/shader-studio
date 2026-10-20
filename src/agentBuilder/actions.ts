@@ -9,12 +9,12 @@ import { useNodeGraphStore, undoManager } from '../store/useNodeGraphStore';
 import { freshIds } from '../store/agentSetup';
 import { placeSetupInView } from '../store/placement';
 import { graphOutput } from '../nodes/scene3dDefaults';
-import { applyRulesToGroup, groupRules, isRulesGroup } from '../agentRules/apply';
+import { applyRulesToGroup, groupRules } from '../agentRules/apply';
 import { agentsViewOf } from '../agentRules/outputs';
 import { rulesTemplate, rulesTemplateNodes } from '../agentRules/templates';
 import { rescaleForSpace } from '../agentRules/space3d';
 import { applyGroupRules } from '../agentRules/storeActions';
-import { type AgentRuleSet, WALKER_KINDS, kindOf } from '../agentRules/spec';
+import { type AgentRuleSet } from '../agentRules/spec';
 import { type StartCard } from './kinds';
 import { builderPreset } from './presets';
 
@@ -177,18 +177,8 @@ export function applyAgentPresetText(groupId: string, text: string, label: strin
 
 // ── Opening the builder on a graph that already has groups; clearing the graph ──
 
-/** A builder group on the top level (a rules Agents group), as the "Edit this one / Start over / Add another" prompt lists it. */
-export interface BuilderGroup { id: string; label: string; kind: string; d3: boolean }
-
-/** The rules Agents groups on the top level of `nodes` (the ones the Agent Builder makes and edits). */
-export function builderGroups(nodes: readonly GraphNode[]): BuilderGroup[] {
-  return nodes.filter(isRulesGroup).map(g => ({
-    id: g.id,
-    label: (typeof g.params.label === 'string' && g.params.label) || 'Agents',
-    kind: WALKER_KINDS[kindOf(groupRules(g))].label,
-    d3: g.params.space === '3d',
-  }));
-}
+export { builderGroups, agentSetupIds, type BuilderGroup } from '../builders/builtScenes';
+import { agentSetupIds } from '../builders/builtScenes';
 
 const isOutput = (n: GraphNode) => n.type === 'output' || n.type === 'vec4Output';
 
@@ -212,32 +202,6 @@ export function clearGraphForBuilder(label = 'Agent Builder: cleared the graph')
   useNodeGraphStore.setState({ nodes, selectedNodeId: null, selectedNodeIds: [] });
   useNodeGraphStore.getState().compile();
   return before;
-}
-
-/**
- * The nodes that belong to a group's setup and nothing else: the group, then (until nothing changes)
- * every node only the setup reads from (its Emit, a picture wired only into it) and every node that
- * reads only from the setup (Deposit, Trail field, its palette, Draw agents). The Output and nodes
- * with no wires at all are never part of it. Pure.
- */
-export function agentSetupIds(nodes: readonly GraphNode[], groupId: string): Set<string> {
-  if (!nodes.some(n => n.id === groupId)) return new Set();
-  const ids = new Set<string>([groupId]);
-  const sources = (n: GraphNode) => Object.values(n.inputs).map(i => i.connection?.nodeId).filter((x): x is string => !!x);
-  const readers = new Map<string, string[]>();
-  for (const n of nodes) for (const s of sources(n)) readers.set(s, [...(readers.get(s) ?? []), n.id]);
-  let grew = true;
-  while (grew) {
-    grew = false;
-    for (const n of nodes) {
-      if (ids.has(n.id) || isOutput(n)) continue;
-      const from = sources(n), to = readers.get(n.id) ?? [];
-      const downstream = from.length > 0 && from.every(x => ids.has(x));
-      const upstream = to.length > 0 && to.every(x => ids.has(x));
-      if (downstream || upstream) { ids.add(n.id); grew = true; }
-    }
-  }
-  return ids;
 }
 
 /** "Start over": take a group and its setup away (agentSetupIds), one undo step. */

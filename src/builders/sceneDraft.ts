@@ -30,6 +30,7 @@ import { useGridBuilder } from '../gridScene/store';
 import { useSplatBuilder } from '../splatBuilder/store';
 import { useTimeCubeBuilder } from '../timeCubeBuilder/store';
 import { useWarpBuilder } from '../warpBuilder/store';
+import { useCombine } from '../combine/store';
 import { useBuilderWindows } from './windows';
 import { sceneDraftActive, setSceneDraftActive } from './sceneDraftFlag';
 import type { SceneKind } from './sceneKinds';
@@ -61,10 +62,23 @@ interface Session {
 
 let session: Session | null = null;
 let discarding = 0;
+/** Counts sessions and their restarts (back to the kinds): what a "come back here" (Combine's New…) is tied to. */
+let generation = 0;
+
+/** Which session (and restart) this is: a return Combine set up is only good for the same one. */
+export const sceneDraftGeneration = (): number => generation;
+
+/**
+ * A window that asked for a kind's builder to come back to it (Combine's New… and Edit product): × or Esc on that
+ * builder goes back there instead of closing the session. True when it was handled.
+ */
+type CloseHook = (close: () => void) => Promise<boolean> | boolean;
+let closeHook: CloseHook | null = null;
+export function setSceneCloseHook(h: CloseHook | null): void { closeHook = h; }
 
 const TITLES: Record<SceneKind, string> = {
   '2d': '2D scene', agents: 'Agent scene', grid: 'Grid scene', simulation: 'Grid simulation', '3d': '3D scene',
-  splat: 'Splat scene', timecube: 'Time Cube', warp: 'Warp',
+  splat: 'Splat scene', timecube: 'Time Cube', warp: 'Warp', combine: 'Combined scene',
 };
 
 function keptNow(): Kept {
@@ -83,16 +97,17 @@ export function openSceneKind(): SceneKind | null {
   if (useSplatBuilder.getState().open) return 'splat';
   if (useTimeCubeBuilder.getState().open) return 'timecube';
   if (useWarpBuilder.getState().open) return 'warp';
+  if (useCombine.getState().open) return 'combine';
   if (w.agentBuilder) return 'agents';
   if (w.gridRules) return 'simulation';
   return null;
 }
 
 /** How many kinds' windows are open at once (more than one: a window opened from another, like Warp from 2D). */
-function openKindCount(): number {
+export function openKindCount(): number {
   const w = useBuilderWindows.getState();
   return [useSceneBuilder2D.getState().open, useSceneBuilder.getState().open, useGridBuilder.getState().open, useSplatBuilder.getState().open,
-    useTimeCubeBuilder.getState().open, useWarpBuilder.getState().open, !!w.agentBuilder, !!w.gridRules].filter(Boolean).length;
+    useTimeCubeBuilder.getState().open, useWarpBuilder.getState().open, useCombine.getState().open, !!w.agentBuilder, !!w.gridRules].filter(Boolean).length;
 }
 
 /** The open kind's own settings, as text (null for the kinds that keep theirs in the graph: agents, simulation). */
@@ -104,6 +119,7 @@ function specKey(kind: SceneKind | null): string | null {
     case 'splat': return JSON.stringify(useSplatBuilder.getState().spec);
     case 'timecube': return JSON.stringify(useTimeCubeBuilder.getState().spec);
     case 'warp': return JSON.stringify(useWarpBuilder.getState().spec);
+    case 'combine': return JSON.stringify(useCombine.getState().spec);
     default: return null;
   }
 }
@@ -117,7 +133,7 @@ function sessionWindowOpen(): boolean {
 /** A window that starts a session when it opens (the Agent Builder and Grid Rules also open from their cards: not a session). */
 function startingWindowOpen(): boolean {
   return !!useBuilderWindows.getState().sceneShell || useSceneBuilder2D.getState().open || useSceneBuilder.getState().open || useGridBuilder.getState().open
-    || useSplatBuilder.getState().open || useTimeCubeBuilder.getState().open || useWarpBuilder.getState().open;
+    || useSplatBuilder.getState().open || useTimeCubeBuilder.getState().open || useWarpBuilder.getState().open || useCombine.getState().open;
 }
 
 function remark(s: Session): void {
@@ -150,7 +166,7 @@ function onWindows(): void {
 export function watchSceneDraft(): void {
   if (watching) return;
   watching = true;
-  for (const s of [useSceneBuilder2D, useSceneBuilder, useGridBuilder, useSplatBuilder, useTimeCubeBuilder, useWarpBuilder, useBuilderWindows] as Array<{ subscribe: (fn: () => void) => () => void }>) s.subscribe(onWindows);
+  for (const s of [useSceneBuilder2D, useSceneBuilder, useGridBuilder, useSplatBuilder, useTimeCubeBuilder, useWarpBuilder, useCombine, useBuilderWindows] as Array<{ subscribe: (fn: () => void) => () => void }>) s.subscribe(onWindows);
 }
 
 // ── The session ──────────────────────────────────────────────────────────────
@@ -160,6 +176,7 @@ export function beginSceneDraft(): void {
   watchSceneDraft();
   if (session) return;
   const base = keptNow();
+  generation++;
   session = { base, undo: undoManager.snapshot(), restart: null, kind: null, mark: { nodes: base.nodes, play: base.play, spec: null } };
   setSceneDraftActive(true);
   remark(session);
@@ -206,6 +223,7 @@ export function markSceneDraftRestart(): void {
 export function resetSceneDraft(): void {
   const s = session;
   if (!s) return;
+  generation++;
   const to = s.restart ?? { kept: s.base, undo: s.undo };
   const st = useNodeGraphStore.getState();
   if (st.nodes !== to.kept.nodes || st.play !== to.kept.play || undoManager.top() !== to.undo.history[to.undo.history.length - 1]) putBack(to.kept, to.undo);
@@ -270,6 +288,7 @@ export async function confirmDiscardScene(): Promise<boolean> {
  * first; then the window closes and the graph goes back to how it was. True when it closed.
  */
 export async function closeSceneWindow(close: () => void): Promise<boolean> {
+  if (closeHook && session && (await closeHook(close))) return true;
   // A window over another kind's (the Warp Builder on the 2D builder's blocks): closing it goes back to that one.
   if (!session || !sceneDraftActive() || openKindCount() > 1) { close(); return true; }
   if (sceneDraftChanged() && !(await confirmDiscardScene())) return false;

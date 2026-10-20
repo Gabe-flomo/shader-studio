@@ -44,6 +44,7 @@ import { Preview2D, compileScene2D } from './Preview2D';
 import { compiledPicture } from '../sceneBuilder/specThumbs';
 import { useDepthView } from '../../builders/depthPreview';
 import { StudioNavItem, StudioShell } from '../builders/studio/StudioShell';
+import { AddToThisButton } from '../combine/AddToThis';
 import { PhoneStudioContext, addButtonStyle, addButtonsRow } from '../builders/studio/PhoneStudio';
 import { usePhoneDialog } from '../ui/phoneDialog';
 import { DepthTab } from './DepthTab';
@@ -1316,6 +1317,7 @@ export function SceneBuilder2DModal() {
         <span style={{ flex: 1 }} />
         {(dirty || !editing) && (shapes > 0 || !!gridSize) && <BuilderNote data-scene2d-unbuilt style={{ color: tk.text.faint }}>{editing ? 'Changed · Done rebuilds it' : 'Not built yet · Done builds it'}</BuilderNote>}
         <Button icon="rebuild" data-scene2d-build disabled={!shapes && !gridSize} onClick={build} title={buildTitle}>Apply</Button>
+        <AddToThisButton done={done} size="md" />
         <Button variant="primary" icon="check" data-scene2d-done onClick={done} title={doneTitle}>Done</Button>
       </>}
     >

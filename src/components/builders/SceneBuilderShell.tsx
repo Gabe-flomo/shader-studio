@@ -23,7 +23,7 @@ import { StudioShell } from './studio/StudioShell';
 import { useNarrowWindow } from '../code/SidePanels';
 import { usePhoneDialog } from '../ui/phoneDialog';
 import { ScenePicture } from './scenePictures';
-import { SCENE_KINDS, builtScenes, clearForScene, defaultClearChoice, removeBuiltScene, sceneKindInfo, selectedBuiltScene, type BuiltScene, type SceneKind, type SceneKindInfo } from '../../builders/sceneKinds';
+import { builtScenes, sceneKindsFor, clearForScene, defaultClearChoice, removeBuiltScene, sceneKindInfo, selectedBuiltScene, type BuiltScene, type SceneKind, type SceneKindInfo } from '../../builders/sceneKinds';
 import { editBuiltScene, startSceneKind } from '../../builders/open';
 import { clearableCount } from '../../agentBuilder/actions';
 import { closeSceneShell, openSceneShell, type SceneShellPage } from '../../builders/windows';
@@ -49,7 +49,8 @@ function KindPage({ note, keep }: { note?: string; keep?: boolean }) {
   const narrow = useNarrowWindow();
   const clearFirst = choice ?? fallback;
   const pick = (k: SceneKind) => {
-    if (clearFirst === 'clear' && clearableCount(useNodeGraphStore.getState().nodes) > 0) clearForScene();
+    // Combine puts together what is in the graph: it never clears it.
+    if (k !== 'combine' && clearFirst === 'clear' && clearableCount(useNodeGraphStore.getState().nodes) > 0) clearForScene();
     startSceneKind(k, { fromShell: true });
   };
   return (
@@ -72,7 +73,7 @@ function KindPage({ note, keep }: { note?: string; keep?: boolean }) {
           <span data-scene-clear-note style={{ fontSize: 12, color: tk.status.warningText, marginTop: -10 }}>The new scene replaces everything but the Output when you press Done. Undo brings it back.</span>
         )}
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(${phone ? 1 : narrow ? 2 : 3}, minmax(0, 1fr))`, gap: 14, width: '100%', maxWidth: narrow ? 640 : 940 }}>
-          {SCENE_KINDS.map(k => <KindCard key={k.id} info={k} onPick={() => pick(k.id)} />)}
+          {sceneKindsFor(phone).map(k => <KindCard key={k.id} info={k} onPick={() => pick(k.id)} />)}
         </div>
         {/* A phone starts every new graph here (builders/newGraph.ts): the empty graph stays one tap away. */}
         {phone && (
@@ -109,7 +110,9 @@ function KindCard({ info, onPick }: { info: SceneKindInfo; onPick: () => void })
 
 function ExistingScenes() {
   const tk = useTokens();
-  const key = useNodeGraphStore(s => JSON.stringify(builtScenes(s.nodes)));
+  // On a phone a graph Combine made opens as plain nodes ([D9]): its parts are listed, not the stack.
+  const phone = usePhoneDialog();
+  const key = useNodeGraphStore(s => JSON.stringify(builtScenes(s.nodes).filter(b => !phone || b.kind !== 'combine')));
   const scenes = useMemo(() => JSON.parse(key) as BuiltScene[], [key]);
   const [picked, setPicked] = useState<string | null>(() => {
     const st = useNodeGraphStore.getState();
