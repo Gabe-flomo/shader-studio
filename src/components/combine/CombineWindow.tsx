@@ -386,7 +386,10 @@ function HowStep({ product, on }: { product: ProductRef; on: string }) {
   const tKind = useTargetKind(on);
   const label = useNodeGraphStore(s => resolveProduct(product, s.nodes).label);
   const spec = useCombine(s => s.spec);
-  const tInfo = useNodeGraphStore(s => targetInfo(spec, on, s.nodes));
+  // Two booleans, not the object: a selector returning a new object each call loops the store forever (React #185).
+  const shape = useNodeGraphStore(s => targetInfo(spec, on, s.nodes).shape);
+  const flatScene = useNodeGraphStore(s => targetInfo(spec, on, s.nodes).flatScene);
+  const tInfo = useMemo(() => ({ shape, flatScene }), [shape, flatScene]);
   const a = kindOf(product) ?? 'picture';
   const verbs = tKind ? offeredVerbs(a, tKind, { splat: isSplat(product), ...tInfo }) : [];
   const ways = (v: VerbId): Array<{ label: string; icon: IconName; settings: CombineLayer['settings']; sub: string }> => {
