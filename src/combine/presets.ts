@@ -107,7 +107,7 @@ function photo(id: string, which: 'room' | 'walkway', at: { x: number; y: number
   return {
     id, type: 'textureInput', position: at, inputs, outputs,
     params: {
-      ...(def.defaultParams ?? {}), fit: which === 'room' ? 'stretch' : 'cover', ...builtinImageParams(which === 'room' ? ROOM_AND_CAT_ID : WALKWAY_CAT_ID),
+      ...(def.defaultParams ?? {}), fit: 'stretch', ...builtinImageParams(which === 'room' ? ROOM_AND_CAT_ID : WALKWAY_CAT_ID),
       ...note([`Texture: the built-in ${name} photo. Pick your own picture or video on this card: the layers above it follow.`]),
     },
   };

@@ -20,6 +20,7 @@ import { radius } from '../../theme/tokens';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { StripRow, StudioShell, StudioLabel, PresetCard } from '../builders/studio/StudioShell';
 import { LiveViewport, type ViewRect } from '../builders/studio/LiveViewport';
+import { usePictureAspect } from '../builders/studio/usePictureAspect';
 import { SceneCrumb } from '../builders/SceneCrumb';
 import { BuilderNote } from '../builders/BuilderWindow';
 import { Card, ColourRow, NumRow, Row, NO_DRAG } from '../sceneBuilder/controls';
@@ -55,7 +56,7 @@ import { BLOCK_GROUPS, BLOCKS, blockDef, viewOf, type BlockDef } from '../../tex
 import { TX_PRESETS, presetNow, surpriseTextureLab, withPreset } from '../../textureLab/presets';
 import { lookThumb, type PictureLook } from '../../textureLab/picture';
 import {
-  blockLabel, blockSummary, defaultsOf, defsOf, normalizeSpec, sourceName, stackLine, visibleNow,
+  blockLabel, blockSummary, defaultsOf, defsOf, normalizeSpec, sourceName, stackLine, txSourceAspect, visibleNow,
   type Params, type TextureLabSpec, type TxBlock, type TxSource,
 } from '../../textureLab/spec';
 
@@ -93,6 +94,14 @@ function useBlockPasses(): Record<string, number> {
   const target = useTextureLab(s => s.targetId);
   const nodes = useNodeGraphStore(s => s.nodes);
   return useMemo(() => blockPasses(nodes, target), [nodes, target]);
+}
+
+/** The source's shape, so the picture is drawn at it, letterboxed, not stretched to the window. */
+function useSourceAspect(): number | null {
+  const source = useTextureLab(s => s.spec.source);
+  // The built-in photos' and clip's own sizes; a node of yours: its picture's (usePictureAspect).
+  const known = source.kind === 'node' ? null : txSourceAspect({ source }, []);
+  return usePictureAspect(source.kind === 'node' ? source.nodeId : null, known);
 }
 
 // ── Small pieces ─────────────────────────────────────────────────────────────
@@ -237,9 +246,11 @@ function ParamRow({ block, k, role = 'main', type, params, set }: { block: TxBlo
   const def = defaultsOf(type)[k];
   if (!pd || !visibleNow(pd, params, type)) return null;
   const attrs = { 'data-tx-param': `${block.id}.${role}.${k}` };
+  // A picture's range where the node's is for something else (blocks.ts `ranges`).
+  const range = role === 'main' ? blockDef(block.type)?.ranges?.[k] : undefined;
   switch (pd.type) {
     case 'float': case 'int':
-      return <div {...attrs}><NumRow label={pd.label} hint={pd.hint} value={num(params[k], num(def, 0))} min={pd.min ?? 0} max={pd.max ?? 1} step={pd.step ?? 0.01}
+      return <div {...attrs}><NumRow label={pd.label} hint={pd.hint} value={num(params[k], num(def, 0))} min={range?.min ?? pd.min ?? 0} max={range?.max ?? pd.max ?? 1} step={range?.step ?? pd.step ?? 0.01}
         integer={pd.type === 'int' || pd.step === 1} defaultValue={typeof def === 'number' ? def : undefined} rangeKey={`texturelab:${block.type}:${k}`}
         lazyParam={playParam(block.id, k, role)} onChange={v => set(k, v)} /></div>;
     case 'select':
@@ -492,6 +503,7 @@ export function TextureLab() {
   const upTo = useTextureLab(s => s.upTo);
   const line = useTextureLab(s => stackLine(s.spec));
   const upToLabel = useTextureLab(s => { const b = s.spec.blocks.find(x => x.id === s.upTo); return b ? blockLabel(b) : ''; });
+  const aspect = useSourceAspect();
   useLiveSync();
 
   // ⌘Z / ⌘⇧Z undo the builder (the graph follows), not the graph's own history.
@@ -550,7 +562,7 @@ export function TextureLab() {
       nav={<Stack />} navWidth={264}
       inspector={<Inspector />} inspectorWidth={360}
       presets={<Presets />} presetsSummary={<PresetsSummary kind="texture" builtIns={stripOf(TX_PRESETS, TEXTURE_STRIP_KEYS).map(t => t.label)} />}>
-      <LiveViewport ownSize clock overlay={overlay} emptyNote="The preview is hidden: show it to see the picture here." />
+      <LiveViewport ownSize aspect={aspect} clock overlay={overlay} emptyNote="The preview is hidden: show it to see the picture here." />
     </StudioShell>
   );
 }

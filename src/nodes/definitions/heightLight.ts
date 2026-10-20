@@ -39,7 +39,7 @@ export const HeightLightNode: NodeDefinition = withParamSockets({
   },
   defaultParams: {
     channel: '1', low: 0, high: 1, relief: 0.08, spacing: 1.5,
-    sunAngle: 135, sunHeight: 35, ambient: 0.3,
+    sunAngle: 135, sunHeight: 35, ambient: 0.3, keepFlat: false,
     lowColour: [0.36, 0.22, 0.12], highColour: [0.96, 0.8, 0.52],
   },
   paramDefs: {
@@ -53,6 +53,7 @@ export const HeightLightNode: NodeDefinition = withParamSockets({
     sunAngle: { label: 'Sun from', type: 'float', min: 0, max: 360, step: 1, section: 'Sun', hint: 'Which way the light comes from, in degrees: 0 from the right, 90 from the top, 180 from the left.' },
     sunHeight: { label: 'Sun height', type: 'float', min: 1, max: 90, step: 1, section: 'Sun', hint: 'How high the sun is, in degrees: low sun (10–30) rakes across and shows every ripple; 90 is straight overhead.' },
     ambient: { label: 'Ambient', type: 'float', min: 0, max: 1, step: 0.01, section: 'Sun', hint: 'Light that reaches the shadows too (sky light): 0 is black shadows.' },
+    keepFlat: { label: 'Keep flat parts', type: 'bool', section: 'Sun', hint: 'Flat parts keep the colour as it came in: only slopes get lighter (facing the sun) or darker (facing away), as an emboss over a photo. Off: the whole surface is lit, so flat ground is as dark as a low sun makes it.' },
     lowColour: { label: 'Low colour', type: 'vec3color', section: 'Colour', hint: 'The colour at Range low (unless Colour is wired).' },
     highColour: { label: 'High colour', type: 'vec3color', section: 'Colour', hint: 'The colour at Range high (unless Colour is wired).' },
   },
@@ -88,6 +89,7 @@ export const HeightLightNode: NodeDefinition = withParamSockets({
       );
       at = (dx, dy) => norm(pick(channelOf(node), `texture2D(${tex}, ${id}_st + vec2(${dx}, ${dy}) * ${id}_px)`));
     }
+    const keepFlat = P.keepFlat === true || P.keepFlat === 'true';
     const sa = `radians(${p(P.sunAngle, 135)})`, sh = `radians(${p(P.sunHeight, 35)})`;
     lines.push(
       `    float ${id}_h = ${at('0.0', '0.0')};\n`,
@@ -97,7 +99,9 @@ export const HeightLightNode: NodeDefinition = withParamSockets({
       `    vec3 ${id}_sun = vec3(cos(${sa}) * cos(${sh}), sin(${sa}) * cos(${sh}), sin(${sh}));\n`,
       `    float ${id}_s = clamp(dot(${id}_n, ${id}_sun), 0.0, 1.0);\n`,
       `    vec3 ${id}_surf = ${v.colour ?? `mix(${pv3(P.lowColour, [0.36, 0.22, 0.12])}, ${pv3(P.highColour, [0.96, 0.8, 0.52])}, clamp(${id}_h, 0.0, 1.0))`};\n`,
-      `    vec3 ${id}_c = ${id}_surf * (${p(P.ambient, 0.3)} + (1.0 - ${p(P.ambient, 0.3)}) * ${id}_s);\n`,
+      `    vec3 ${id}_c = ${id}_surf * (${p(P.ambient, 0.3)} + (1.0 - ${p(P.ambient, 0.3)}) * ${id}_s)${keepFlat
+        // Divided by the light a flat surface gets (the sun's height), so flat is 1: the picture as it was.
+        ? ` / max(${p(P.ambient, 0.3)} + (1.0 - ${p(P.ambient, 0.3)}) * sin(${sh}), 1e-3)` : ''};\n`,
     );
     return { code: lines.join(''), outputVars: outs };
   },

@@ -13,6 +13,8 @@ import type { ParamDef } from '../types/nodeGraph';
 import { isParamVisible } from '../compiler/uniformPatcher';
 import { BUILTIN_IMAGES, ROOM_AND_CAT_ID, WALKWAY_CAT_ID } from '../lib/builtinImages';
 import { BLOCKS, blockDef, viewOf, type Params } from './blocks';
+import { BALL_VIDEO } from '../lib/builtinVideos';
+import type { GraphNode } from '../types/nodeGraph';
 
 export type { Params };
 
@@ -108,6 +110,23 @@ export function normalizeSpec(s: Partial<TextureLabSpec> | null | undefined): Te
 export const SOURCE_NAMES: Record<Exclude<TxSourceKind, 'node'>, string> = {
   room: BUILTIN_IMAGES[ROOM_AND_CAT_ID].name, walkway: BUILTIN_IMAGES[WALKWAY_CAT_ID].name, ball: 'Ball action',
 };
+
+/**
+ * The source picture's shape (width / height), so Texture Lab draws the preview at it (LiveViewport `aspect`) instead of
+ * stretching it to the window: the built-in photos' and clip's own sizes; a Texture Input of yours, its picture's
+ * (`_imageAspect`). Null when it isn't known from the graph (a Video Input: its element says, once loaded). Pure.
+ */
+export function txSourceAspect(spec: Pick<TextureLabSpec, 'source'>, nodes: readonly GraphNode[]): number | null {
+  const s = spec.source;
+  if (s.kind === 'room' || s.kind === 'walkway') {
+    const img = BUILTIN_IMAGES[s.kind === 'room' ? ROOM_AND_CAT_ID : WALKWAY_CAT_ID];
+    return img.width / img.height;
+  }
+  if (s.kind === 'ball') return BALL_VIDEO.width / BALL_VIDEO.height;
+  const nd = nodes.find(x => x.id === s.nodeId);
+  const a = nd?.type === 'textureInput' ? nd.params._imageAspect : undefined;
+  return typeof a === 'number' && Number.isFinite(a) && a > 0 ? a : null;
+}
 
 export function sourceName(s: TxSource): string {
   return s.kind === 'node' ? (s.name || 'A picture in the graph') : SOURCE_NAMES[s.kind];

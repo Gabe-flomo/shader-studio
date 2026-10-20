@@ -84,3 +84,13 @@ export function adoptPreviewCanvas(host: HTMLElement): (() => void) | null {
   wake?.();
   return give;
 }
+
+/**
+ * Move the lent canvas within `host` (CSS pixels from its top left): a viewport that draws the preview smaller than
+ * itself, at the picture's shape (LiveViewport's `aspect`), centres it. Nothing when it isn't lent to `host`.
+ */
+export function placeLentCanvas(host: HTMLElement, x: number, y: number): void {
+  if (!canvas || lent?.host !== host) return;
+  canvas.style.left = `${Math.round(x)}px`;
+  canvas.style.top = `${Math.round(y)}px`;
+}
