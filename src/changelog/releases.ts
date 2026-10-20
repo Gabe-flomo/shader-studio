@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.321',
+    date: '2026-10-20',
+    title: "Combine",
+    highlights: [
+      { area: 'Studio', text: "New Combine builder: stack builds in layers and join them with a verb, like a photo standing in a 3D scene or 3D objects placed in a photo by depth." },
+      { area: 'Studio', text: "Replace mask: find people or objects, then fill them with a 2D build, a photo or a 3D scene that follows each blob. Every builder has Add to this…" },
+    ],
+  },
+  {
     id: '2026.10.320',
     date: '2026-10-20',
     title: "Two spare passes",
