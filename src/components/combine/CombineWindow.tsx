@@ -13,9 +13,11 @@
  * The layer stack is bottom-up (the base at the bottom). Clicking a layer shows the stack up to it alone; again (or
  * Esc), the whole stack. "+ Add a layer" asks what (from this graph, a photo, a mask, or a new build in its builder)
  * and then how (only the verbs that join the pair). The settings are the selected layer's verb, the primary section
- * open and the rest folded with a summary. Off on a phone (docs/combine-plan.md [D9]).
+ * open and the rest folded with a summary. A number that goes into a socket has ƒ beside it: written as a one-line
+ * expression instead (a Simple Expression in the graph), with Make a slider on its numbers (XSlider). Off on a phone
+ * (docs/combine-plan.md [D9]).
  */
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
@@ -42,12 +44,17 @@ import {
 } from '../../combine/actions';
 import { applyCombinePreset } from '../../combine/presetActions';
 import { COMBINE_PRESETS } from '../../combine/presets';
-import { graphProducts, isSplat, productKind, resolveProduct, sameProduct, type GraphProduct } from '../../combine/products';
+import { graphProducts, isSplat, productKind, resolveProduct, sameProduct, targetInfo, type GraphProduct } from '../../combine/products';
 import { findCombineBuild } from '../../combine/meta';
+import { innerGlue } from '../../combine/apply';
+import { FREE_NAMES, checkExpr, exprTargets, type ExprName } from '../../combine/exprs';
 import {
-  MASK_DEFAULTS, PLACE_DEFAULTS, PRODUCT_LABEL, REPLACE_DEFAULTS, VERBS, num, offeredVerbs, resultKind, settingsOf, targetOf, verbLine,
+  COLLIDE_DEFAULTS, FOLLOW_DEFAULTS, MASK_DEFAULTS, PLACE_DEFAULTS, PRODUCT_LABEL, REPLACE_DEFAULTS, VERBS, num, offeredVerbs, resultKind, settingsOf, targetOf, verbLine,
   type CombineLayer, type CombineSpec, type MaskFind, type ProductKind, type ProductRef, type VerbId,
 } from '../../combine/spec';
+import { ExprLineInput } from '../builders/ExprLineInput';
+import { MakeSliderButton } from '../code/MakeSlider';
+import { literalAt, literalToSlider, type LiteralSpan } from '../../lib/glslPatterns/literalSlider';
 import type { SceneKind } from '../../builders/sceneKinds';
 import { builtinImageParams, ROOM_AND_CAT_ID, WALKWAY_CAT_ID } from '../../lib/builtinImages';
 import { BALL_VIDEO } from '../../lib/builtinVideos';
@@ -201,6 +208,21 @@ const MASKS: Array<{ find: MaskFind; label: string; icon: IconName }> = [
   { find: 'click', label: 'Click', icon: 'mouse' },
 ];
 
+/** Collide with's ways (docs/combine-plan.md §2.3). */
+const COLLIDE_WAYS: Array<{ mode: 'bounce' | 'slide' | 'settle'; label: string; icon: IconName; sub: string }> = [
+  { mode: 'bounce', label: 'Bounce', icon: 'spark', sub: 'off its surface' },
+  { mode: 'slide', label: 'Slide', icon: 'wave', sub: 'along it, round it' },
+  { mode: 'settle', label: 'Settle', icon: 'droplet', sub: 'fall and pile up' },
+];
+
+/** Follow the shape's ways (§2.4): what each does on a 2D outline, and on a 3D scene's surfaces. */
+const FOLLOW_WAYS: Array<{ how: 'trace' | 'cling' | 'flow' | 'orbit'; label: string; icon: IconName; sub: string; sub3d: string }> = [
+  { how: 'trace', label: 'Trace', icon: 'curve', sub: 'ride the outline', sub3d: 'circle on the surface' },
+  { how: 'cling', label: 'Cling', icon: 'target', sub: 'stay on it, drifting', sub3d: 'crawl on it, any way' },
+  { how: 'flow', label: 'Flow along', icon: 'wave', sub: 'pushed round it', sub3d: 'flow over it, one way' },
+  { how: 'orbit', label: 'Orbit', icon: 'loop', sub: 'circle it, further out', sub3d: 'a shell round it' },
+];
+
 /** A picture-tile button (the picker's choices, the settings' visual pickers). */
 function Tile({ icon, label, sub, on, onClick, disabled, title, attrs }: {
   icon: IconName; label: string; sub?: string; on?: boolean; onClick: () => void; disabled?: boolean; title?: string; attrs?: Record<string, string>;
@@ -245,7 +267,8 @@ function AddLayer() {
   const close = () => useCombine.getState().setPicker(null);
   const setProduct = (product: ProductRef | null) => useCombine.getState().setPicker({ on, product });
   // A base takes anything; a layer only what some verb joins to the target.
-  const joins = (k: ProductKind, splat = false) => on === null || (tKind !== null && offeredVerbs(k, tKind, { splat }).length > 0);
+  const tInfo = targetInfo(spec, on, nodes);
+  const joins = (k: ProductKind, splat = false) => on === null || (tKind !== null && offeredVerbs(k, tKind, { splat, ...tInfo }).length > 0);
   const pick = (product: ProductRef) => {
     if (on === null) addLayer(product, 'base', null);
     else setProduct(product);
@@ -355,8 +378,10 @@ function HowStep({ product, on }: { product: ProductRef; on: string }) {
   const kindOf = useKindOf();
   const tKind = useTargetKind(on);
   const label = useNodeGraphStore(s => resolveProduct(product, s.nodes).label);
+  const spec = useCombine(s => s.spec);
+  const tInfo = useNodeGraphStore(s => targetInfo(spec, on, s.nodes));
   const a = kindOf(product) ?? 'picture';
-  const verbs = tKind ? offeredVerbs(a, tKind, { splat: isSplat(product) }) : [];
+  const verbs = tKind ? offeredVerbs(a, tKind, { splat: isSplat(product), ...tInfo }) : [];
   const ways = (v: VerbId): Array<{ label: string; icon: IconName; settings: CombineLayer['settings']; sub: string }> => {
     const pic = (k: ProductKind | null) => k === 'picture' || k === 'pictureDepth';
     if (v === 'placeIn' && pic(a) && tKind === 'scene3d') return [
@@ -377,6 +402,8 @@ function HowStep({ product, on }: { product: ProductRef; on: string }) {
       { label: 'On each blob', icon: 'target', settings: { stick: 'blobs' }, sub: 'fitted, follows it' },
       { label: 'The whole mask', icon: 'mask', settings: { stick: 'frame' }, sub: 'the fill as it is' },
     ];
+    if (v === 'collide') return COLLIDE_WAYS.map(w => ({ label: w.label, icon: w.icon, settings: { mode: w.mode }, sub: w.sub }));
+    if (v === 'follow') return FOLLOW_WAYS.map(w => ({ label: w.label, icon: w.icon, settings: { how: w.how }, sub: tKind === 'scene3d' ? w.sub3d : w.sub }));
     return [{ label: VERBS[v].label, icon: 'link', settings: {}, sub: VERBS[v].reads }];
   };
   return (
@@ -416,10 +443,13 @@ function playParam(role: string, key: string): () => { nodeId: string; key: stri
   return () => {
     const c = useCombine.getState();
     const nodes = useNodeGraphStore.getState().nodes;
-    const node = c.anchorId ? findCombineBuild(nodes, c.anchorId)?.byRole.get(role) : undefined;
+    const found = c.anchorId ? findCombineBuild(nodes, c.anchorId) : null;
+    // A glue node, or one Combine put inside a product's Agents group (Collide with, Follow the shape).
+    const node = found ? found.byRole.get(role) ?? innerGlue(nodes, found.meta.build).get(role) : undefined;
     if (!node) return { missing: 'Not built yet: this part is off.' };
     // Before Done the build is a draft: a Play control would point at nothing in your graph.
-    if (!sceneDraftBase()?.some(n => n.id === node.id)) return { missing: 'Add to Play after Done: the combined scene isn\'t in your graph yet.' };
+    const inBase = (list: readonly GraphNode[] | null | undefined): boolean => !!list?.some(n => n.id === node.id || inBase((n.params.subgraph as { nodes?: GraphNode[] } | undefined)?.nodes));
+    if (!inBase(sceneDraftBase())) return { missing: 'Add to Play after Done: the combined scene isn\'t in your graph yet.' };
     return { nodeId: node.id, key };
   };
 }
@@ -433,6 +463,8 @@ function LayerSettings() {
   const nodes = useNodeGraphStore(s => s.nodes);
   const kindOf = useKindOf();
   const layer = spec.layers.find(l => l.id === selected);
+  // An expression that doesn't check says so under its own field: not again here.
+  const shown = warnings.filter(w => !/ = .*The slider's number is used\.$/.test(w));
   if (!layer) return <div style={{ padding: 16 }}><BuilderNote>Pick a layer to set how it joins.</BuilderNote></div>;
   const a = resolveProduct(layer.product, nodes);
   const target = targetOf(spec, layer);
@@ -449,6 +481,13 @@ function LayerSettings() {
       lazyParam={play ? playParam(`${L}:${play[0]}`, play[1]) : () => ({ missing: 'This one is set on two nodes at once: change it here.' })} />
   );
   const pic = (k: ProductKind | null) => k === 'picture' || k === 'pictureDepth';
+  const d3 = tKind === 'scene3d';
+  // The numbers that can be a line instead (they go into a socket), with the names each line can use.
+  const targets = exprTargets(layer.verb, { how: String(S.how ?? FOLLOW_DEFAULTS.how), mode: String(S.mode ?? COLLIDE_DEFAULTS.mode), d3, amount: true });
+  /** A slider, or (ƒ) its one-line expression, when the number can be one. */
+  const xslider = (key: string, label: string, def: number, min: number, max: number, play?: [string, string], step = 0.01) => (targets[key]
+    ? <XSlider key={key} layer={layer} k={key} label={label} names={targets[key]}>{slider(key, label, def, min, max, play, step)}</XSlider>
+    : slider(key, label, def, min, max, play, step));
   const body: ReactNode[] = [];
   if (layer.verb === 'base') {
     body.push(<BuilderNote key="base">The base: every layer above goes on it.{layer.product.kind === 'build' ? ' Edit product opens it in its builder.' : ''}</BuilderNote>);
@@ -456,7 +495,7 @@ function LayerSettings() {
     const P = settingsOf(layer, PLACE_DEFAULTS);
     body.push(<Fold key="blend" id="blend" title="Blend" primary summary={`${P.blend} · ${num(P.amount, 1)}`}>
       <TileGrid cols={5}>{(['normal', 'screen', 'add', 'multiply', 'overlay'] as const).map(b => <Tile key={b} icon={b === 'multiply' ? 'moon' : b === 'normal' ? 'layers' : 'sun'} label={b[0].toUpperCase() + b.slice(1)} on={P.blend === b} onClick={() => set('blend')(b)} />)}</TileGrid>
-      {slider('amount', 'Amount', 1, 0, 1, P.blend === 'normal' ? ['blend', 't'] : ['blend', 'opacity'])}
+      {xslider('amount', 'Amount', 1, 0, 1, P.blend === 'normal' ? ['blend', 't'] : ['blend', 'opacity'])}
     </Fold>);
   } else if (layer.verb === 'placeIn' && pic(a.kind) && tKind === 'scene3d') {
     const P = settingsOf(layer, PLACE_DEFAULTS);
@@ -479,13 +518,45 @@ function LayerSettings() {
         <Tile icon="layers" label="Over it" sub="where it has shapes" on={P.howPic === 'over'} attrs={{ 'data-how': 'over' }} onClick={() => set('howPic')('over')} />
         <Tile icon="cube" label="By depth" sub="near things hide it" on={P.howPic === 'depth'} attrs={{ 'data-how': 'depth' }} onClick={() => set('howPic')('depth')} />
       </TileGrid>
-      {P.howPic === 'over' && slider('amount', 'Amount', 1, 0, 1, ['amount', 'b'])}
+      {P.howPic === 'over' && xslider('amount', 'Amount', 1, 0, 1, ['amount', 'b'])}
     </Fold>);
     if (P.howPic === 'depth' && target) body.push(<DepthFold key="depth" layer={layer} pictureRef={resolveProduct(target.product, nodes).texture?.nodeId} label={tLabel} />);
   } else if (layer.verb === 'placeIn' && a.kind === 'points') {
-    body.push(<Fold key="pts" id="points" title="Points" primary summary={`amount ${num(S.amount, 1)}`}>{slider('amount', 'Amount', 1, 0, 2, ['amount', 'b'])}</Fold>);
+    body.push(<Fold key="pts" id="points" title="Points" primary summary={`amount ${num(S.amount, 1)}`}>{xslider('amount', 'Amount', 1, 0, 1, ['over', 't'])}</Fold>);
   } else if (layer.verb === 'placeIn' && a.splat) {
     body.push(<BuilderNote key="splat">The splats are seen through the scene's camera and hide behind its surfaces. Place and turn them in the Splat builder (Edit product).</BuilderNote>);
+  } else if (layer.verb === 'collide') {
+    const C = settingsOf(layer, COLLIDE_DEFAULTS);
+    const mode = String(C.mode);
+    body.push(<Fold key="how" id="collide" title="How" primary summary={mode}>
+      <TileGrid cols={3}>{COLLIDE_WAYS.map(w => <Tile key={w.mode} icon={w.icon} label={w.label} sub={w.sub} on={mode === w.mode} attrs={{ 'data-collide': w.mode }} onClick={() => set('mode')(w.mode)} />)}</TileGrid>
+      {mode === 'bounce' && xslider('bounce', 'Bounce', 0.6, 0, 1, ['collide', 'bounce'])}
+      {mode === 'settle' && xslider('gravity', 'Gravity', 0.6, 0, 3, ['gravity', 'strength'])}
+      {xslider('friction', 'Friction', mode === 'settle' ? 0.5 : 0.03, 0, 1, ['collide', 'friction'])}
+    </Fold>);
+    body.push(<Fold key="edge" id="collideEdge" title="Surface" summary={`margin ${num(C.margin, 0.015)}${d3 ? ` · grid ±${num(C.reach, 2)}` : ''}`}>
+      {slider('margin', 'Margin', 0.015, 0, 0.2, ['collide', 'margin'], 0.001)}
+      {mode !== 'settle' && slider('cushion', 'Cushion', 0.06, 0, 0.5, ['collide', 'cushion'], 0.001)}
+      {d3 && slider('reach', 'Scene size', 2, 0.2, 10, ['collide', 'reach'], 0.05)}
+    </Fold>);
+    body.push(<Fold key="draw" id="pointsDraw" title="Draw" summary={`amount ${num(S.amount, 1)}`}>{xslider('amount', 'Amount', 1, 0, 1, ['over', 't'])}</Fold>);
+  } else if (layer.verb === 'follow') {
+    const F = settingsOf(layer, FOLLOW_DEFAULTS);
+    const how = String(F.how);
+    const ride = !d3 && (how === 'trace' || how === 'orbit');
+    body.push(<Fold key="how" id="follow" title="How" primary summary={`${how === 'flow' ? 'flow along' : how} · speed ${num(F.speed, 0.35)}`}>
+      <TileGrid cols={4}>{FOLLOW_WAYS.map(w => <Tile key={w.how} icon={w.icon} label={w.label} sub={d3 ? w.sub3d : w.sub} on={how === w.how} attrs={{ 'data-follow': w.how }} onClick={() => set('how')(w.how)} />)}</TileGrid>
+      {d3 && how !== 'cling' && <TileGrid cols={3}>{(['y', 'x', 'z'] as const).map(x => <Tile key={x} icon={x === 'y' ? 'loop' : 'bidir'} label={x === 'y' ? 'Up' : x === 'x' ? 'Across' : 'Depth'} sub={how === 'flow' ? 'flows that way' : 'round that axis'} on={String(F.axis) === x} attrs={{ 'data-axis': x }} onClick={() => set('axis')(x)} />)}</TileGrid>}
+      {(d3 || ride) && xslider('speed', 'Speed', 0.35, -2, 2, ['follow', 'speed'])}
+      {!d3 && how === 'flow' && xslider('push', 'Push', 1.2, -4, 4, ['along', 'strength'])}
+      {!d3 && how === 'cling' && xslider('drift', 'Drift', 0.5, 0, 3, ['drift', 'strength'])}
+      {how === 'orbit'
+        ? xslider('orbit', 'Distance', 0.25, 0, 1.5, ['follow', d3 ? 'offset' : 'level'], 0.005)
+        : xslider('offset', 'Offset', 0.02, -0.3, 0.6, d3 ? ['follow', 'offset'] : ride ? ['follow', 'level'] : ['offset', 'value'], 0.005)}
+      {ride && xslider('width', 'Band', 0.03, 0, 0.3, ['follow', 'width'], 0.001)}
+    </Fold>);
+    if (d3) body.push(<Fold key="grid" id="followGrid" title="Surface" summary={`grid ±${num(F.reach, 2)}`}>{slider('reach', 'Scene size', 2, 0.2, 10, ['follow', 'reach'], 0.05)}</Fold>);
+    body.push(<Fold key="draw" id="pointsDraw" title="Draw" summary={`amount ${num(S.amount, 1)}`}>{xslider('amount', 'Amount', 1, 0, 1, ['over', 't'])}</Fold>);
   } else if (layer.verb === 'replaceMask' && layer.product.kind === 'mask') {
     const M = settingsOf(layer, MASK_DEFAULTS);
     const find = layer.product.find;
@@ -522,7 +593,7 @@ function LayerSettings() {
         <Tile icon="target" label="On each blob" sub="fitted, follows it" on={R.stick === 'blobs'} attrs={{ 'data-stick': 'blobs' }} onClick={() => set('stick')('blobs')} />
         <Tile icon="mask" label="Whole mask" sub="as it is" on={R.stick === 'frame'} attrs={{ 'data-stick': 'frame' }} onClick={() => set('stick')('frame')} />
       </TileGrid>
-      {slider('amount', 'Amount', 1, 0, 1, ['amount', 'b'])}
+      {xslider('amount', 'Amount', 1, 0, 1, ['amount', 'b'])}
     </Fold>);
     if (R.stick === 'blobs') body.push(<Fold key="stick" id="stick" title="Stick" summary={`${R.fit} · padding ${num(R.padding, 0.15)}`}>
       <TileGrid cols={3}>{(['box', 'square', 'circle'] as const).map(f => <Tile key={f} icon={f === 'circle' ? 'target' : f === 'box' ? 'layout' : 'grid'} label={f === 'box' ? 'Box' : f === 'square' ? 'Square' : 'Circle'} on={R.fit === f} attrs={{ 'data-fit': f }} onClick={() => set('fit')(f)} />)}</TileGrid>
@@ -540,7 +611,77 @@ function LayerSettings() {
       {info?.problem && <BuilderNote style={{ color: tk.status.warningText }}>{info.problem}</BuilderNote>}
       <div style={layer.muted ? MUTED_DIM : undefined}>{body}</div>
       {!!info?.passes && <BuilderNote>This layer adds {info.passes} pass{info.passes === 1 ? '' : 'es'}: a picture worked out per pixel becomes a texture for it.</BuilderNote>}
-      {warnings.length > 0 && <div data-combine-warnings style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>{warnings.map(w => <BuilderNote key={w} style={{ color: tk.status.warningText }}>{w}</BuilderNote>)}</div>}
+      {shown.length > 0 && <div data-combine-warnings style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>{shown.map(w => <BuilderNote key={w} style={{ color: tk.status.warningText }}>{w}</BuilderNote>)}</div>}
+    </div>
+  );
+}
+
+// ── One-line expressions (docs/combine-plan.md §2.8) ─────────────────────────
+
+/**
+ * A verb's number with ƒ beside it: written as a one-line expression instead (exprs.ts: a Simple Expression wired where
+ * the number goes). The line is checked as you type and built when you leave it (or press Enter). A number under the
+ * caret offers Make a slider: it becomes a name with a slider of its own (a Constant in the graph, which Add to Play
+ * can take after Done). × goes back to the plain slider.
+ */
+function XSlider({ layer, k, label, names, children }: { layer: CombineLayer; k: string; label: string; names: readonly ExprName[]; children: ReactNode }) {
+  const tk = useTokens();
+  const text = layer.exprs?.[k];
+  const sliders = useMemo(() => layer.sliders?.[k] ?? {}, [layer.sliders, k]);
+  const [draft, setDraft] = useState<string | null>(null);
+  const [offer, setOffer] = useState<LiteralSpan | null>(null);
+  useEffect(() => { setDraft(null); setOffer(null); }, [text]);
+  const L = layer.id;
+  const value = draft ?? text ?? '';
+  const all = useMemo(() => [...FREE_NAMES, ...names], [names]);
+  const chk = text === undefined ? null : checkExpr(value, all, sliders);
+  const commit = (v = value) => {
+    setDraft(null);
+    if (v !== text) updateLayer(L, l => { l.exprs = { ...(l.exprs ?? {}), [k]: v }; });
+  };
+  const toggle = () => updateLayer(L, l => {
+    if (l.exprs?.[k] !== undefined) {
+      const { [k]: _gone, ...rest } = l.exprs;
+      l.exprs = rest;
+      if (l.sliders) { const { [k]: _s, ...more } = l.sliders; l.sliders = more; }
+    } else l.exprs = { ...(l.exprs ?? {}), [k]: String(num(l.settings[k], 0)) };
+  });
+  const makeSlider = (lit: LiteralSpan) => {
+    const made = literalToSlider(value, { ...lit, int: false }, [...all.map(x => x.name), ...Object.keys(sliders)]);
+    setOffer(null);
+    setDraft(null);
+    updateLayer(L, l => {
+      l.exprs = { ...(l.exprs ?? {}), [k]: made.text };
+      l.sliders = { ...(l.sliders ?? {}), [k]: { ...(l.sliders?.[k] ?? {}), [made.name]: made.value } };
+    });
+  };
+  const fx = (
+    <button type="button" data-expr-toggle={k} aria-pressed={text !== undefined} onClick={toggle}
+      title={text !== undefined ? `Back to a plain ${label} slider` : `Write ${label} as a line: a Simple Expression in the graph`}
+      style={{ flexShrink: 0, width: 22, height: 22, padding: 0, border: 0, borderRadius: 6, cursor: 'pointer', font: `italic 700 12px ${fontFamily.mono}`,
+        background: text !== undefined ? alpha(tk.accent.base, 0.16) : 'none', color: text !== undefined ? tk.accent.text : tk.text.muted }}>ƒ</button>
+  );
+  if (text === undefined) return <div data-xslider={k} style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ flex: 1, minWidth: 0 }}>{children}</div>{fx}</div>;
+  return (
+    <div data-xslider={k} data-expr-on style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ width: 76, flexShrink: 0, fontSize: 12, color: tk.text.secondary }}>{label} =</span>
+        <ExprLineInput ariaLabel={`${label} as an expression`} attrs={{ 'data-expr-line': k }} value={value} invalid={!!chk && !chk.ok}
+          vars={[...all.map(x => ({ name: x.name, type: 'float' })), ...Object.keys(sliders).map(name => ({ name, type: 'float' }))]}
+          placeholder="e.g. 0.3 + 0.2 * sin(t)"
+          onChange={v => setDraft(v)}
+          onCaret={el => setOffer(literalAt(el.value, el.selectionStart ?? 0, el.selectionEnd ?? 0))}
+          onBlur={() => { commit(); setTimeout(() => setOffer(null), 150); }} />
+        {fx}
+      </div>
+      {chk && !chk.ok && <div role="alert" data-expr-error={k} style={{ fontSize: 11.5, color: tk.status.danger, paddingLeft: 82 }}>{chk.error}</div>}
+      {offer && <MakeSliderButton lit={offer} onMake={() => makeSlider(offer)} indent={82} />}
+      <span style={{ paddingLeft: 82, fontSize: 11, color: tk.text.faint }} title={all.map(x => `${x.name}: ${x.doc}`).join('\n')}>{all.map(x => x.name).join(' · ')}</span>
+      {Object.entries(sliders).map(([name, v]) => (
+        <NumRow key={name} label={name} value={v} min={Math.min(0, v * 2)} max={Math.max(1, Math.abs(v) * 2)} defaultValue={v}
+          onChange={nv => updateLayer(L, l => { l.sliders = { ...(l.sliders ?? {}), [k]: { ...(l.sliders?.[k] ?? {}), [name]: nv } }; })}
+          lazyParam={playParam(`${L}:x:${k}:${name}`, 'value')} />
+      ))}
     </div>
   );
 }

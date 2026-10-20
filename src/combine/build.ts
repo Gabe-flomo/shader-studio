@@ -22,36 +22,25 @@
  *    a picture chain through Blob Space's Fill field, a texture through Fill texture, a 3D scene through its camera's
  *    UV) or fills the whole mask; Select lays it over the picture under the mask.
  *
+ * Phase 2 (points.ts): Collide with and Follow the shape, points on a 2D build's shape or in a 3D scene: plain nodes
+ * added inside the points' Agents group (`inner`), and the walkers drawn over the layer below as Place in draws them.
+ * A number of a verb can be a one-line expression instead (exprs.ts): a Simple Expression wired where the number goes.
+ *
  * A few pairs set a wire on a product's own node (a 3D group's camera, a Splat Scene's rays, a 3D fill's camera UV):
  * those are returned as `patches`, which apply.ts sets and puts back. Pure: ids come from `idFor`.
  */
-import type { GraphNode, InputSocket, OutputSocket, SubgraphData } from '../types/nodeGraph';
-import { getNodeDefinition } from '../nodes/definitions';
-import { startingSockets } from '../nodes/definitions/transformAny';
+import type { GraphNode, SubgraphData } from '../types/nodeGraph';
 import { blobFitOf } from '../nodes/definitions/blobSpace';
-import { CB_ROLE } from './meta';
 import { resolveProduct, type Resolved } from './products';
+import { mk, mkVec3, ref, simple, textureFor, tidy, type Ctx, type InnerEdit, type LayerOut, type Patch } from './glue';
+import { collideWith, followShape, pointsOver } from './points';
+import { exprFor } from './exprs';
 import {
   MASK_DEFAULTS, PLACE_DEFAULTS, REPLACE_DEFAULTS, num, settingsOf, str, targetOf,
   type Blend, type CombineLayer, type CombineSpec, type NodeRef, type PlaceHow3d, type PlaceHowPic, type ProductKind, type Stick,
 } from './spec';
 
-/** A wire the build sets on a product's own node (null: unwire it). */
-export interface Patch { nodeId: string; input: string; from: NodeRef | null; note: string }
-
-/** What a layer is, built: its picture and, for 3D and masks, what the layers above it wire from. */
-export interface LayerOut {
-  id: string;
-  kind: ProductKind;
-  label: string;
-  colour: NodeRef | null;
-  texture: NodeRef | null;
-  cam?: string;
-  loop?: { id: string; dist: boolean; hit: boolean };
-  sceneGroup?: string;
-  /** A mask layer: its mask, texture, Blob data (when it has some), and the picture it masks. */
-  mask?: { mask: NodeRef; texture: NodeRef | null; blobs: NodeRef | null; under: LayerOut; maxBlobs?: number };
-}
+export type { InnerEdit, LayerOut, Patch } from './glue';
 
 export interface LayerBuilt {
   out: LayerOut | null;
@@ -70,68 +59,13 @@ export interface CombineBuild {
   result: NodeRef | null;
   layers: Record<string, LayerBuilt>;
   warnings: string[];
-}
-
-const ref = (n: GraphNode, outputKey: string): NodeRef => ({ nodeId: n.id, outputKey });
-
-interface Ctx {
-  graph: readonly GraphNode[];
-  idFor: (role: string) => string;
-  glue: GraphNode[];
-  patches: Patch[];
-  warnings: string[];
-  /** The layer being built: its glue ids. */
-  mine: string[];
-}
-
-/** A glue node of `type`: sockets from its definition, params = defaults + `params`, its role and note. */
-function mk(ctx: Ctx, layer: string, part: string, type: string, params: Record<string, unknown>, wires: Record<string, NodeRef | null | undefined>, note: string): GraphNode {
-  const def = getNodeDefinition(type);
-  if (!def) throw new Error(`Combine: unknown node type ${type}`);
-  const sockets = startingSockets(type, def, { ...(def.defaultParams ?? {}), ...params });
-  const inputs: Record<string, InputSocket> = {};
-  for (const [k, s] of Object.entries({ ...def.inputs, ...sockets.inputs })) {
-    const w = wires[k];
-    if (!(k in sockets.inputs) && !w) continue;
-    inputs[k] = { type: s.type, label: s.label, ...(w ? { connection: { ...w } } : {}) };
-  }
-  const outputs: Record<string, OutputSocket> = {};
-  for (const [k, s] of Object.entries(sockets.outputs)) outputs[k] = { type: s.type, label: s.label };
-  const role = `${layer}:${part}`;
-  const node: GraphNode = { id: ctx.idFor(role), type, position: { x: 0, y: 0 }, inputs, outputs, params: { ...(def.defaultParams ?? {}), ...params, __comment: note, [CB_ROLE]: role } };
-  ctx.glue.push(node);
-  ctx.mine.push(node.id);
-  return node;
-}
-
-/** A math node (Mix, Select) set to vec3, its sockets retyped as the card's type picker leaves them. */
-function mkVec3(ctx: Ctx, layer: string, part: string, type: 'mix' | 'select', wires: Record<string, NodeRef | null | undefined>, note: string, params: Record<string, unknown> = {}): GraphNode {
-  const node = mk(ctx, layer, part, type, { outputType: 'vec3', ...params }, wires, note);
-  for (const k of Object.keys(node.inputs)) if (!(type === 'mix' && k === 't') && !(type === 'select' && k === 'mask')) node.inputs[k] = { ...node.inputs[k], type: 'vec3' };
-  for (const k of Object.keys(node.outputs)) node.outputs[k] = { ...node.outputs[k], type: 'vec3' };
-  return node;
-}
-
-/** A Simple Expression with named inputs (their types follow the wires when the graph compiles). */
-function simple(ctx: Ctx, layer: string, part: string, label: string, expr: string, outputType: 'float' | 'vec3', ins: Array<[string, NodeRef]>, note: string): GraphNode {
-  const vars = ins.map(([name], i) => ({ key: `in${i + 1}`, name }));
-  const node = mk(ctx, layer, part, 'simpleExpr', { label, vars, expr, outputType }, {}, note);
-  node.inputs = Object.fromEntries(ins.map(([name, from], i) => [`in${i + 1}`, { type: 'float', label: name, connection: { ...from } }]));
-  node.outputs = { result: { type: outputType, label: 'Result' } };
-  return node;
-}
-
-/** The picture as a texture: its own when it has one, else a Pass (one pass) that renders it into one. */
-function textureFor(ctx: Ctx, layer: string, out: { texture: NodeRef | null; colour: NodeRef | null; label: string }, why: string): NodeRef | null {
-  if (out.texture) return out.texture;
-  if (!out.colour) return null;
-  const pass = mk(ctx, layer, 'pass', 'pass', {}, { color: out.colour },
-    `Pass: ${out.label} drawn into a texture (one pass), because ${why} reads a picture as a texture, not a colour worked out per pixel.`);
-  return ref(pass, 'texture');
+  /** Nodes added inside products' Agents groups (Collide with, Follow the shape): apply.ts puts them in. */
+  inner: InnerEdit[];
 }
 
 const asOut = (layerId: string, r: Resolved): LayerOut => ({
   id: layerId, kind: r.kind, label: r.label, colour: r.colour, texture: r.texture, cam: r.cam, loop: r.loop, sceneGroup: r.sceneGroup,
+  ...(r.shape ? { shape: r.shape } : {}),
   ...(r.mask ? { mask: { ...r.mask, under: { id: '', kind: 'picture', label: '', colour: null, texture: null } } } : {}),
 });
 
@@ -148,10 +82,11 @@ function placeIn(ctx: Ctx, layer: CombineLayer, a: Resolved, b: LayerOut): Layer
   if (isPic(a.kind) && isPic(b.kind)) {
     const blend = str<Blend>(S.blend, ['normal', 'screen', 'add', 'multiply', 'overlay'], 'normal');
     const amount = num(S.amount, 1);
+    const ex = exprFor(ctx, layer, 'amount', {});
     const top = blend === 'normal'
-      ? mkVec3(ctx, L, 'blend', 'mix', { a: b.colour, b: a.colour }, `Mix: ${a.label} over ${b.label}, by Amount (Blend ${amount}: 0 only the picture below, 1 only ${a.label}).`, { t: amount })
-      : mk(ctx, L, 'blend', 'blendModes', { mode: blend === 'add' ? 'additive' : blend, opacity: amount }, { base: b.colour, blend: a.colour },
-        `Blend Modes (${blend}): ${a.label} blended onto ${b.label}; Opacity is the Amount.`);
+      ? mkVec3(ctx, L, 'blend', 'mix', { a: b.colour, b: a.colour, t: ex }, `Mix: ${a.label} over ${b.label}, by Amount (Blend ${ex ? 'from the expression wired into it' : `${amount}`}: 0 only the picture below, 1 only ${a.label}).`, { t: amount })
+      : mk(ctx, L, 'blend', 'blendModes', { mode: blend === 'add' ? 'additive' : blend, opacity: amount }, { base: b.colour, blend: a.colour, opacity: ex },
+        `Blend Modes (${blend}): ${a.label} blended onto ${b.label}; Opacity is the Amount${ex ? ' (the expression wired into it)' : ''}.`);
     return { ...b, id: L, colour: ref(top, 'result'), texture: null };
   }
   // A picture in a 3D scene.
@@ -239,30 +174,14 @@ function placeIn(ctx: Ctx, layer: CombineLayer, a: Resolved, b: LayerOut): Layer
       return { ...b, id: L, colour: ref(comp, 'color') };
     }
     const hit: NodeRef | null = a.loop.hit ? { nodeId: a.loop.id, outputKey: 'hit' } : null;
-    const amount = mk(ctx, L, 'amount', 'multiply', { b: num(S.amount, 1) }, { a: hit }, `Multiply: where the scene's rays hit something (Hit), times Amount: how much of the scene shows over ${b.label}.${hit ? '' : ' This scene\'s march has no Hit, so A is 0 until you wire one.'}`);
+    const amount = mk(ctx, L, 'amount', 'multiply', { b: num(S.amount, 1) }, { a: hit, b: exprFor(ctx, layer, 'amount', {}) }, `Multiply: where the scene's rays hit something (Hit), times Amount: how much of the scene shows over ${b.label}.${hit ? '' : ' This scene\'s march has no Hit, so A is 0 until you wire one.'}`);
     if (!hit) amount.params.a = 1;
     const sel = mkVec3(ctx, L, 'over', 'select', { mask: ref(amount, 'result'), ifTrue: a.colour, ifFalse: b.colour },
       `Select: ${a.label} where it has something (its Hit), ${b.label} round it.`);
     return { ...b, id: L, colour: ref(sel, 'result') };
   }
   // Points on a picture or in a 3D scene.
-  if (a.kind === 'points') {
-    if (!a.draw) return `${a.label} has no Draw agents.`;
-    const notes: string[] = [];
-    if (b.kind === 'scene3d' && a.draw.d3 && b.cam) {
-      ctx.patches.push(
-        { nodeId: a.draw.id, input: 'camOrigin', from: { nodeId: b.cam, outputKey: 'ro' }, note: 'seen through the scene\'s camera' },
-        { nodeId: a.draw.id, input: 'camRay', from: { nodeId: b.cam, outputKey: 'rd' }, note: 'seen through the scene\'s camera' },
-        ...(b.loop?.dist ? [{ nodeId: a.draw.id, input: 'depth', from: { nodeId: b.loop.id, outputKey: 'dist' }, note: 'hidden behind the scene\'s surfaces' }] : []),
-      );
-      notes.push(' Its Draw agents sees through the scene\'s March Camera and hides walkers behind the scene\'s surfaces (Camera from, Camera ray and Depth are wired from the scene).');
-    } else if (b.kind === 'scene3d') ctx.warnings.push(`${a.label} is a 2D Agents group: it is laid over the scene, not in it.`);
-    const amount = mk(ctx, L, 'amount', 'multiply', { b: num(S.amount, 1) }, { a: { nodeId: a.draw.id, outputKey: 'density' } },
-      `Multiply: Draw agents' Density (how much walker is here) times Amount: how strongly the walkers cover ${b.label}.`);
-    const sel = mkVec3(ctx, L, 'over', 'select', { mask: ref(amount, 'result'), ifTrue: a.colour, ifFalse: b.colour },
-      `Select: the walkers (Draw agents' Color) where they are, ${b.label} elsewhere.${notes.join('')}`);
-    return { ...b, id: L, colour: ref(sel, 'result') };
-  }
+  if (a.kind === 'points') return pointsOver(ctx, layer, a, b);
   return `${a.label} can't be placed in ${b.label}.`;
 }
 
@@ -360,7 +279,7 @@ function fillLayer(ctx: Ctx, layer: CombineLayer, a: Resolved, b: LayerOut): Lay
     fill = threeD ? a.colour : ref(space, 'color');
     where = ref(space, 'alpha');
   }
-  const amount = mk(ctx, L, 'amount', 'multiply', { b: num(S.amount, 1) }, { a: where },
+  const amount = mk(ctx, L, 'amount', 'multiply', { b: num(S.amount, 1) }, { a: where, b: exprFor(ctx, layer, 'amount', {}) },
     stick === 'blobs' ? 'Multiply: where the fill shows (Blob Space\'s Alpha) times Amount.' : 'Multiply: the mask times Amount: how much of the fill replaces what was found.');
   const sel = mkVec3(ctx, L, 'replace', 'select', { mask: ref(amount, 'result'), ifTrue: fill, ifFalse: pic.colour },
     `Select: ${a.label} where the mask found something, ${pic.label} everywhere else.`);
@@ -369,22 +288,18 @@ function fillLayer(ctx: Ctx, layer: CombineLayer, a: Resolved, b: LayerOut): Lay
 
 // ── The stack ────────────────────────────────────────────────────────────────
 
-/** Lay `nodes` out in a row, left to right in the order made (a group's inside). */
-function tidy(nodes: GraphNode[]): void {
-  nodes.forEach((n, i) => { n.position = { x: i * 300, y: 120 }; });
-}
 
 export const defaultCombineId = (role: string) => `cb_${role.replace(/[^A-Za-z0-9]/g, '_')}`;
 
 /** The glue for `spec` over the products in `graph` (no Output: `result` is what it shows). Pure. */
 export function buildCombine(spec: CombineSpec, graph: readonly GraphNode[], idFor: (role: string) => string = defaultCombineId): CombineBuild {
-  const ctx: Ctx = { graph, idFor, glue: [], patches: [], warnings: [], mine: [] };
+  const ctx: Ctx = { graph, idFor, glue: [], patches: [], warnings: [], mine: [], inner: [] };
   const layers: Record<string, LayerBuilt> = {};
   const outs = new Map<string, LayerOut>();
   let result: NodeRef | null = null;
   for (const layer of spec.layers) {
     ctx.mine = [];
-    const before = ctx.glue.length, patchesBefore = ctx.patches.length;
+    const before = ctx.glue.length, patchesBefore = ctx.patches.length, innerBefore = ctx.inner.length;
     const a = resolveProduct(layer.product, graph);
     const target = targetOf(spec, layer);
     const b = target ? outs.get(target.id) ?? null : null;
@@ -396,11 +311,14 @@ export function buildCombine(spec: CombineSpec, graph: readonly GraphNode[], idF
     else if (a.missing) out = a.missing;
     else if (layer.verb === 'placeIn') out = placeIn(ctx, layer, a, b);
     else if (layer.verb === 'replaceMask') out = a.kind === 'mask' ? (isPic(b.kind) ? maskLayer(ctx, layer, a, b) : 'A mask goes on a picture.') : fillLayer(ctx, layer, a, b);
+    else if (layer.verb === 'collide') out = collideWith(ctx, layer, a, b);
+    else if (layer.verb === 'follow') out = followShape(ctx, layer, a, b);
     else out = 'This verb comes in a later phase.';
     if (typeof out === 'string') {
       // Nothing half-made: a layer that can't be built leaves no glue, and the layers above see the one below it.
       ctx.glue.splice(before);
       ctx.patches.splice(patchesBefore);
+      ctx.inner.splice(innerBefore);
       layers[layer.id] = { out: b ? { ...b, id: layer.id } : null, glue: [], passes: 0, problem: out };
       if (b) outs.set(layer.id, { ...b, id: layer.id });
       if (layer.verb !== 'base') ctx.warnings.push(`${a.label}: ${out}`);
@@ -414,5 +332,5 @@ export function buildCombine(spec: CombineSpec, graph: readonly GraphNode[], idF
   // The top of the stack (a muted or failed top layer: the one below it).
   const top = spec.layers[spec.layers.length - 1];
   if (top) result = layers[top.id]?.out?.colour ?? result;
-  return { glue: ctx.glue, patches: ctx.patches, result, layers, warnings: ctx.warnings };
+  return { glue: ctx.glue, patches: ctx.patches, result, layers, warnings: ctx.warnings, inner: ctx.inner };
 }

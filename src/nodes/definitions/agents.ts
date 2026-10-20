@@ -80,6 +80,8 @@ export const AGENT_INSIDE_TYPES = new Set([
   'agentIntegrate', 'agentAge', 'agentCollide', 'agentChladni',
   // 3D: colliding with a ray-marched scene through its coarse grid.
   'agentCollideScene',
+  // 3D: moving along a ray-marched scene's surfaces, through the same grid (agentFollowScene.ts).
+  'agentFollowScene',
   // The walkers near this one, through the group's grid (docs/agents-group.md "Neighbours").
   'agentNeighbours',
   // Walkers locked onto a parametric curve (agentRideCurve.ts; hidden, kept for saved graphs).
@@ -181,6 +183,7 @@ export const AGENT_3D_SOCKETS: Record<string, { in?: string[]; out?: string[] }>
   agentCollide: { in: ['position', 'velocity'], out: ['position', 'velocity'] },
   agentChladni: { in: ['position', 'velocity'], out: ['position', 'velocity'] },
   agentCollideScene: { in: ['position', 'velocity'], out: ['position', 'velocity'] },
+  agentFollowScene: { in: ['position', 'velocity'], out: ['position', 'velocity', 'heading'] },
   agentNeighbours: { in: ['position'], out: ['centre', 'heading', 'push'] },
   agentRideCurve: { out: ['position', 'velocity', 'heading'] },
   agentRidePath: { out: ['position', 'velocity', 'heading'] },
@@ -343,7 +346,7 @@ const WALKER_SOCKETS: Record<string, string[]> = {
   agentSense: ['position', 'heading'], agentSteer: ['heading', 'random'], agentMove: ['position', 'heading'],
   agentWind: ['position'], agentCurl: ['position'], agentAttract: ['position'], agentVortex: ['position'], agentFlow: ['position'],
   agentSoundKick: ['position'], agentIntegrate: ['position', 'velocity'], agentCollide: ['position', 'velocity'],
-  agentChladni: ['position', 'velocity'], agentAge: ['age', 'life'], agentCollideScene: ['position', 'velocity'],
+  agentChladni: ['position', 'velocity'], agentAge: ['age', 'life'], agentCollideScene: ['position', 'velocity'], agentFollowScene: ['position', 'velocity'],
   agentNeighbours: ['position'], agentRideCurve: ['memory'],
   agentTurnToward: ['heading', 'position'], agentFollowTrail: ['heading'], agentWander: ['heading'], agentOrbit: ['heading', 'position'],
   agentAvoidWalls: ['heading', 'position'], agentApplyForce: ['heading', 'position'], agentLeaveTrail: [], agentFadeWithAge: ['age'],

@@ -188,6 +188,7 @@ export { AgentNeighboursNode } from './agentNeighbours';
 export { AgentTurnTowardNode, AgentFollowTrailNode, AgentWanderNode, AgentOrbitNode, AgentAvoidWallsNode, AgentApplyForceNode, AgentDragNode, AgentSlowInCrowdNode, AgentLeaveTrailNode, AgentFadeWithAgeNode } from './agentRuleSteps';
 export { AgentRideCurveNode } from './agentRideCurve';
 export { AgentRidePathNode } from './agentRidePath';
+export { AgentFollowSceneNode } from './agentFollowScene';
 
 // Math
 export {
@@ -335,6 +336,7 @@ import { AgentNeighboursNode } from './agentNeighbours';
 import { AgentTurnTowardNode, AgentFollowTrailNode, AgentWanderNode, AgentOrbitNode, AgentAvoidWallsNode, AgentApplyForceNode, AgentDragNode, AgentSlowInCrowdNode, AgentLeaveTrailNode, AgentFadeWithAgeNode } from './agentRuleSteps';
 import { AgentRideCurveNode } from './agentRideCurve';
 import { AgentRidePathNode } from './agentRidePath';
+import { AgentFollowSceneNode } from './agentFollowScene';
 import { AgentGravityNode, AgentWindNode, AgentCurlNode, AgentAttractNode, AgentVortexNode, AgentFlowNode, AgentSoundKickNode, AgentIntegrateNode, AgentAgeNode, AgentCollideNode, AgentChladniNode, AgentCollideSceneNode, AgentGridOutNode } from './agentForces';
 
 // Every setting of the Agents family has a "?" on its card: its hint, unless it has a fuller help of its own.
@@ -659,6 +661,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   splatProbeOut: SplatProbeOutNode,
   splatModOut: SplatModOutNode,
   agentCollideScene: AgentCollideSceneNode,
+  agentFollowScene: AgentFollowSceneNode,
   agentNeighbours: AgentNeighboursNode,
   agentTurnToward: AgentTurnTowardNode,
   agentFollowTrail: AgentFollowTrailNode,

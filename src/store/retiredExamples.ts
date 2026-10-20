@@ -46,8 +46,9 @@ export const RETIRED_EXAMPLE_KEYS: readonly string[] = [
   // Not retired but not in a folder either (each folder holds its curated five): Simple Expression's own example,
   // shown under the node in the node list (Used in) and opened by key.
   'simpleExprBlend',
-  // Not in a folder either: Combine's two examples (combineExamples.ts), shown under Blob Space and Picture Card (Used in).
-  'combinePhotoInRoom', 'combinePeopleRings',
+  // Not in a folder either: Combine's examples (combineExamples.ts), shown under Blob Space, Picture Card, Ride a Path and
+  // Follow surface (3D Scene) (Used in).
+  'combinePhotoInRoom', 'combinePeopleRings', 'combineSparksTrace', 'combineFireflies',
   // Texture Lab's two (textureLabExamples.ts): the Texture tools folder holds its five; these open by key and from What's new.
   'texLabThermal', 'texLabTrails',
 ];

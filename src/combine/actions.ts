@@ -163,6 +163,20 @@ export function editCombine(anchorId: string): boolean {
 const silent = (k: string) => k === '__comment' || k.startsWith('_') || k === 'combine';
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
+/**
+ * How the inside of an Agents group changed: null when its nodes or wires did (a rebuild), else its params as the
+ * group's "inner::key" writes (Collide's Bounce, Follow's Speed: written live through the group, no rebuild).
+ */
+function innerParamDiff(prev: unknown, next: unknown): Record<string, unknown> | null {
+  const a = (prev as { nodes?: GraphNode[] } | undefined)?.nodes, b = (next as { nodes?: GraphNode[] } | undefined)?.nodes;
+  if (!a || !b) return null;
+  const d = paramDiff(a, b);
+  if (!d) return null;
+  const out: Record<string, unknown> = {};
+  for (const x of d) for (const [k, v] of Object.entries({ ...x.silent, ...x.live })) out[`${x.id}::${k}`] = v;
+  return out;
+}
+
 /** How `next` differs from `prev`: null when the wiring or the nodes changed (a rebuild), else the params per node. */
 function paramDiff(prev: readonly GraphNode[], next: readonly GraphNode[]): Array<{ id: string; live: Record<string, unknown>; silent: Record<string, unknown> }> | null {
   if (prev.length !== next.length) return null;
@@ -177,6 +191,12 @@ function paramDiff(prev: readonly GraphNode[], next: readonly GraphNode[]): Arra
     const live: Record<string, unknown> = {}, quiet: Record<string, unknown> = {};
     for (const k of new Set([...Object.keys(o.params), ...Object.keys(n.params)])) {
       if (same(o.params[k], n.params[k])) continue;
+      if (k === 'subgraph' && n.type === 'agentsGroup') {
+        const inner = innerParamDiff(o.params[k], n.params[k]);
+        if (!inner) return null;
+        Object.assign(live, inner);
+        continue;
+      }
       if (!(k in n.params) || k === 'subgraph') return null;
       (silent(k) ? quiet : live)[k] = n.params[k];
     }

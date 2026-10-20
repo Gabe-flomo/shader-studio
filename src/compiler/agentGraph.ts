@@ -134,11 +134,12 @@ export function agentStepNodes(group: GraphNode, volumeOf?: (nodeId: string) => 
     const vol = src && volumeOf ? volumeOf(src) : null;
     return vol ? { ...n, params: { ...n.params, __vol: true, __volOf: vol } } : n;
   };
-  // Collide (3D scene): its Scene (rewired to what is wired outside) goes to the engine as a grid program; the copy here has no wire.
+  // Collide (3D scene) and Follow surface (3D Scene): the Scene (rewired to what is wired outside) goes to the engine as a grid
+  // program; the copy here has no wire.
   const grids: Array<{ nodeId: string; from: { nodeId: string; outputKey: string } }> = [];
   const gridded = (n: GraphNode) => {
-    if (n.type !== 'agentCollideScene') return n;
-    if (!d3) problems.push(`Node ${n.id}: Collide (3D scene) works in a 3D group: set ${labelOf(group)}'s Space to 3D.`);
+    if (!SCENE_GRID_TYPES.has(n.type)) return n;
+    if (!d3) problems.push(`Node ${n.id}: ${n.type === 'agentFollowScene' ? 'Follow surface (3D Scene)' : 'Collide (3D scene)'} works in a 3D group: set ${labelOf(group)}'s Space to 3D.`);
     const c = n.inputs.scene?.connection;
     if (c && d3 && c.nodeId !== inputsNode?.id) grids.push({ nodeId: n.id, from: c });
     if (!c) return n;
@@ -168,6 +169,9 @@ export function agentStepNodes(group: GraphNode, volumeOf?: (nodeId: string) => 
   if (!outputNode) problems.push(`Node ${group.id}: ${labelOf(group)} has no Agent Output inside; open it and Start over, or add the preset again.`);
   return { inner, sink, starts, problems, stateC, stateE, space3d: d3, grids };
 }
+
+/** Nodes that read a Scene through its coarse grid (one grid program each). */
+export const SCENE_GRID_TYPES: ReadonlySet<string> = new Set(['agentCollideScene', 'agentFollowScene']);
 
 /** The end of a Collide (3D scene)'s grid program (AgentGridOutNode), wired to the Scene outside. */
 export function gridSink(nodeId: string, slug: string, from: { nodeId: string; outputKey: string }): GraphNode {

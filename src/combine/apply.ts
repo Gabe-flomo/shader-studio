@@ -8,11 +8,15 @@
  *
  * The spec goes on the top glue node (the anchor, `params.combine`); every glue node carries the build key. The
  * Output shows the stack (or one layer of it, isolated). Pure: ids come from `nextId`.
+ *
+ * Collide with and Follow the shape add nodes inside a product's Agents group (`build.inner`): those carry the build
+ * key too, the group gains a port, and its Agent Output's motion wires go to them. What was there is kept in the meta
+ * (`inner`) and put back before every rebuild and when the build goes, as the top-level patches are.
  */
-import type { GraphNode } from '../types/nodeGraph';
+import type { GraphNode, SubgraphData } from '../types/nodeGraph';
 import { getNodeDefinition } from '../nodes/definitions';
 import { estimateNodeHeight } from '../store/graphLayout';
-import { buildCombine, type CombineBuild } from './build';
+import { buildCombine, type CombineBuild, type InnerEdit } from './build';
 import { CB_BUILD, CB_ROLE, COMBINE_META, cbRoleOf, findCombineBuild, type CombineMeta } from './meta';
 import type { CombineSpec, NodeRef } from './spec';
 
@@ -94,12 +98,116 @@ function unpatch(graph: GraphNode[], patched: CombineMeta['patched']): GraphNode
   });
 }
 
+// ── Inside products' Agents groups ───────────────────────────────────────────
+
+type InnerMeta = NonNullable<CombineMeta['inner']>;
+const subOf = (g: GraphNode): SubgraphData | null => (g.params.subgraph as SubgraphData | undefined) ?? null;
+
+/** The nodes build `key` added inside groups, by role (their ids kept on a rebuild). */
+export function innerGlue(graph: readonly GraphNode[], key: string): Map<string, GraphNode> {
+  const out = new Map<string, GraphNode>();
+  for (const g of graph) {
+    if (g.type !== 'agentsGroup') continue;
+    for (const n of subOf(g)?.nodes ?? []) if (n.params[CB_BUILD] === key && cbRoleOf(n)) out.set(cbRoleOf(n), n);
+  }
+  return out;
+}
+
+/**
+ * The graph with build `key`'s inside edits taken out: its nodes gone from the groups, the ports it added gone (from
+ * Agent Inputs and the group's sockets), Agent Output's wires put back as they were (only those still on its nodes: a
+ * group its builder rebuilt in the meantime keeps its own).
+ */
+function uninner(graph: GraphNode[], key: string | undefined, inner: InnerMeta | undefined, dropWrites = false): GraphNode[] {
+  if (!key) return graph;
+  return graph.map(g => {
+    if (g.type !== 'agentsGroup') return g;
+    const sg = subOf(g);
+    if (!sg) return g;
+    const mine = new Set(sg.nodes.filter(n => n.params[CB_BUILD] === key).map(n => n.id));
+    const rec = inner?.[g.id];
+    if (!mine.size && !rec) return g;
+    const ports = new Set(rec?.ports ?? []);
+    const insId = sg.nodes.find(x => x.type === 'agentInputs')?.id;
+    const nodes = sg.nodes.filter(n => !mine.has(n.id)).map(n => {
+      let inputs = n.inputs, params = n.params, outputs = n.outputs;
+      for (const [k, s] of Object.entries(n.inputs)) {
+        const c = s.connection;
+        if (!c) continue;
+        const ours = mine.has(c.nodeId) || (c.nodeId === insId && ports.has(c.outputKey));
+        if (!ours) continue;
+        const was = n.type === 'agentOutput' ? rec?.out[k] : null;
+        const back = was && sg.nodes.some(x => x.id === was.nodeId && !mine.has(x.id)) ? { ...was } : undefined;
+        if (inputs === n.inputs) inputs = { ...inputs };
+        inputs[k] = { ...s, connection: back };
+      }
+      if (n.type === 'agentInputs' && ports.size) {
+        const extra = ((n.params.extraInputs ?? []) as Array<{ key: string }>);
+        if (extra.some(e => ports.has(e.key))) params = { ...params, extraInputs: extra.filter(e => !ports.has(e.key)) };
+        if (Object.keys(outputs).some(k => ports.has(k))) outputs = Object.fromEntries(Object.entries(outputs).filter(([k]) => !ports.has(k)));
+      }
+      return inputs === n.inputs && params === n.params && outputs === n.outputs ? n : { ...n, inputs, params, outputs };
+    });
+    const inputs = Object.fromEntries(Object.entries(g.inputs).filter(([k]) => !ports.has(k)));
+    // Live writes to its nodes went through the group ("inner::key"): when the build goes, those go with them.
+    const params = dropWrites ? Object.fromEntries(Object.entries(g.params).filter(([k]) => !(k.includes('::') && mine.has(k.slice(0, k.indexOf('::')))))) : g.params;
+    return { ...g, inputs, params: { ...params, subgraph: { ...sg, nodes } } };
+  });
+}
+
+/** The graph with `edits` put in their groups; returns what Agent Output had (to put back) and the ports added. */
+function putInner(graph: GraphNode[], edits: readonly InnerEdit[]): { graph: GraphNode[]; meta: InnerMeta } {
+  const meta: InnerMeta = {};
+  if (!edits.length) return { graph, meta };
+  const byGroup = new Map<string, InnerEdit[]>();
+  for (const e of edits) byGroup.set(e.groupId, [...(byGroup.get(e.groupId) ?? []), e]);
+  const out = graph.map(g => {
+    const list = byGroup.get(g.id);
+    const sg = list ? subOf(g) : null;
+    if (!list || !sg) return g;
+    const rec = (meta[g.id] = { ports: [] as string[], out: {} as Record<string, NodeRef | null> });
+    let nodes = [...sg.nodes];
+    const inputs = { ...g.inputs };
+    for (const e of list) {
+      const ins = nodes.find(n => n.type === 'agentInputs');
+      const outNode = nodes.find(n => n.type === 'agentOutput');
+      if (!ins || !outNode) continue;
+      // The ports: Agent Inputs' extra inputs (an output each inside) and the group's sockets, wired from outside.
+      if (e.ports.length) {
+        const extra = [...((ins.params.extraInputs ?? []) as Array<{ key: string; type: string; label: string }>)];
+        const outs = { ...ins.outputs };
+        for (const pt of e.ports) {
+          if (!extra.some(x => x.key === pt.key)) extra.push({ key: pt.key, type: pt.type, label: pt.label });
+          outs[pt.key] = { type: pt.type, label: pt.label };
+          inputs[pt.key] = { type: pt.type, label: pt.label, connection: { ...pt.from } };
+          rec.ports.push(pt.key);
+        }
+        nodes = nodes.map(n => (n.id === ins.id ? { ...n, params: { ...n.params, extraInputs: extra }, outputs: outs } : n));
+      }
+      // Agent Output's motion: from the new nodes (what was there, kept to put back).
+      const oi = { ...outNode.inputs };
+      const def = getNodeDefinition('agentOutput');
+      for (const [k, from] of Object.entries(e.out)) {
+        if (!(k in rec.out)) rec.out[k] = oi[k]?.connection ? { ...oi[k].connection! } : null;
+        const sock = oi[k] ?? (def?.inputs[k] ? { type: g.params.space === '3d' && k !== 'speed' ? 'vec3' as const : def.inputs[k].type, label: def.inputs[k].label } : null);
+        if (sock) oi[k] = { ...sock, connection: from ? { ...from } : undefined };
+      }
+      // Under Agent Output, so the group's own layout stays as its builder made it (a node kept from the last build stays put).
+      const base = { x: outNode.position.x - 300 * Math.max(0, e.nodes.length - 1), y: outNode.position.y + 520 };
+      const placed = e.nodes.map(n => (n.params._cbPlaced ? n : { ...n, position: { x: base.x + n.position.x, y: base.y }, params: { ...n.params, _cbPlaced: true } }));
+      nodes = [...nodes.map(n => (n.id === outNode.id ? { ...n, inputs: oi } : n)), ...placed];
+    }
+    return { ...g, inputs, params: { ...g.params, subgraph: { ...sg, nodes } } };
+  });
+  return { graph: out, meta };
+}
+
 /** The graph with the Combine build of `anchorId` taken away: its glue gone, its patches put back. Pure. */
 export function removeCombine(graph: readonly GraphNode[], anchorId: string): GraphNode[] {
   const found = findCombineBuild(graph, anchorId);
   if (!found) return [...graph];
   const glue = new Set([...found.byRole.values()].map(n => n.id));
-  const rest = unpatch(graph.filter(n => !glue.has(n.id)), found.meta.patched);
+  const rest = uninner(unpatch(graph.filter(n => !glue.has(n.id)), found.meta.patched), found.meta.build, found.meta.inner, true);
   return rest.map(n => {
     let changed = false;
     const inputs = { ...n.inputs };
@@ -114,11 +222,15 @@ export function removeCombine(graph: readonly GraphNode[], anchorId: string): Gr
  */
 export function applyCombine(graph0: readonly GraphNode[], spec: CombineSpec, opts: { nextId: () => string; anchorId?: string | null; isolate?: string | null; restore?: boolean }): ApplyCombineResult {
   const found = opts.anchorId ? findCombineBuild(graph0, opts.anchorId) : null;
-  const oldByRole = found?.byRole ?? new Map<string, GraphNode>();
-  const oldIds = new Set([...oldByRole.values()].map(n => n.id));
+  const oldTop = found?.byRole ?? new Map<string, GraphNode>();
+  const oldIds = new Set([...oldTop.values()].map(n => n.id));
+  // The glue inside groups too (found by the build's key), so a rebuild keeps its ids and your edits on it.
+  const oldInner = found ? innerGlue(graph0, found.meta.build) : new Map<string, GraphNode>();
+  const oldByRole = new Map([...oldTop, ...oldInner]);
   // The products as their builders left them, without the old glue.
-  let graph = unpatch(graph0.filter(n => !oldIds.has(n.id)), found?.meta.patched);
+  let graph = uninner(unpatch(graph0.filter(n => !oldIds.has(n.id)), found?.meta.patched), found?.meta.build, found?.meta.inner);
   const taken = new Set(graph0.map(n => n.id));
+  for (const g of graph0) if (g.type === 'agentsGroup') for (const n of subOf(g)?.nodes ?? []) taken.add(n.id);
   const nextId = () => { let id = opts.nextId(); while (taken.has(id)) id = opts.nextId(); taken.add(id); return id; };
   const idOfRole = new Map<string, string>();
   const idFor = (role: string) => {
@@ -130,17 +242,19 @@ export function applyCombine(graph0: readonly GraphNode[], spec: CombineSpec, op
 
   // Your edits on the glue: settings the new spec leaves as the last build made them, and wires you moved.
   const kept: string[] = [];
-  const roleById = new Map(build.glue.map(n => [n.id, cbRoleOf(n)]));
+  const innerNodes = build.inner.flatMap(e => e.nodes);
+  const roleById = new Map([...build.glue, ...innerNodes].map(n => [n.id, cbRoleOf(n)]));
   const oldRoleById = new Map([...oldByRole.values()].map(n => [n.id, cbRoleOf(n)]));
   const built: Record<string, string> = {};
-  const present = new Set([...graph.map(n => n.id), ...build.glue.map(n => n.id)]);
-  for (const node of build.glue) {
+  const insideIds = graph.flatMap(g => (g.type === 'agentsGroup' ? (subOf(g)?.nodes ?? []).map(n => n.id) : []));
+  const present = new Set([...graph.map(n => n.id), ...build.glue.map(n => n.id), ...innerNodes.map(n => n.id), ...insideIds]);
+  for (const node of [...build.glue, ...innerNodes]) {
     const role = cbRoleOf(node);
     const fresh = snapshot(node, roleById);
     built[role] = JSON.stringify(fresh);
     const old = oldByRole.get(role);
     const was = found?.meta.built?.[role] ? JSON.parse(found.meta.built[role]) as Snap : null;
-    if (old) node.position = { ...old.position };
+    if (old) { node.position = { ...old.position }; if (old.params._cbPlaced) node.params._cbPlaced = true; }
     if (!old || !was || old.type !== node.type || opts.restore) continue;
     for (const [k, v] of Object.entries(old.params)) {
       if (ignored(k)) continue;
@@ -197,6 +311,11 @@ export function applyCombine(graph0: readonly GraphNode[], spec: CombineSpec, op
     });
   }
 
+  // Inside products' Agents groups: the nodes, the ports, Agent Output's wires (what was there kept to put back).
+  for (const n of innerNodes) n.params[CB_BUILD] = key;
+  const put = putInner(graph, build.inner);
+  graph = put.graph;
+
   // The anchor: the glue node the stack's picture comes out of (else the last glue made).
   const glueIds = new Set(build.glue.map(n => n.id));
   const anchor = (build.result && glueIds.has(build.result.nodeId) ? build.glue.find(n => n.id === build.result!.nodeId) : undefined) ?? build.glue[build.glue.length - 1];
@@ -204,7 +323,7 @@ export function applyCombine(graph0: readonly GraphNode[], spec: CombineSpec, op
     n.params[CB_BUILD] = key;
     delete n.params[COMBINE_META];
   }
-  if (anchor) anchor.params[COMBINE_META] = { v: 1, spec: structuredClone(spec), build: key, built, patched } satisfies CombineMeta;
+  if (anchor) anchor.params[COMBINE_META] = { v: 1, spec: structuredClone(spec), build: key, built, patched, ...(Object.keys(put.meta).length ? { inner: put.meta } : {}) } satisfies CombineMeta;
 
   // Wires from your own nodes into old glue that is gone: dropped.
   graph = graph.map(n => {

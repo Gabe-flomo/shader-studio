@@ -1,10 +1,10 @@
 /**
- * combineExamples.ts — Combine's examples (docs/combine.md): two of its presets as the graphs Done leaves, built
+ * combineExamples.ts — Combine's examples (docs/combine.md): four of its presets as the graphs Done leaves, built
  * from ordinary nodes. The products are made by their own builders (a 3D build from a recipe, a 2D build, the
  * built-in photos) and the glue by Combine (combine/build.ts); every node carries a note saying what it does and why.
  *
  * Not in a folder (each holds its curated five): listed with RETIRED_EXAMPLE_KEYS, shown under their nodes (Used in)
- * and opened by key. Reopening one in the Scene builder offers "Edit Combined scene".
+ * and opened by key (Sparks trace a star under Ride a Path, Fireflies round a sculpture under Follow surface (3D Scene)). Reopening one in the Scene builder offers "Edit Combined scene".
  */
 import type { ExampleGraph } from './exampleIndex';
 import type { GraphNode } from '../types/nodeGraph';
@@ -15,7 +15,9 @@ import { COMBINE_EXAMPLE_INDEX } from './combineExampleIndex';
 
 export const COMBINE_EXAMPLE_KEYS = Object.keys(COMBINE_EXAMPLE_INDEX);
 
-const PRESET_OF: Record<string, string> = { combinePhotoInRoom: 'photoInRoom', combinePeopleRings: 'peopleRings' };
+const PRESET_OF: Record<string, string> = {
+  combinePhotoInRoom: 'photoInRoom', combinePeopleRings: 'peopleRings', combineSparksTrace: 'sparksTrace', combineFireflies: 'firefliesSculpture',
+};
 
 /** One example: the preset's products and its glue, ids counted from 1, with the Output. */
 function exampleOf(key: string): ExampleGraph {

@@ -63,7 +63,7 @@ function compiles(nodes: GraphNode[]) {
 beforeEach(() => { k = 0; });
 
 describe('the verb matrix', () => {
-  it('offers only valid pairs, and only the verbs built in phase 1', () => {
+  it('offers only valid pairs, and only the verbs built so far', () => {
     expect(offeredVerbs('picture', 'picture')).toEqual(['placeIn']);
     expect(offeredVerbs('picture', 'scene3d')).toEqual(['placeIn']);
     expect(offeredVerbs('scene3d', 'picture')).toEqual(['placeIn']);
@@ -73,9 +73,9 @@ describe('the verb matrix', () => {
     // Two 3D builds: the 3D builder's job; splats are placed in.
     expect(offeredVerbs('scene3d', 'scene3d')).toEqual([]);
     expect(offeredVerbs('scene3d', 'scene3d', { splat: true })).toEqual(['placeIn']);
-    // Valid later, not offered yet.
-    expect(verbsFor('points', 'scene3d')).toContain('collide');
-    expect(offeredVerbs('points', 'scene3d')).toEqual(['placeIn']);
+    // Valid later, not offered yet (Collide with and Follow the shape came in phase 2: combinePoints.test.ts).
+    expect(verbsFor('points', 'scene3d')).toContain('spawn');
+    expect(offeredVerbs('points', 'scene3d')).not.toContain('spawn');
     expect(offeredVerbs('mask', 'scene3d')).toEqual([]);
     expect(offeredVerbs('picture', 'points')).toEqual([]);
   });

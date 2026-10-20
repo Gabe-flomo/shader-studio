@@ -7,7 +7,9 @@
  *    its texture when it has one (a Texture / Video Input's, Draw agents' Image);
  *  - 3D scene (a 3D build): its picture, its March Camera and its March Loop (Distance, Hit), its Scene Group;
  *  - Splats (a Splat build): its Splat Scene, placed in a 3D scene by distance;
- *  - Points (an Agent build): its Draw agents' colour, density and image;
+ *  - Points (an Agent build): its Draw agents' colour, density and image, and its group's inside (Agent Inputs, Agent
+ *    Output and what feeds it), where Collide with and Follow the shape add their nodes;
+ *  - a 2D build's shape: the distances its layers are drawn with (Collide with and Follow the shape read them);
  *  - Mask (a Segment, a Blob Track): its mask, its texture, and Blob Track's Blob data.
  *
  * Pure: reads the nodes it is given.
@@ -17,6 +19,7 @@ import { getNodeDefinition } from '../nodes/definitions';
 import { builtSceneIds, builtScenes, sceneKindInfo, type SceneKind } from '../builders/builtScenes';
 import { findBuild } from '../sceneBuilder/apply';
 import { findSplatBuild } from '../splatBuilder/apply';
+import { find2dBuild } from '../sceneBuilder2d/apply';
 import type { NodeRef, ProductKind, ProductRef } from './spec';
 import { CB_BUILD } from './meta';
 
@@ -36,10 +39,29 @@ export interface Resolved {
   splat?: string;
   /** Points: the Draw agents node, and whether the group is 3D. */
   draw?: { id: string; d3: boolean };
+  /** A 2D build's shape: the distance of each of its layers that is drawn (negative inside). */
+  shape?: NodeRef[];
+  /** Points: the Agents group's inside, where Collide and Follow go (Agent Output's wires as its builder left them). */
+  group?: AgentsInside;
   /** A mask node in the graph: its mask (float) and texture, and Blob data when it is a Blob Track. */
   mask?: { mask: NodeRef; texture: NodeRef | null; blobs: NodeRef | null };
   /** Why it can't be used ("Product missing: pick another"). */
   missing?: string;
+}
+
+/** An Agents group's inside, as Collide with and Follow the shape see it. */
+export interface AgentsInside {
+  id: string;
+  d3: boolean;
+  /** Agent Inputs and Agent Output (inside the group). */
+  inputs: string;
+  output: string;
+  /** What feeds Agent Output's Position, Velocity and Heading now (null: unwired, the walker's own). */
+  out: { position: NodeRef | null; velocity: NodeRef | null; heading: NodeRef | null };
+  /** The velocity of what moves the walker (Move's), when Agent Output's Velocity is unwired. */
+  moveVelocity: NodeRef | null;
+  /** Ids of every node inside (a role's id must not clash with one). */
+  ids: string[];
 }
 
 const ref = (nodeId: string, outputKey: string): NodeRef => ({ nodeId, outputKey });
@@ -94,6 +116,43 @@ export function pictureOf(nodes: readonly GraphNode[], ids: ReadonlySet<string>,
     if (k) return ref(n.id, k);
   }
   return null;
+}
+
+/** The inside of the Agents group `g`: its Agent Inputs and Agent Output, and what feeds the Output's motion. */
+export function agentsInside(g: GraphNode): AgentsInside | null {
+  const inner = ((g.params.subgraph as { nodes?: GraphNode[] } | undefined)?.nodes) ?? [];
+  const ins = inner.find(n => n.type === 'agentInputs');
+  const out = inner.find(n => n.type === 'agentOutput');
+  if (!ins || !out) return null;
+  const at = (k: string) => (out.inputs[k]?.connection ? { ...out.inputs[k].connection! } : null);
+  const mover = inner.find(n => n.id === out.inputs.position?.connection?.nodeId);
+  return {
+    id: g.id, d3: g.params.space === '3d', inputs: ins.id, output: out.id, out: { position: at('position'), velocity: at('velocity'), heading: at('heading') },
+    moveVelocity: mover?.outputs.velocity ? { nodeId: mover.id, outputKey: 'velocity' } : null, ids: inner.map(n => n.id),
+  };
+}
+
+/**
+ * A 2D build's shape: the distance each of its layers is drawn with (its SDF Fill's or glow's), as its builder made
+ * them: the layers' own roles (`<item>:fill`, `<item>:glow`, `<item>:outline`). Muted layers are left out.
+ */
+export function shapeOf2d(nodes: readonly GraphNode[], sceneId: string): NodeRef[] {
+  const b = find2dBuild(nodes as GraphNode[], sceneId);
+  if (!b) return [];
+  const out: NodeRef[] = [];
+  const seen = new Set<string>();
+  for (const it of b.meta.spec.layers ?? []) {
+    if ((it as { muted?: boolean }).muted) continue;
+    for (const part of ['fill', 'glow', 'outline']) {
+      const n = b.byRole.get(`${it.id}:${part}`);
+      const c = n?.inputs.d?.connection ?? n?.inputs.distance?.connection ?? n?.inputs.sdf?.connection;
+      if (!c) continue;
+      const k = `${c.nodeId}.${c.outputKey}`;
+      if (!seen.has(k)) { seen.add(k); out.push({ ...c }); }
+      break;
+    }
+  }
+  return out;
 }
 
 /** The Draw agents node that draws the Agents group `groupId` (top level). */
@@ -151,7 +210,12 @@ export function resolveProduct(p: ProductRef, nodes: readonly GraphNode[]): Reso
   if (p.scene === 'agents') {
     const draw = drawOf(nodes, p.id);
     if (!draw) return none(kind, label, 'This Agents group has no Draw agents to show it.');
-    return { kind, label, colour: ref(draw.id, 'color'), texture: draw.outputs.texture ? ref(draw.id, 'texture') : null, draw: { id: draw.id, d3: byId.get(p.id)?.params.space === '3d' } };
+    const group = agentsInside(byId.get(p.id)!) ?? undefined;
+    return { kind, label, colour: ref(draw.id, 'color'), texture: draw.outputs.texture ? ref(draw.id, 'texture') : null, draw: { id: draw.id, d3: byId.get(p.id)?.params.space === '3d' }, group };
+  }
+  if (p.scene === '2d') {
+    const shape = shapeOf2d(nodes, p.id);
+    return { kind, label, colour: pictureOf(nodes, ids, p.out), texture: null, ...(shape.length ? { shape } : {}) };
   }
   return { kind, label, colour: pictureOf(nodes, ids, p.out), texture: null };
 }
@@ -195,4 +259,24 @@ export function productNodeIds(p: ProductRef, nodes: readonly GraphNode[]): Set<
   }
   if (p.kind === 'node') return new Set(nodes.some(n => n.id === p.nodeId) ? [p.nodeId] : []);
   return new Set();
+}
+
+/**
+ * What the picker needs to know of layer `on` besides its kind (spec.ts PairInfo): whether the product under it (past
+ * the layers placed in it) has a shape to meet (a 2D build), or is a 3D scene without surfaces (splats).
+ */
+export function targetInfo(spec: { layers: ReadonlyArray<{ id: string; verb: string; on?: string; product: ProductRef }> }, on: string | null, nodes: readonly GraphNode[]): { shape: boolean; flatScene: boolean } {
+  let layer = spec.layers.find(l => l.id === on);
+  const seen = new Set<string>();
+  // Down through Place in (it keeps its target's kind) to the product that gives the layer its kind.
+  while (layer && layer.verb === 'placeIn' && !seen.has(layer.id)) {
+    seen.add(layer.id);
+    const here = layer;
+    const below = here.on ? spec.layers.find(l => l.id === here.on) : spec.layers[spec.layers.indexOf(here) - 1];
+    if (!below) break;
+    layer = below;
+  }
+  if (!layer) return { shape: false, flatScene: false };
+  const r = resolveProduct(layer.product, nodes);
+  return { shape: !!r.shape?.length, flatScene: r.kind === 'scene3d' && !r.loop };
 }
