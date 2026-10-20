@@ -10,7 +10,7 @@
  */
 import type { ExampleGraph } from './exampleIndex';
 import type { GraphNode, SubgraphData } from '../types/nodeGraph';
-import { ctl, n, out, play } from './graphBuilder';
+import { ctl, n, nv, out, play } from './graphBuilder';
 import { expr, note } from './agentExampleKit';
 import { BALL_VIDEO } from '../lib/builtinVideos';
 import { builtinImageParams, ROOM_AND_CAT_ID, WALKWAY_CAT_ID } from '../lib/builtinImages';
@@ -49,6 +49,8 @@ function groupIn(g: GraphNode, key: string, type: GraphNode['inputs'][string]['t
 // ── 1 · A video card in a lit room, reflected ────────────────────────────────
 
 const ROOM_CARD = { size: 2.0, thickness: 0.02, back: 'readable', emissive: 0.7, brightness: 1.4 };
+/** Where the chrome ball sits (a Transform's Move), the same in the scene and at the hit point. */
+const BALL_AT = { x: -1.35, y: -0.55, z: 0.35 };
 
 function videoRoom(): GraphNode[] {
   const scene = n('sceneGroup', 'scene', 640, 420, {
@@ -59,30 +61,18 @@ function videoRoom(): GraphNode[] {
       n('scenePos', 'sp', 0, 200, { _groupOriginal: true, ...note(['Scene Pos: the point being measured.']) }),
       n('pictureCard', 'card', 300, 40, { ...ROOM_CARD, ...note([
         'Picture Card: the video as a card 2 wide (its height follows the clip\'s 16:9), 0.02 thick. Inside the Scene Group only its Distance is used, so the march never reads the video: the colour is read once, after the loop, where the ray hit.',
-        'Its Position and Rotation come in through the group\'s ports (from Float, outside). Back: the right way round, so the clip reads correctly from behind too.',
+        'Its Position and Rotation come in through the group\'s ports (from the Make Vec3 nodes outside). Back: the right way round, so the clip reads correctly from behind too.',
       ]) }, { pos: ['sp', 'pos'] }),
-      expr('ball', 300, 300, {
-        label: 'Ball', inputs: [{ name: 'p', type: 'vec3' }], lines: [], result: 'length(p - vec3(-1.35, -0.55, 0.35)) - 0.45', outputType: 'float', wires: { p: ['sp', 'pos'] },
-        note: ['Ball: a sphere of radius 0.45 resting on the floor to the left of the card (its centre at x −1.35, y −0.55, z 0.35). It is chrome: it shows the card and the room in the reflection pass.'],
-      }),
-      expr('room', 300, 460, {
-        label: 'Room walls', inputs: [{ name: 'p', type: 'vec3' }],
-        lines: [
-          ['float floorD', 'p.y + 1.0'],
-          ['vec2 w', '4.0 - abs(p.xz)'],
-          ['float wallD', 'max(min(w.x, w.y), p.y - 2.0)'],
-        ],
-        result: 'min(floorD, wallD)', outputType: 'float', wires: { p: ['sp', 'pos'] },
-        note: [
-          'Room walls: a set with no ceiling, like a film stage. floorD is the distance to the floor (y −1); w how far the point is inside the four walls (8 × 8 units); wallD the walls, cut off 3 units up (p.y − 2: above y 2 there is no wall). The sunlight comes in over the top.',
-        ],
-      }),
-      expr('union', 600, 200, {
-        label: 'Everything', inputs: [{ name: 'card', type: 'float' }, { name: 'ball', type: 'float' }, { name: 'room', type: 'float' }],
-        lines: [], result: 'min(card, min(ball, room))', outputType: 'float', wires: { card: ['card', 'dist'], ball: ['ball', 'result'], room: ['room', 'result'] },
-        note: ['Everything: the nearest of the card, the ball and the walls (a plain union, min).'],
-      }),
-      n('sceneOutput', 'so', 860, 200, { _groupOriginal: true, ...note(['Scene Output: the room\'s distance, for the March Loops, the shadow and the AO.']) }, { dist: ['union', 'result'] }),
+      n('transform', 'ballAt', 300, 300, { dim: '3', ...BALL_AT, ...note(['Transform: moves the ball to the left of the card, resting on the floor (x −1.35, y −0.55, z 0.35).']) }, { p: ['sp', 'pos'] }),
+      n('sphereSDF3D', 'ball', 560, 300, { radius: 0.45, ...note(['Sphere, radius 0.45: the ball. It is chrome: it shows the card and the room in the reflection pass.']) }, { pos: ['ballAt', 'p'] }),
+      n('transform', 'roomAt', 300, 520, { dim: '3', y: 4, ...note(['Transform: lifts the room\'s box by 4, so its floor is at y −1 and its top far overhead (y 9), well out of the way of the cut below.']) }, { p: ['sp', 'pos'] }),
+      n('boxSDF3D', 'roomBox', 560, 520, { sizeX: 4.05, sizeY: 5.05, sizeZ: 4.05, edges: 'sharp', ...note(['Box 3D: the room\'s volume, a little over 8 units square and 10 tall.']) }, { pos: ['roomAt', 'p'] }),
+      n('sdfOnion', 'shell', 820, 520, { r: 0.05, ...note(['Onion 0.05: the box turned into a shell 0.1 thick: four walls and a floor (its inside at y −1). Its ceiling is far overhead and cut away below.']) }, { dist: ['roomBox', 'dist'] }),
+      n('planeSDF3D', 'lid', 820, 720, { height: 1.95, ...note(['Plane 3D at y 1.95: below it is solid. Used to cut the ceiling off.']) }, { p: ['sp', 'pos'] }),
+      n('sdfIntersect', 'room', 1080, 600, { k: 0, ...note(['Intersect: the shell only below y 1.95: walls 3 high and no ceiling, like a film stage, so the sunlight comes in over the top. (Why the box reaches so high: a ceiling cut off just above the walls would still be a hair away from every shadow ray, and darken the whole room.)']) }, { a: ['shell', 'dist'], b: ['lid', 'dist'] }),
+      n('sdfUnion', 'cardBall', 1080, 160, { k: 0, ...note(['Union: the card or the ball, whichever is nearer.']) }, { a: ['card', 'dist'], b: ['ball', 'dist'] }),
+      n('sdfUnion', 'union', 1340, 300, { k: 0, ...note(['Union: and the room. Everything, as one distance.']) }, { a: ['cardBall', 'dist'], b: ['room', 'dist'] }),
+      n('sceneOutput', 'so', 1600, 300, { _groupOriginal: true, ...note(['Scene Output: the room\'s distance, for the March Loops, the shadow and the AO.']) }, { dist: ['union', 'dist'] }),
     ], [
       { key: 'picture', type: 'texture', label: 'Picture', toNodeId: 'card', toInputKey: 'picture' },
       { key: 'place', type: 'vec3', label: 'Card place', toNodeId: 'card', toInputKey: 'center' },
@@ -90,24 +80,28 @@ function videoRoom(): GraphNode[] {
     ]),
   });
   groupIn(scene, 'picture', 'texture', 'Picture', ['vid', 'texture']);
-  groupIn(scene, 'place', 'vec3', 'Card place', ['float', 'result']);
-  groupIn(scene, 'turn', 'vec3', 'Card turn', ['float', 'turn']);
+  groupIn(scene, 'place', 'vec3', 'Card place', ['place', 'rgb']);
+  groupIn(scene, 'turn', 'vec3', 'Card turn', ['turn', 'rgb']);
+
+  /** The card's colour after a march, at that march's hit point, with the same settings and wires as the one in the scene. */
+  const cardAt = (id: string, x: number, y: number, march: string, what: string) => n('pictureCard', id, x, y, { ...ROOM_CARD, ...note([what]) },
+    { pos: [march, 'pos'], picture: ['vid', 'texture'], center: ['place', 'rgb'], rotation: ['turn', 'rgb'] });
+  /** 1 where `card`'s distance at the hit is (nearly) 0: the ray landed on the card. */
+  const onCard = (id: string, x: number, y: number, card: string) => [
+    n('sdfOffset', `${id}Edge`, x, y, { amount: -0.01, ...note(['Offset −0.01: the card\'s distance at the hit, less a hair, so a hit on the card reads below 0.']) }, { sdf: [card, 'dist'] }),
+    n('compare', id, x + 240, y, { operator: '<', ...note(['Compare: 1 where the ray landed on the card, 0 anywhere else.']) }, { a: [`${id}Edge`, 'result'] }),
+  ];
 
   return [
     n('videoInput', 'vid', 40, 0, { ...BALL_VIDEO_PARAMS, ...note([
       'Texture (video): the built-in Ball action clip, looping. Choose your own video, a picture or the webcam on this card: the card takes its shape (aspect) from whatever it shows.',
     ]) }),
     n('time', 'time', 40, 260, note(['Time: makes the card float and turn.'])),
-    expr('float', 340, 220, {
-      label: 'Float', inputs: [{ name: 't', type: 'float' }],
-      lines: [['vec3 turn', 'vec3(4.0 * sin(t * 0.37), 24.0 * sin(t * 0.21), 0.0)']],
-      result: 'vec3(-0.25, 0.55 + 0.12 * sin(t * 0.8), -0.3)', outputType: 'vec3', wires: { t: ['time', 'time'] },
-      exposed: [{ name: 'turn', type: 'vec3' }],
-      note: [
-        'Float: where the card is (the result) and how it is turned (turn, degrees about X, Y and Z), slowly changing with time.',
-        'The result bobs the card 0.12 up and down about y 0.55; turn rocks it ±24° round Y and tips it ±4° about X. Both go into the card inside the Room (through its ports) and into the card after the loop, so the shape and its colour always agree.',
-      ],
-    }),
+    n('lfo', 'bob', 40, 420, { waveform: 'sine', freq: 0.127, amplitude: 0.12, offset: 0.55, ...note(['LFO: the card\'s height, bobbing 0.12 up and down about y 0.55, about once every 8 seconds.']) }, { time: ['time', 'time'] }),
+    n('lfo', 'rock', 40, 580, { waveform: 'sine', freq: 0.0334, amplitude: 24, ...note(['LFO: the card rocks ±24° round the up axis, slowly (once every 30 seconds).']) }, { time: ['time', 'time'] }),
+    n('lfo', 'tip', 40, 740, { waveform: 'sine', freq: 0.0589, amplitude: 4, ...note(['LFO: and tips ±4° forward and back.']) }, { time: ['time', 'time'] }),
+    n('makeVec3', 'place', 340, 420, { r: -0.25, b: -0.3, ...note(['Make Vec3: where the card is (x −0.25, the bob, z −0.3). It goes into the card inside the Room (through its Card place port) and into every card after the loops, so the shape and its colour always agree.']) }, { g: ['bob', 'value'] }),
+    n('makeVec3', 'turn', 340, 640, { b: 0, ...note(['Make Vec3: how the card is turned (degrees about X, Y and Z), into the Card turn port and the cards after the loops.']) }, { r: ['tip', 'value'], g: ['rock', 'value'] }),
     n('marchCamera', 'cam', 340, 0, { camDist: 3.2, camAngle: 0.3, camElevation: 0.1, rotSpeed: 0, fov: 1.35, targetY: 0.35, ...note([
       'March Camera: inside the room, a little to the right and above the card, looking at it (Target Y 0.35).',
     ]) }, { time: ['time', 'time'] }),
@@ -115,78 +109,60 @@ function videoRoom(): GraphNode[] {
     n('marchLoopGroup', 'march', 940, 220, { maxSteps: 160, maxDist: 20, jitter: 0.5, bg: [0.02, 0.02, 0.03], subgraph: loopBody(), ...note([
       'March Loop: finds where each ray from the camera meets the room, the ball or the card. Hit Pos, Normal and Hit feed the lights; Hit Pos also goes to the card below for its colour.',
     ]) }, { ro: ['cam', 'ro'], rd: ['cam', 'rd'], scene: ['scene', 'scene'] }),
-    n('pictureCard', 'cardHit', 1240, 0, { ...ROOM_CARD, ...note([
-      'Picture Card at Hit Pos: the same card, same settings and the same Float wires, measured where the ray stopped. Its Distance is 0 on the card, so Materials knows when the ray hit it; Color is the video there, for the lights; Glow the part that shines like a screen (Emissive 0.7, Glow brightness 1.4).',
-      'The video is read here only: once per pixel, with its mipmap picked from how fast the place on the card changes from pixel to pixel (no shimmer when it is small).',
-    ]) }, { pos: ['march', 'pos'], picture: ['vid', 'texture'], center: ['float', 'result'], rotation: ['float', 'turn'] }),
-    expr('sun', 940, 640, {
-      label: 'Key light', inputs: [], lines: [], result: 'normalize(vec3(-0.3, 0.8, 0.55))', outputType: 'vec3',
-      note: ['Key light: the direction the sunlight comes from (high, from in front and a little to the right as you look), shared by the shadow and Multi-Light. It throws the card\'s shadow onto the floor behind it.'],
-    }),
+    cardAt('cardHit', 1240, 0, 'march', 'Picture Card at Hit Pos: the same card, same settings and the same wires, measured where the ray stopped. Its Distance is 0 on the card, which tells the materials the ray hit it; Color is the video there, for the lights; Glow the part that shines like a screen (Emissive 0.7, Glow brightness 1.4). The video is read here only: once per pixel.'),
+    n('makeVec3', 'sun', 940, 640, { r: -0.295, g: 0.787, b: 0.541, ...note(['Make Vec3: the direction the sunlight comes from (high, from in front and a little to the right as you look), shared by the shadow and both lights. It throws the card\'s shadow onto the floor behind it.']) }),
     n('softShadow', 'shadow', 1240, 520, { k: 10, tmax: 10, ...note(['Soft Shadow: walks from each hit towards the key light through the Room scene: the card\'s shadow falls on the floor behind it, the ball\'s beside it, and the front wall shades the floor nearest the camera.']) },
-      { scene: ['scene', 'scene'], pos: ['march', 'pos'], normal: ['march', 'normal'], hit: ['march', 'hit'], lightDir: ['sun', 'result'] }),
+      { scene: ['scene', 'scene'], pos: ['march', 'pos'], normal: ['march', 'normal'], hit: ['march', 'hit'], lightDir: ['sun', 'rgb'] }),
     n('sdfAo', 'ao', 1240, 760, note(['SDF Ambient Occlusion: darkens the corners and under the ball.']), { scene: ['scene', 'scene'], pos: ['march', 'pos'], normal: ['march', 'normal'], hit: ['march', 'hit'] }),
-    expr('mat', 1540, 220, {
-      label: 'Materials', inputs: [{ name: 'p', type: 'vec3' }, { name: 'cardD', type: 'float' }, { name: 'cardCol', type: 'vec3' }, { name: 'cardGlow', type: 'vec3' }],
-      lines: [
-        ['float onCard', 'cardD < 0.01 ? 1.0 : 0.0'],
-        ['float onBall', '(1.0 - onCard) * (length(p - vec3(-1.35, -0.55, 0.35)) < 0.47 ? 1.0 : 0.0)'],
-        ['float onFloor', '(1.0 - onCard) * (1.0 - onBall) * (p.y < -0.98 ? 1.0 : 0.0)'],
-        ['vec2 tile', 'floor(p.xz * 1.25)'],
-        ['vec3 floorCol', 'mix(vec3(0.16, 0.13, 0.11), vec3(0.24, 0.2, 0.16), mod(tile.x + tile.y, 2.0))'],
-        ['vec3 wallCol', 'vec3(0.55, 0.5, 0.46)'],
-        ['vec3 glow', 'cardGlow * onCard'],
-        ['float shine', 'onBall * 0.85 + onFloor * 0.35'],
-      ],
-      result: 'onCard > 0.5 ? cardCol : onBall > 0.5 ? vec3(0.08) : onFloor > 0.5 ? floorCol : wallCol', outputType: 'vec3',
-      wires: { p: ['march', 'pos'], cardD: ['cardHit', 'dist'], cardCol: ['cardHit', 'color'], cardGlow: ['cardHit', 'glow'] },
-      exposed: [{ name: 'glow', type: 'vec3' }, { name: 'shine', type: 'float' }],
-      note: [
-        'Materials: what the ray hit and its colour. onCard is 1 where the card\'s Distance at the hit is (nearly) 0; onBall where the hit is on the ball; onFloor where it is on the floor (y −1). The result is the surface colour for Multi-Light: the video on the card, dark chrome on the ball, a wooden checker on the floor (tile, floorCol), warm grey walls.',
-        'glow is the card\'s Glow (the screen\'s own light, added after the lights). shine is how mirror-like each surface is (the ball 0.85, the floor 0.35): the reflection pass is mixed in by it.',
-      ],
-    }),
-    n('multiLight', 'light', 1840, 220, { background: 'colour', bgColor: [0.04, 0.045, 0.06], sunR: 1.25, sunG: 1.1, sunB: 0.95, skyR: 0.3, skyG: 0.32, skyB: 0.38, bounceR: 0.12, bounceG: 0.1, bounceB: 0.08, ...note([
+
+    // ── Materials: what the ray hit, from the same shapes measured again at the hit point ──
+    ...onCard('onCard', 1540, 0, 'cardHit'),
+    n('transform', 'ballHitAt', 1540, 180, { dim: '3', ...BALL_AT, ...note(['Transform: the ball\'s place again, at the hit point.']) }, { p: ['march', 'pos'] }),
+    n('sphereSDF3D', 'onBall', 1780, 180, { radius: 0.47, ...note(['Sphere at the hit point, a hair bigger than the ball (0.47): below 0 where the ray landed on the ball.']) }, { pos: ['ballHitAt', 'p'] }),
+    n('planeSDF3D', 'onFloor', 1780, 340, { height: -0.97, ...note(['Plane 3D at the hit point, a hair above the floor: below 0 where the ray landed on the floor.']) }, { p: ['march', 'pos'] }),
+    n('colorPicker', 'floorCol', 1540, 500, { color: [0.2, 0.165, 0.135], ...note(['Colour: the floor, a warm dark wood.']) }),
+    n('colorPicker', 'wallCol', 1540, 620, { color: [0.55, 0.5, 0.46], ...note(['Colour: the walls, a warm grey.']) }),
+    n('colorPicker', 'chrome', 1540, 740, { color: [0.08, 0.08, 0.08], ...note(['Colour: the ball, nearly black: as chrome, its look is almost all reflection.']) }),
+    n('materialSelect', 'roomCol', 2020, 500, { ...note(['Material Select: the floor\'s colour where the floor is nearer than 0 (the ray landed on it), the walls\' everywhere else. Its Blend is 0 on the floor.']) },
+      { distA: ['onFloor', 'dist'], colorA: ['floorCol', 'rgb'], colorB: ['wallCol', 'rgb'] }),
+    n('materialSelect', 'solidCol', 2260, 340, { ...note(['Material Select: chrome on the ball, the room colour elsewhere. Its Blend is 0 on the ball.']) },
+      { distA: ['onBall', 'dist'], colorA: ['chrome', 'rgb'], colorB: ['roomCol', 'color'] }),
+    nv('vec3', 'select', 'mat', 2500, 220, { ...note(['Select: the video on the card, the other surfaces\' colours elsewhere: the surface colour for the lights.']) }, { mask: ['onCard', 'mask'], ifTrue: ['cardHit', 'color'], ifFalse: ['solidCol', 'color'] }),
+    nv('vec3', 'select', 'glow', 2500, 0, { ...note(['Select: the card\'s Glow on the card, nothing elsewhere: the screen\'s own light, added after the lights so it shines whatever they do.']) }, { mask: ['onCard', 'mask'], ifTrue: ['cardHit', 'glow'] }),
+    n('multiLight', 'light', 2740, 220, { background: 'colour', bgColor: [0.04, 0.045, 0.06], sunR: 1.25, sunG: 1.1, sunB: 0.95, skyR: 0.3, skyG: 0.32, skyB: 0.38, bounceR: 0.12, bounceG: 0.1, bounceB: 0.08, ...note([
       'Multi-Light: the key light (with its shadow), a dim fill from above and a warm bounce, over each surface\'s colour. The card\'s Color is lit like any print here; its Glow is added after.',
-    ]) }, { baseColor: ['mat', 'result'], normal: ['march', 'normal'], hit: ['march', 'hit'], ao: ['ao', 'ao'], shadow: ['shadow', 'shadow'], sunDir: ['sun', 'result'] }),
-    expr('bounce', 1540, 640, {
-      label: 'Mirror ray', inputs: [{ name: 'p', type: 'vec3' }, { name: 'n', type: 'vec3' }, { name: 'rd', type: 'vec3' }],
-      lines: [['vec3 from', 'p + n * 0.02']], result: 'reflect(normalize(rd), n)', outputType: 'vec3',
-      wires: { p: ['march', 'pos'], n: ['march', 'normal'], rd: ['cam', 'rd'] }, exposed: [{ name: 'from', type: 'vec3' }],
-      note: ['Mirror ray: where a mirror at each hit point looks. The result is the camera\'s ray bounced off the surface (reflect); from is the hit point lifted 0.02 off the surface, so the new ray doesn\'t hit it straight away.'],
-    }),
-    n('marchLoopGroup', 'march2', 1840, 640, { maxSteps: 96, maxDist: 16, jitter: 0, bg: [0.02, 0.02, 0.03], subgraph: loopBody(), ...note([
+    ]) }, { baseColor: ['mat', 'result'], normal: ['march', 'normal'], hit: ['march', 'hit'], ao: ['ao', 'ao'], shadow: ['shadow', 'shadow'], sunDir: ['sun', 'rgb'] }),
+
+    // ── The mirror pass: a second march along the reflected ray ──
+    n('reflect', 'mirror', 1540, 960, { ...note(['Reflect: where a mirror at each hit point looks: the camera\'s ray bounced off the surface.']) }, { incident: ['cam', 'rd'], normal: ['march', 'normal'] }),
+    nv('vec3', 'multiply', 'lift', 1540, 1120, { b: 0.02, ...note(['Multiply: the Normal × 0.02, a small step off the surface.']) }, { a: ['march', 'normal'] }),
+    nv('vec3', 'add', 'from', 1780, 1120, { ...note(['Add: the hit point lifted 0.02 off the surface, where the mirror ray starts, so it doesn\'t hit the surface straight away.']) }, { a: ['march', 'pos'], b: ['lift', 'result'] }),
+    n('marchLoopGroup', 'march2', 2020, 960, { maxSteps: 96, maxDist: 16, jitter: 0, bg: [0.02, 0.02, 0.03], subgraph: loopBody(), ...note([
       'Reflection March Loop: a second march through the same Room, along the mirror ray. It costs about as much as the first (fewer steps: 96), which is what reflections cost in a ray marcher.',
-    ]) }, { ro: ['bounce', 'from'], rd: ['bounce', 'result'], scene: ['scene', 'scene'] }),
-    n('pictureCard', 'cardRefl', 2140, 640, { ...ROOM_CARD, ...note([
-      'Picture Card at the reflected Hit Pos: the card\'s colour where the mirror ray landed, so the video plays in the floor and the ball.',
-    ]) }, { pos: ['march2', 'pos'], picture: ['vid', 'texture'], center: ['float', 'result'], rotation: ['float', 'turn'] }),
-    expr('reflCol', 2440, 640, {
-      label: 'What the mirror sees', inputs: [{ name: 'p', type: 'vec3' }, { name: 'n', type: 'vec3' }, { name: 'hit', type: 'float' }, { name: 'cardD', type: 'float' }, { name: 'cardCol', type: 'vec3' }, { name: 'cardGlow', type: 'vec3' }, { name: 'sun', type: 'vec3' }],
-      lines: [
-        ['float onCard', 'cardD < 0.01 ? 1.0 : 0.0'],
-        ['vec2 tile', 'floor(p.xz * 1.25)'],
-        ['vec3 room', 'p.y < -0.98 ? mix(vec3(0.16, 0.13, 0.11), vec3(0.24, 0.2, 0.16), mod(tile.x + tile.y, 2.0)) : vec3(0.55, 0.5, 0.46)'],
-        ['float lit', '0.25 + 0.75 * max(dot(n, sun), 0.0)'],
-      ],
-      result: 'hit * (onCard > 0.5 ? cardCol * lit + cardGlow : room * lit)', outputType: 'vec3',
-      wires: { p: ['march2', 'pos'], n: ['march2', 'normal'], hit: ['march2', 'hit'], cardD: ['cardRefl', 'dist'], cardCol: ['cardRefl', 'color'], cardGlow: ['cardRefl', 'glow'], sun: ['sun', 'result'] },
-      note: [
-        'What the mirror sees: the surface the reflected ray found, simply lit (no second shadow, to keep it cheap). onCard: the video (its Color lit, plus its Glow); otherwise the room\'s colour (room: the floor\'s checker or the wall). lit is a soft light from the key direction.',
-      ],
-    }),
-    expr('final', 2740, 220, {
-      label: 'Combine', inputs: [{ name: 'lit', type: 'vec3' }, { name: 'glow', type: 'vec3' }, { name: 'refl', type: 'vec3' }, { name: 'shine', type: 'float' }, { name: 'n', type: 'vec3' }, { name: 'rd', type: 'vec3' }, { name: 'amount', type: 'float', slider: { min: 0, max: 1 } }],
-      values: { amount: 1 },
-      lines: [['float fres', '0.35 + 0.65 * pow(1.0 - max(dot(-normalize(rd), n), 0.0), 4.0)']],
-      result: 'lit + glow + refl * shine * fres * amount', outputType: 'vec3',
-      wires: { lit: ['light', 'color'], glow: ['mat', 'glow'], refl: ['reflCol', 'result'], shine: ['mat', 'shine'], n: ['march', 'normal'], rd: ['cam', 'rd'] },
-      note: [
-        'Combine: the lit room, plus the card\'s Glow (it shines whatever the light), plus the reflection where a surface is shiny. fres (Schlick\'s Fresnel) makes reflections stronger at grazing angles, as on a real floor. amount turns reflections down (Play: Reflections).',
-      ],
-    }),
-    n('toneMap', 'tone', 3040, 220, { mode: 'aces', ...note(['Tone Map (ACES): the bright screen rolls off into the displayable range instead of clipping.']) }, { color: ['final', 'result'] }),
-    out(['tone', 'color'], 3300),
+    ]) }, { ro: ['from', 'result'], rd: ['mirror', 'result'], scene: ['scene', 'scene'] }),
+    cardAt('cardRefl', 2260, 960, 'march2', 'Picture Card at the reflected Hit Pos: the card\'s colour where the mirror ray landed, so the video plays in the floor and the ball.'),
+    ...onCard('reflOnCard', 2500, 960, 'cardRefl'),
+    nv('vec3', 'select', 'reflMat', 2740, 960, { ...note(['Select: the video where the mirror ray found the card, the walls\' colour elsewhere (kept simple: what a mirror sees needs no floor or ball of its own).']) }, { mask: ['reflOnCard', 'mask'], ifTrue: ['cardRefl', 'color'], ifFalse: ['wallCol', 'rgb'] }),
+    n('multiLight', 'reflLight', 2980, 960, { background: 'none', sunR: 1, sunG: 0.95, sunB: 0.85, skyR: 0.25, skyG: 0.25, skyB: 0.28, bounceR: 0, bounceG: 0, bounceB: 0, ...note([
+      'Multi-Light on what the mirror sees: a plain sun and sky (no second shadow, to keep it cheap). Where the mirror ray found nothing, black.',
+    ]) }, { baseColor: ['reflMat', 'result'], normal: ['march2', 'normal'], hit: ['march2', 'hit'], sunDir: ['sun', 'rgb'] }),
+    nv('vec3', 'select', 'reflGlow', 2980, 1160, { ...note(['Select: the card\'s Glow where the mirror ray found the card, so the screen shines in the reflection too.']) }, { mask: ['reflOnCard', 'mask'], ifTrue: ['cardRefl', 'glow'] }),
+    n('addColor', 'seen', 3220, 960, { ...note(['Add Colours: what the mirror sees, lit, plus the screen\'s glow.']) }, { a: ['reflLight', 'color'], b: ['reflGlow', 'result'] }),
+
+    // ── How mirror-like each surface is, and Fresnel ──
+    n('remap', 'floorShine', 2260, 620, { inMin: 0, inMax: 1, outMin: 0.35, outMax: 0, ...note(['Remap of the floor\'s Blend (0 on the floor): 0.35 on the floor, a polished wood, 0 on the walls.']) }, { value: ['roomCol', 'blend'] }),
+    n('remap', 'shine', 2500, 620, { inMin: 0, inMax: 1, outMin: 0.85, ...note(['Remap of the ball\'s Blend (0 on the ball): 0.85 on the chrome ball, the floor\'s shine elsewhere (Out max is wired). The card is matte.']) }, { value: ['solidCol', 'blend'], outMax: ['floorShine', 'result'] }),
+    n('fresnel3d', 'fres', 2740, 1320, { power: 4, ...note(['Fresnel 3D: how much the surface turns away from the camera, 0 face-on to 1 at a grazing angle. Reflections are stronger at grazing angles, as on a real floor.']) }, { normal: ['march', 'normal'], viewDir: ['cam', 'rd'] }),
+    n('remap', 'fresAmt', 2980, 1320, { inMin: 0, inMax: 1, outMin: 0.35, outMax: 1, ...note(['Remap: 0.35 face-on up to 1 at a grazing angle (Schlick\'s Fresnel, roughly).']) }, { value: ['fres', 'fresnel'] }),
+    nv('vec3', 'multiply', 'shiny', 3460, 960, { ...note(['Multiply: the reflection × how mirror-like the surface is.']) }, { a: ['seen', 'result'], b: ['shine', 'result'] }),
+    nv('vec3', 'multiply', 'glancing', 3700, 960, { ...note(['Multiply: × the Fresnel.']) }, { a: ['shiny', 'result'], b: ['fresAmt', 'result'] }),
+    nv('vec3', 'multiply', 'reflAmt', 3940, 960, { b: 1, ...note(['Multiply by B: how much reflection there is in all (Play: Reflections, 0 to 1).']) }, { a: ['glancing', 'result'] }),
+
+    // ── Put together ──
+    n('addColor', 'litGlow', 3220, 220, { ...note(['Add Colours: the lit room plus the card\'s Glow (it shines whatever the light).']) }, { a: ['light', 'color'], b: ['glow', 'result'] }),
+    n('addColor', 'final', 4180, 220, { ...note(['Add Colours: plus the reflections.']) }, { a: ['litGlow', 'result'], b: ['reflAmt', 'result'] }),
+    n('toneMap', 'tone', 4420, 220, { mode: 'aces', ...note(['Tone Map (ACES): the bright screen rolls off into the displayable range instead of clipping.']) }, { color: ['final', 'result'] }),
+    out(['tone', 'color'], 4680),
   ];
 }
 
@@ -393,7 +369,7 @@ export function buildPictures3DExamples(): Record<string, ExampleGraph> {
       play: play([
         ctl('e', 'cardHit::emissive', 'Emissive', 0, 1, 0.01),
         ctl('g', 'cardHit::brightness', 'Glow', 0, 4, 0.01),
-        ctl('r', 'final::amount', 'Reflections', 0, 1, 0.01),
+        ctl('r', 'reflAmt::b', 'Reflections', 0, 1, 0.01),
         ctl('a', 'cam::camAngle', 'Look round', -0.8, 1.6, 0.01),
       ], `**What it shows.** A video inside a ray-marched room. The card is a shape in the Scene Group like the walls and the ball, so it casts a shadow and a second March Loop sees it in the floor and the chrome ball.
 

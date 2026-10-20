@@ -2,13 +2,11 @@
  * raysExamples.ts — Radial Fast Blur (Light rays) in use (docs/radial-fast-blur.md): the word
  * LIGHT throwing rays, and colourful shapes bursting outward with long zoom streaks, the two looks
  * After Effects' CC Radial Fast Blur is known for. Built from the node definitions (graphBuilder.ts);
- * the letters are the Agent Builder's stroke font (agentBuilder/strokeFont.ts), one line per stroke
- * of an Expression Block, so nothing is downloaded.
+ * the word is the Text node (the preview's font atlas), so nothing is downloaded.
  */
 import type { ExampleGraph } from './exampleIndex';
 import type { GraphNode } from '../types/nodeGraph';
-import { colourCtl, ctl, n, play } from './graphBuilder';
-import { layoutStrokes, strokeGlsl } from '../agentBuilder/strokeFont';
+import { colourCtl, ctl, n, nv, play } from './graphBuilder';
 
 export const RAYS_EXAMPLE_INDEX: Record<string, { label: string; description: string; play: true }> = {
   raysLightText: {
@@ -50,76 +48,45 @@ function expr(id: string, x: number, y: number, o: {
 export function buildRaysExamples(): Record<string, ExampleGraph> {
   const g: Record<string, ExampleGraph> = {};
 
-  // ── 1 · LIGHT: a light behind the word → letters lit through → Pass → Radial Fast Blur (Add) → grade ──
-  const strokes = layoutStrokes('LIGHT').strokes;
+  // ── 1 · LIGHT: a lamp behind the word → letters lit through → Pass → Radial Fast Blur (Add) → grade ──
   g.raysLightText = {
     ...RAYS_EXAMPLE_INDEX.raysLightText,
     counter: 20,
     nodes: [
-      n('uv', 'uv', 40, 300, note('UV: this pixel, centred (the frame is 2 tall). The light, the letters and the grade all read it.')),
-      expr('lamp', 40, 600, {
-        label: 'Light behind the word', outputType: 'vec2',
-        inputs: [['uv', 'vec2', ['uv', 'uv']]],
-        lines: [],
-        result: 'vec2(0.42 * sin(t * 0.11), 0.06 + 0.05 * sin(t * 0.23 + 1.3))',
-        note: [
-          'Light behind the word: where a lamp sits behind the letters, drifting slowly from side to side (t is the clock, about a minute per sweep).',
-          'It goes to two places: the letters (lit most where the lamp is close) and Radial Fast Blur\'s Centre, so the shafts always fan out from the lamp.',
-        ],
-      }),
-      expr('word', 400, 300, {
-        label: 'LIGHT, lit from behind', outputType: 'vec3',
-        inputs: [['uv', 'vec2', ['uv', 'uv']], ['lamp', 'vec2', ['lamp', 'result']]],
-        lines: [
-          ['vec2 q', 'uv * 3.4'],
-          ['float d', '1e5'],
-          ...strokes.map((s): [string, string] => ['d', `min(d, ${strokeGlsl(s)})`]),
-          ['float ink', '1.0 - smoothstep(0.055, 0.075, d)'],
-          ['float near', 'exp(-2.6 * length(uv - lamp))'],
-          ['float flicker', '0.94 + 0.06 * sin(t * 7.0) * sin(t * 2.3)'],
-        ],
-        result: 'vec3(1.0, 0.78, 0.52) * ink * (0.12 + 1.5 * near) * flicker',
-        note: [
-          'LIGHT, lit from behind: the word cut out of a dark panel, with the lamp shining through the cuts. Only light that gets through the letters is drawn; everything else is black.',
-          'q: the picture scaled to the stroke font\'s units (letters 2 tall), so the word is about a third of the frame high.',
-          'd: the distance to the nearest stroke, one line per stroke of L, I, G, H and T (the Agent Builder\'s stroke font).',
-          'ink: 1 inside the letters: thin strokes (0.065 wide) with a soft edge, so the type reads as fine lettering, not a neon tube.',
-          'near: how close the lamp is (1 on top of it, fading over about half the frame). Letters near the lamp burn bright, far ones stay dim: the light falls off like a real lamp.',
-          'flicker: a slight, uneven waver, like a filament.',
-          'result: warm lamp light (a tungsten orange-white) where the letters let it through.',
-        ],
-      }),
-      n('pass', 'pic', 760, 300, { label: 'Pass · letters', ...note('Pass: holds the lit letters as a texture, so Radial Fast Blur can read them anywhere along each shaft, not only at this pixel.') }, { color: ['word', 'result'] }),
-      n('radialFastBlur', 'rays', 1060, 300, {
-        mode: 'add', direction: 'out', length: 3.2, centerX: 0, centerY: 0, threshold: 0.1, knee: 0.2, intensity: 0.6, opacity: 1, decay: 0.68, falloff: 0.25, tint: [1, 0.86, 0.7],
+      n('uv', 'uv', 40, 300, note('UV: this pixel, centred (the frame is 2 tall). The word, the lamp\'s light and the grade all read it.')),
+      n('time', 'time', 40, 620, note('Time: the clock that drifts the lamp.')),
+      n('motion2D', 'sway', 340, 620, { mode: 'bob', speed: 0.0175, amount: 0.42, direction: 0, ...note([
+        'Motion 2D (Bob): the lamp behind the word slides slowly from side to side, 0.42 each way, about once a minute.',
+        'Why a motion and not a fixed point: the shafts swing as the lamp moves, which is what makes the light feel real.',
+      ]) }, { time: ['time', 'time'] }),
+      n('motion2D', 'lamp', 620, 620, { mode: 'bob', speed: 0.037, amount: 0.05, direction: 90, phase: 75, ...note([
+        'Motion 2D (Bob, up and down): a second, slower drift added to the first (its Offset in), so the lamp never retraces the same line.',
+        'Its Offset is the lamp: it goes to the light on the letters and to Radial Fast Blur\'s Centre, so the shafts always fan out from the lamp.',
+      ]) }, { time: ['time', 'time'], offset: ['sway', 'offset'] }),
+      n('text', 'word', 340, 140, { text: 'LIGHT', size: 0.42, spacing: 1.25, align: 'center', posX: 0, posY: 0.21, color: [1, 1, 1], ...note([
+        'Text: the word, drawn in the shader from the font atlas. Its Mask is 1 inside the letters: the cuts in a dark panel that the lamp shines through.',
+        'Size 0.42 makes the word about a fifth of the frame high; Position Y 0.21 is the top of the line, so the word sits on the middle.',
+      ]) }, { uv: ['uv', 'uv'] }),
+      n('circleSDF', 'reach', 620, 380, { radius: 0, ...note('Circle SDF, radius 0: simply how far this pixel is from the lamp (its Center is wired to the lamp).') }, { position: ['uv', 'uv'], offset: ['lamp', 'offset'] }),
+      n('light', 'lampLight', 900, 380, { mode: 'glow', brightness: 2.6, tint: [3.2, 2.3, 1.4], ...note([
+        'SDF Glow: the lamp\'s light at each pixel, e^(−2.6 × distance): bright on top of the lamp, fading over about half the frame, so letters near it burn and far ones stay dim.',
+        'Tinted is that light times a warm tungsten colour, set well over 1 (3.2, 2.3, 1.4) so the nearest letters burn and the tone map rolls them off.',
+      ]) }, { distance: ['reach', 'distance'] }),
+      nv('vec3', 'multiply', 'lit', 1180, 300, note('Multiply: the lamp\'s light, only where the letters let it through (times the Text Mask). Everything else stays black.'), { a: ['lampLight', 'tinted'], b: ['word', 'mask'] }),
+      n('pass', 'pic', 1440, 300, { label: 'Pass · letters', ...note('Pass: holds the lit letters as a texture, so Radial Fast Blur can read them anywhere along each shaft, not only at this pixel.') }, { color: ['lit', 'result'] }),
+      n('radialFastBlur', 'rays', 1720, 300, {
+        mode: 'add', direction: 'out', length: 3.2, centerX: 0, centerY: 0, threshold: 0.1, knee: 0.2, intensity: 0.9, opacity: 1, decay: 0.7, falloff: 0.25, tint: [0.95, 0.82, 0.7],
         ...note([
           'Radial Fast Blur (Add): the light through the letters smeared outward from the lamp and added up, which is how light shafts in haze look: long, soft, brightest at their roots.',
-          'Centre is wired to the lamp, so the shafts swing as it drifts. Length 3.2 lets them reach the frame\'s edge; Intensity stays moderate (0.6) and Decay fairly high (0.68) so they read as haze, not a glow.',
-          'Only the Rays output is used: the grade adds them under the letters itself.',
+          'Centre is wired to the lamp, so the shafts swing as it drifts. Length 3.2 lets them reach the frame\'s edge; Intensity 0.9 and Decay fairly high (0.7) so they read as haze, not a glow. The tint is a touch cooler than the letters, so the letters stay the warmest thing in frame.',
+          'Only the Rays output is used: Add Colours puts them under the letters.',
         ]),
-      }, { texture: ['pic', 'texture'], center: ['lamp', 'result'] }),
-      expr('grade', 1380, 300, {
-        label: 'Grade', outputType: 'vec3',
-        inputs: [['uv', 'vec2', ['uv', 'uv']], ['letters', 'vec3', ['word', 'result']], ['shafts', 'vec3', ['rays', 'rays']], ['lamp', 'vec2', ['lamp', 'result']]],
-        lines: [
-          ['vec3 haze', 'shafts * vec3(0.95, 0.92, 1.0)'],
-          ['float bloom', '0.05 * exp(-6.0 * length(uv - lamp))'],
-          ['vec3 col', 'letters + haze + bloom * vec3(1.0, 0.7, 0.45)'],
-          ['col', '1.0 - exp(-col * 1.4)'],
-          ['col', 'col + vec3(0.008, 0.012, 0.018)'],
-          ['float vig', '1.0 - 0.45 * dot(uv * vec2(0.55, 0.9), uv * vec2(0.55, 0.9))'],
-          ['float grain', '(fract(sin(dot(uv * 431.0 + fract(t) * 17.0, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.018'],
-        ],
-        result: 'max(col * vig + grain, 0.0)',
-        note: [
-          'Grade: puts the shot together like a film frame.',
-          'haze: the shafts, cooled a touch so the letters stay the warmest thing in frame.',
-          'bloom: a faint warm halo right round the lamp, as a lens would see it.',
-          'col: letters + haze + halo, then a soft tone curve (1 − e^(−x)) so nothing clips to white.',
-          'The tiny blue lift keeps the blacks from going dead; vig darkens the corners; grain adds film noise so the gradients don\'t band.',
-        ],
-      }),
-      n('output', 'out', 1720, 300, note('Output: the graded frame. The Pass and the four hidden shaft passes draw first each frame.'), { color: ['grade', 'result'] }),
+      }, { texture: ['pic', 'texture'], center: ['lamp', 'offset'] }),
+      n('addColor', 'both', 2000, 300, note('Add Colours: the letters plus their shafts.'), { a: ['lit', 'result'], b: ['rays', 'rays'] }),
+      n('toneMap', 'tone', 2240, 300, { mode: 'tanh', ...note('Tone Map (Tanh): a soft curve, so where shafts pile up on a letter nothing clips to white.') }, { color: ['both', 'result'] }),
+      n('vignette', 'vig', 2480, 300, { radius: 0.7, softness: 0.6, strength: 0.6, ...note('Vignette: darkens the corners, like a lens, to hold the eye on the word.') }, { color: ['tone', 'color'], uv: ['uv', 'uv'] }),
+      n('grain', 'grain', 2720, 300, { mode: 'temporal', amount: 0.012, ...note('Grain: fine film noise that changes every frame, so the long soft gradients of the shafts don\'t band.') }, { color: ['vig', 'result'], uv: ['uv', 'uv'], time: ['time', 'time'] }),
+      n('output', 'out', 2960, 300, note('Output: the graded frame. The Pass and the hidden shaft passes draw first each frame.'), { color: ['grain', 'color'] }),
     ],
     play: play([
       ctl('len', 'rays::length', 'Shaft length', 0, 4, 0.01),
@@ -129,9 +96,9 @@ export function buildRaysExamples(): Record<string, ExampleGraph> {
       colourCtl('tint', 'rays::tint', 'Shaft colour'),
     ], `**What it shows.** Light shafts through a word, the way a title is lit in film: a lamp drifts behind the letters, and only the light that gets through them is drawn. Radial Fast Blur (Add) smears that light outward from the lamp, so it fans into soft shafts; a grade tone-maps, vignettes and grains it.
 
-**How it's built.** *Light behind the word* is one point, wired to both the letters (how bright each part is) and Radial Fast Blur's Centre (where the shafts come from). The letters go into a Pass so the blur can read them along each shaft. The Grade adds the Rays output under the letters.
+**How it's built.** Two **Motion 2D** nodes drift the lamp. Their Offset goes to the lamp's light (Circle SDF → **SDF Glow**: how bright each part of the word is) and to Radial Fast Blur's Centre (where the shafts come from). The **Text** node's Mask lets the light through only inside the letters. The lit letters go into a Pass so the blur can read them along each shaft; Add Colours puts the Rays under the letters, and Tone Map, Vignette and Grain grade the frame.
 
-**Try.** Raise Shaft strength for a smokier room; lower Decay for long, even shafts. Set the node's Mode to Brightest for the harder "text throwing light" look. Wire Mouse UV into the blur's Centre (and the letters' lamp input) to carry the lamp with the pointer.`),
+**Try.** Raise Shaft strength for a smokier room; lower Decay for long, even shafts. Set the node's Mode to Brightest for the harder "text throwing light" look. Wire Mouse UV into the blur's Centre and the Circle SDF's Center to carry the lamp with the pointer. Type any word into the Text node.`),
   };
 
   // ── 2 · Colour burst: shapes flying outward → Pass → Radial Fast Blur (Brightest, zooming in) ──

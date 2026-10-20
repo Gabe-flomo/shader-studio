@@ -6,13 +6,21 @@
  * Listed in the 3D SDF folder. Built from the node definitions (graphBuilder.ts).
  */
 import type { GraphNode, SubgraphData } from '../types/nodeGraph';
-import { ctl, n, play } from './graphBuilder';
-import { expr, note } from './agentExampleKit';
+import { ctl, n, nv, play } from './graphBuilder';
+import { WIGGLE_PALETTE } from './wiggleLook';
+import { note } from './agentExampleKit';
 import type { ExampleGraph } from './exampleIndex';
 import { REPEAT_SCENE_EXAMPLE_INDEX } from './repeatSceneExampleIndex';
 
 const sub = (nodes: GraphNode[]): SubgraphData => ({ nodes, inputPorts: [], outputPorts: [] });
 const BG: [number, number, number] = [0.03, 0.035, 0.06];
+
+/** Length of a vec3 (the card's type picker set to vec3: a vec3 in, a float out). */
+function vec3Length(id: string, x: number, y: number, from: [string, string], comment: string): GraphNode {
+  const node = n('length', id, x, y, { outputType: 'vec3', ...note([comment]) }, { input: from });
+  node.inputs.input = { ...node.inputs.input, type: 'vec3' };
+  return node;
+}
 
 function bubbles(centre = false): GraphNode[] {
   const bubble = n('sceneGroup', 'bubble', 40, 480, {
@@ -20,23 +28,22 @@ function bubbles(centre = false): GraphNode[] {
     subgraph: sub([
       n('scenePos', 'sp', 0, 200, { _groupOriginal: true, ...note(['Scene Pos: the point being measured, already moved into this copy\'s cell by Repeat Scene.']) }),
       n('repeatCell', 'cell', 0, 420, { seed: 3, ...note(['Repeat Cell: which copy this is. Random 3 is three random numbers per copy, the same every frame.']) }),
-      expr('place', 300, 200, {
-        label: 'Jiggle', inputs: [{ name: 'p', type: 'vec3' }, { name: 'r', type: 'vec3' }], lines: [],
-        result: centre ? 'p - vec3((r.x - 0.5) * 1.4, -0.55, (r.z - 0.5) * 1.4)' : 'p - vec3(r.x - 0.5, 0.0, r.z - 0.5) * 1.4', outputType: 'vec3', wires: { p: ['sp', 'pos'], r: ['cell', 'random3'] },
-        note: centre
-          ? ['Jiggle: moves this copy\'s bubble up to 0.7 off the middle of its cell, and down 0.55 so it sits in the floor (and melts into it).']
-          : ['Jiggle: moves this copy\'s bubble up to 0.7 off the middle of its cell (random per copy), so bubbles crowd their neighbours.'],
-      }),
-      centre ? expr('size', 300, 460, {
-        label: 'Size', inputs: [{ name: 'r', type: 'vec3' }, { name: 'c', type: 'vec3' }], lines: [],
-        result: '(0.3 + 0.3 * r.y) * (2.0 - smoothstep(2.0, 8.0, length(c.xz)))', outputType: 'float', wires: { r: ['cell', 'random3'], c: ['cell', 'centre'] },
-        note: ['Size: a random radius per copy, bigger the nearer the copy\'s Centre is to the middle: up to twice the size beside the centrepiece (2 away), normal from 8 away, so the copies swell and melt into it.'],
-      }) : expr('size', 300, 460, {
-        label: 'Size', inputs: [{ name: 'r', type: 'vec3' }], lines: [],
-        result: '0.45 + 0.6 * r.y', outputType: 'float', wires: { r: ['cell', 'random3'] },
-        note: ['Size: a radius from 0.45 to 1.05 per copy. With the jiggle, big bubbles reach well past their 2-wide cell.'],
-      }),
-      n('sphereSDF3D', 'ball', 620, 200, { ...note(['Sphere: the bubble, at the jiggled place with this copy\'s size.']) }, { pos: ['place', 'result'], radius: ['size', 'result'] }),
+      n('makeVec3', 'spread', 0, 640, { r: 1.4, g: 0, b: 1.4, ...note(['Make Vec3 (1.4, 0, 1.4): how far a copy may be jiggled across (x) and deep (z), and not at all up (y).']) }),
+      nv('vec3', 'multiply', 'jiggle', 300, 420, { ...note(['Multiply: this copy\'s three random numbers (0 to 1) times that spread, so each copy gets its own jiggle of up to 1.4 across and deep.']) }, { a: ['cell', 'random3'], b: ['spread', 'rgb'] }),
+      n('transform', 'place', 300, 200, { dim: '3', x: -0.7, y: centre ? -0.55 : 0, z: -0.7, ...note(centre
+        ? ['Transform: moves this copy\'s bubble by the jiggle (Offset) less 0.7 (Move), so it lands up to 0.7 either side of the middle of its cell; and down 0.55 so it sits in the floor (and melts into it).']
+        : ['Transform: moves this copy\'s bubble by the jiggle (Offset) less 0.7 (Move), so it lands up to 0.7 either side of the middle of its cell and bubbles crowd their neighbours.']) },
+      { p: ['sp', 'pos'], offset: ['jiggle', 'result'] }),
+      n('splitVec3', 'rnd', 300, 640, { ...note(['Split Vec3: the copy\'s random numbers one by one; the second (Y) picks its size, so size and place are not tied together.']) }, { v: ['cell', 'random3'] }),
+      ...(centre ? [
+        n('remap', 'own', 560, 640, { inMin: 0, inMax: 1, outMin: 0.3, outMax: 0.6, ...note(['Remap: the random number as this copy\'s own radius, 0.3 to 0.6.']) }, { value: ['rnd', 'y'] }),
+        vec3Length('far', 560, 860, ['cell', 'centre'], 'Length: how far this copy\'s cell Centre is from the middle of the grid (the centrepiece). There is one layer of copies, so the Centre\'s height is 0.'),
+        n('remap', 'swell', 820, 860, { inMin: 2, inMax: 8, outMin: 2, outMax: 1, smooth: 'smoothstep', clamp: true, ...note(['Remap (Smoothstep): twice the size beside the centrepiece (2 away), easing to normal by 8 away, so the copies swell and melt into it.']) }, { value: ['far', 'result'] }),
+        n('multiply', 'size', 820, 640, { outputType: 'float', ...note(['Multiply: the copy\'s own radius × the swell: its size.']) }, { a: ['own', 'result'], b: ['swell', 'result'] }),
+      ] : [
+        n('remap', 'size', 560, 640, { inMin: 0, inMax: 1, outMin: 0.45, outMax: 1.05, ...note(['Remap: the random number as a radius from 0.45 to 1.05 per copy. With the jiggle, big bubbles reach well past their 2-wide cell.']) }, { value: ['rnd', 'y'] }),
+      ]),
+      n('sphereSDF3D', 'ball', 620, 200, { ...note(['Sphere: the bubble, at the jiggled place with this copy\'s size.']) }, { pos: ['place', 'p'], radius: ['size', 'result'] }),
       n('sceneOutput', 'so', 900, 200, { _groupOriginal: true, ...note(['Scene Output: the distance to this copy\'s bubble.']) }, { dist: ['ball', 'dist'] }),
     ]),
   });
@@ -77,24 +84,28 @@ function bubbles(centre = false): GraphNode[] {
     n('repeatCell', 'hitCell', 940, 520, { seed: 7, ...note([
       'Repeat Cell, after the loop: with the Repeat Scene and the Hit Pos wired in, it looks up which copy each ray hit, so a bubble is one colour even where it overlaps another\'s cell.',
     ]) }, { scene: ['rep', 'scene'], pos: ['march', 'pos'] }),
-    expr('shade', 940, 220, {
-      label: 'Shade', inputs: [{ name: 'pos', type: 'vec3' }, { name: 'nrm', type: 'vec3' }, { name: 'hit', type: 'float' }, { name: 'dist', type: 'float' }, { name: 'h', type: 'float' }],
-      lines: [
-        ['float fl', 'step(0.95, nrm.y) * step(pos.y, -0.98)'],
-        ['vec3 base', 'mix(0.5 + 0.5 * cos(6.28318 * (0.2 + h * 0.5 + dist * 0.01 + vec3(0.3, 0.416, 0.557))), vec3(0.07, 0.08, 0.11), fl)'],
-        ...(centre ? [['base', 'mix(base, vec3(0.92, 0.88, 0.8), smoothstep(2.4, 2.0, length(pos)) * (1.0 - fl))'] as [string, string]] : []),
-        ['float sun', 'max(dot(nrm, normalize(vec3(0.5, 0.8, 0.35))), 0.0)'],
-        ['float sky', '0.5 + 0.5 * nrm.y'],
-        ['float rim', 'pow(1.0 - abs(nrm.y), 3.0) * (1.0 - fl)'],
-      ],
-      result: `mix(vec3(${BG.join(', ')}), base * (0.15 + 0.3 * sky + 0.9 * sun) + 0.15 * rim, hit * exp(-dist * 0.03))`,
-      outputType: 'vec3', wires: { pos: ['march', 'pos'], nrm: ['march', 'normal'], hit: ['march', 'hit'], dist: ['march', 'dist'], h: ['hitCell', 'random'] },
-      note: [
-        'Shade: a colour per bubble from Repeat Cell\'s Random (h) on the Wiggle Tunnel\'s palette (phase 0.3, 0.416, 0.557: navy, sky blue, cream, orange), turned a little further round with distance so the far field warms; a dark slate floor; a sun and sky light, a little rim, and fog into the background.',
-      ],
-    }),
-    n('toneMap', 'tone', 1220, 220, { mode: 'aces', ...note(['Tone Map: film-like curve into the displayable range.']) }, { color: ['shade', 'result'] }),
-    n('output', 'out', 1480, 220, { ...note(['Output: the picture.']) }, { color: ['tone', 'color'] }),
+    n('palette', 'pal', 1220, 520, { ...WIGGLE_PALETTE, anim: 0.2, speed: 1, scale: 0.5, ...note([
+      'Palette: a colour per bubble from Repeat Cell\'s Random, on the Wiggle Tunnel\'s colours (navy, sky blue, cream, orange). Scale 0.5 spreads the random number over half the wheel, so the bubbles stay in the blues and creams.',
+    ]) }, { value: ['hitCell', 'random'] }),
+    n('planeSDF3D', 'onFloor', 940, 760, { height: -0.97, ...note(['Plane 3D at the hit point, a hair above the floor: below 0 where the ray landed on the floor, above 0 on a bubble. Material Select reads it.']) }, { p: ['march', 'pos'] }),
+    n('colorPicker', 'slate', 1220, 760, { color: [0.07, 0.08, 0.11], ...note(['Colour: the floor, a dark slate, so the bubbles carry the colour.']) }),
+    n('materialSelect', 'floorOrBubble', 1460, 520, { ...note(['Material Select: the slate where the floor\'s distance is below 0 (the ray landed on the floor), the bubble\'s palette colour everywhere else.']) },
+      { distA: ['onFloor', 'dist'], colorA: ['slate', 'rgb'], colorB: ['pal', 'color'] }),
+    ...(centre ? [
+      n('sphereSDF3D', 'onCentre', 1220, 1000, { radius: 2.2, ...note(['Sphere at the hit point, a little larger than the centrepiece (2.2 against 2): below 0 on the centrepiece and on bubbles melted right into it.']) }, { pos: ['march', 'pos'] }),
+      n('colorPicker', 'wax', 1460, 1000, { color: [0.92, 0.88, 0.8], ...note(['Colour: the centrepiece, a warm wax white.']) }),
+      n('materialSelect', 'material', 1700, 520, { ...note(['Material Select: the wax white on the centrepiece, the floor or bubble colour elsewhere.']) },
+        { distA: ['onCentre', 'dist'], colorA: ['wax', 'rgb'], colorB: ['floorOrBubble', 'color'] }),
+    ] : []),
+    n('multiLight', 'lit', 1940, 220, {
+      sunFrom: 'angles', azimuth: 55, elevation: 52.7, sunR: 0.9, sunG: 0.88, sunB: 0.82, skyR: 0.3, skyG: 0.32, skyB: 0.38, bounceR: 0.16, bounceG: 0.16, bounceB: 0.18,
+      background: 'colour', bgColor: BG,
+      ...note(['Multi-Light: a sun from up and to the right, a sky fill from above and a little bounce over each surface\'s colour. Where the ray hit nothing it shows the dark background.']),
+    }, { baseColor: centre ? ['material', 'color'] : ['floorOrBubble', 'color'], normal: ['march', 'normal'], hit: ['march', 'hit'] }),
+    n('volumetricFog', 'fog', 2180, 220, { density: 0.03, fogR: BG[0], fogG: BG[1], fogB: BG[2], ...note(['Volumetric Fog: the far field fades into the background by the distance each ray travelled (Distance, Density 0.03).']) },
+      { color: ['lit', 'color'], depth: ['march', 'dist'], hit: ['march', 'hit'] }),
+    n('toneMap', 'tone', 2420, 220, { mode: 'aces', ...note(['Tone Map: film-like curve into the displayable range.']) }, { color: ['fog', 'color'] }),
+    n('output', 'out', 2660, 220, { ...note(['Output: the picture.']) }, { color: ['tone', 'color'] }),
   ];
 }
 
@@ -119,7 +130,7 @@ export function buildRepeatSceneExamples(): Record<string, ExampleGraph> {
         ctl('a', 'cam::camAngle', 'Look around', 0, 6.28, 0.02),
       ], `**What it shows.** Repeated and not-repeated parts working together. A grid of bubbles (repeated) and a floor with one big centrepiece (Not repeated, added once) are **smooth-unioned** by Repeat Scene's Combine, so the bubbles melt into the floor and the centrepiece where they touch. Each bubble also reads its **Centre** from Repeat Cell and swells the closer it is to the middle, so the copies crowd and melt into the centrepiece.
 
-**Try.** **Melt** (Blend) at 0 is a hard edge; raise it and everything flows together. On the Repeat Scene card set Combine to **Carve** and the centrepiece and floor cut the bubbles away instead; **Carve into** makes the bubbles dig pits in the floor and the sphere; **Intersect** keeps only where they overlap. Open One bubble and change the Size line to make the copies react to the middle differently (shrink instead of grow: use smoothstep(2.0, 8.0, …) in place of 2.0 − smoothstep(…)).`),
+**Try.** **Melt** (Blend) at 0 is a hard edge; raise it and everything flows together. On the Repeat Scene card set Combine to **Carve** and the centrepiece and floor cut the bubbles away instead; **Carve into** makes the bubbles dig pits in the floor and the sphere; **Intersect** keeps only where they overlap. Open One bubble and swap the swell Remap's Out min and Out max (1 and 2) to make the copies shrink near the middle instead of grow.`),
     },
   };
 }

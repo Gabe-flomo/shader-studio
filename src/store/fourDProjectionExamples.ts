@@ -14,7 +14,7 @@ import type { GraphNode } from '../types/nodeGraph';
 import type { ExampleGraph } from './exampleIndex';
 import { ctl, n, play } from './graphBuilder';
 import { FOURD_EXAMPLE_INDEX, SUN_ANGLES, checker, expr, finish, note, passBody, scene } from './fourDExamples';
-import { exprBlock, wiggleFinish } from './wiggleLook';
+import { wiggleFinish } from './wiggleLook';
 
 /** An Add node set to vec3 (the card's type picker retypes its sockets). */
 function vec3Add(id: string, x: number, y: number, comment: string, a: [string, string], b: [string, string]): GraphNode {
@@ -211,8 +211,8 @@ export function buildFourDProjectionExamples(): Record<string, ExampleGraph> {
         ...note('March Loop: finds where each ray meets a circle or the torus, how far it went (Distance) and how many steps it took (Iter Count). Those two numbers colour the picture, as in the Wiggle Tunnel.') },
         { ro: ['cam', 'ro'], rd: ['cam', 'rd'], scene: ['scene', 'scene'] }),
       n('splitVec3', 'hp', 640, 520, { ...note('Split Vec3: the hit point as x, y, z.') }, { v: ['march', 'pos'] }),
-      exprBlock('ang', 880, 520, 'Angle round the axis', { x: { type: 'float', from: ['hp', 'x'] }, z: { type: 'float', from: ['hp', 'z'] } }, [],
-        'atan(z, x) / 6.2832 * 0.3', 'Angle round the y axis as 0 to 0.3: added to the palette position, so neighbouring circles sit at different colours and you can follow one round its link.', 'float'),
+      n('atan2', 'angle', 880, 520, { ...note('Vector Angle: the hit point\'s angle round the y axis (from its z and x), in radians, −π to π.') }, { y: ['hp', 'z'], x: ['hp', 'x'] }),
+      n('multiply', 'ang', 1100, 520, { b: 0.0477, outputType: 'float', ...note('Multiply by 0.0477 (0.3 ÷ 2π): the angle as a span of 0.3 round the palette, added to its position below, so neighbouring circles sit at different colours and you can follow one round its link.') }, { a: ['angle', 'angle'] }),
       ...wiggleFinish({ march: 'march', x: 1120, y: 220, distK: 0.11, iterK: 0.007, shift: 0.42, bg: [0.01, 0.012, 0.03], fog: 6, fogStart: 4.5, form: 0.4, halo: 0.25,
         extra: { from: ['ang', 'result'], note: 'Add: plus the angle round the axis, so each circle of a ring gets its own place on the palette.' } }),
     ],
@@ -225,7 +225,7 @@ export function buildFourDProjectionExamples(): Record<string, ExampleGraph> {
       ctl('c', 'cam::camAngle', 'Camera angle', 0, 6.28, 0.02),
     ], `**What it shows.** The 3-sphere is the 4D ball's skin, and all of 3D space can be laid onto it by **stereographic projection**: every point of space lands on a point of the 3-sphere, the origin at one pole and "infinity" at the other. Here that picture is turned in 4D and then looked at back in 3D. The **Hopf circles** (a few of the great circles that fill the 3-sphere, any two linked once) become the famous interlocking rings that fill space, nested around a **Clifford torus** (the half-cut shell). Circles stay circles under the map, so each ring is a true circle, or a line if it passes through the north pole.
 
-**How it is built.** Inside the Scene Group: Scene Pos → **Stereographic 4D** (scale 1, turned in xw and xy) → **Hopf Circles SDF** (3 rings of 8) and **Clifford Torus SDF**; each distance goes through **Stereographic Distance**, which divides out the stretch of the map so the march cannot step through a ring; a plane cuts the torus open and a sphere bounds the whole. A port brings in the Hopf flow. Outside, the colouring is the Wiggle Tunnel's: the March Loop's Distance and Iter Count (plus each ring's angle round the axis) pick a place on one cosine palette, so near tubes are blue, far ones and tight bends turn cream and orange; a light touch of shading and a depth fade keep it solid.
+**How it is built.** Inside the Scene Group: Scene Pos → **Stereographic 4D** (scale 1, turned in xw and xy) → **Hopf Circles SDF** (3 rings of 8) and **Clifford Torus SDF**; each distance goes through **Stereographic Distance**, which divides out the stretch of the map so the march cannot step through a ring; a plane cuts the torus open and a sphere bounds the whole. A port brings in the Hopf flow. Outside, the colouring is the Wiggle Tunnel's: the March Loop's Distance and Iter Count (plus each ring's angle round the axis) pick a place on one cosine palette, so near tubes are blue, far ones and tight bends turn cream and orange; Multi-Light gives a light touch of form and Volumetric Fog a depth fade, so it stays solid.
 
 **Try.** Set **xw turn** to 0 and the picture holds still while **Flow** slides the circles round themselves, and no ring ever collides. Slide **Ring latitude** to move the middle ring of circles (90 is the one on the torus), and set Fibres per ring to 16 inside the group for a denser bundle. Slide **Scale** to zoom the picture in or out; circles near the middle are thin, those out near the north pole are fat, which is the stretch of the map. In Hopf Circles SDF try Rings 1, Latitude 90: one ring, all on the torus (the Villarceau circles).`),
   };

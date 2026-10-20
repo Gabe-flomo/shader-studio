@@ -241,8 +241,8 @@ describe('free-text search with synonyms', () => {
     const r = functionReport(ix, 'smoothstep');
     const card = r.patterns.find(p => p.l2 === 'smoothstep(#, #, length(…))')!;
     const info = explainPattern({ callee: 'smoothstep', l2: card.l2, sample: card.sample });
-    expect(info?.name).toBe('Soft circle');
-    expect(info?.phrase).toMatch(/circle/i);
+    expect(info?.name).toMatch(/^Soft circle/); // 'Soft circle' or 'Soft circle (filled)', by which example's call is the sample
+    expect(info?.phrase).toMatch(/circle|dot/i);
   });
 });
 

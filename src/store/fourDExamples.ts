@@ -11,7 +11,7 @@
 import { GROUP_PORT_SENTINEL, type GraphNode, type SubgraphData } from '../types/nodeGraph';
 import type { ExampleGraph } from './exampleIndex';
 import { ctl, n, play } from './graphBuilder';
-import { exprBlock, wiggleFinish } from './wiggleLook';
+import { wiggleFinish } from './wiggleLook';
 import { getNodeDefinition } from '../nodes/definitions';
 
 export const FOURD_EXAMPLE_INDEX: Record<string, { label: string; description: string; play: true }> = {
@@ -219,10 +219,10 @@ export function buildFourDExamples(): Record<string, ExampleGraph> {
       n('marchLoopGroup', 'march', 340, 220, { bg: [0.012, 0.012, 0.028], maxSteps: 128, maxDist: 24, subgraph: passBody('march'),
         ...note('March Loop: finds where each ray meets the scene, how far it went (Distance) and how many steps it took (Iter Count): the two numbers the colouring reads.') },
         { ro: ['cam', 'ro'], rd: ['cam', 'rd'], scene: ['scene', 'scene'] }),
-      n('splitVec3', 'hp', 640, 520, { ...note('Split Vec3: the hit point as x, y, z.') }, { v: ['march', 'pos'] }),
-      exprBlock('which', 880, 520, 'Ball or shell?', { x: { type: 'float', from: ['hp', 'x'] }, y: { type: 'float', from: ['hp', 'y'] }, z: { type: 'float', from: ['hp', 'z'] }, w: { type: 'float', from: ['sweep', 'value'] } }, [],
-        'length(vec3(x, y, z)) < sqrt(max(0.36 - w * w, 0.0)) + 0.04 ? 0.38 : 0.0',
-        'Which surface did the ray land on? The ball\'s slice has radius sqrt(0.36 - W²), and the shell is always further from the middle than that (the inner box holds a 4D ball of radius 0.8). So a hit point closer than the ball\'s radius plus a little is the ball: it gets 0.38 more round the palette (cream and orange), the shell stays in the blues.', 'float'),
+      n('lift4D', 'hitLift', 640, 520, { ...note('Lift to 4D, at the hit point: the point where the ray stopped, lifted with the same W from the LFO, so it can be measured against the 4D ball again.') }, { pos: ['march', 'pos'], w: ['sweep', 'value'] }),
+      n('hypersphereSDF', 'hitBall', 880, 520, { radius: 0.64, ...note('Hypersphere SDF at the hit point: the same ball (radius 0.6) measured a little larger (0.64), so every hit on the ball reads below 0 and every hit on the shell, which is always further out, above it. A ball looks the same however it is turned, so the 4D turn is not needed here.') }, { p4: ['hitLift', 'p4'] }),
+      n('compare', 'onBall', 1100, 520, { operator: '<', smoothing: 0.01, ...note('Compare: 1 where the ray landed on the ball (the distance is below 0), 0 on the shell.') }, { a: ['hitBall', 'dist'] }),
+      n('multiply', 'which', 1100, 700, { b: 0.38, outputType: 'float', ...note('Multiply by 0.38: how far round the palette the ball sits from the shell (cream and orange against the blues).') }, { a: ['onBall', 'mask'] }),
       ...wiggleFinish({ march: 'march', x: 1120, y: 220, distK: 0.14, iterK: 0.003, shift: 0.62, bg: [0.012, 0.012, 0.028], fog: 4, fogStart: 3, form: 0.5, halo: 0.15,
         extra: { from: ['which', 'result'], note: 'Add: plus 0.38 on the ball, so the ball and the box are two ends of the same palette.' } }),
     ],
@@ -233,7 +233,7 @@ export function buildFourDExamples(): Record<string, ExampleGraph> {
       ctl('c', 'cam::camAngle', 'Camera angle', 0, 6.28, 0.02),
     ], `**What it shows.** A hypersphere (a ball with four directions) inside a hollow tesseract, seen through a slice. The ball's slice is always a ball, but its size depends on **w**: biggest at w = 0, shrinking to a point as w reaches its radius, so as the slice sweeps the orange ball swells and shrinks. Meanwhile the box around it, turning in the xw plane, morphs from a cube to a corner-cut shape and back. The top is cut off so you can see in: the box in the blues, the ball in cream and orange.
 
-**How it is built.** Inside the Scene Group: Scene Pos → **Lift to 4D** (w comes from an LFO outside, through a port) → **Transform** (4D, turning in xw) → a **Hypersphere SDF**, and two **Tesseract SDF**s subtracted to make a shell; a plane trims the shell open; Union joins the two. An Expression Block outside tells ball from shell by distance from the middle, using the same w. The colouring is the Wiggle Tunnel's (Distance and Iter Count on one cosine palette), with the ball pushed round to the warm end.
+**How it is built.** Inside the Scene Group: Scene Pos → **Lift to 4D** (w comes from an LFO outside, through a port) → **Transform** (4D, turning in xw) → a **Hypersphere SDF**, and two **Tesseract SDF**s subtracted to make a shell; a plane trims the shell open; Union joins the two. Outside, the hit point is lifted to 4D with the same w and measured against the ball again (Hypersphere SDF → Compare), which tells ball from shell. The colouring is the Wiggle Tunnel's (Distance and Iter Count on one cosine palette), with the ball pushed round to the warm end.
 
 **Try.** **Turn** and **Cut height** are Play knobs set directly on nodes inside the Scene Group (the 4D Transform and the plane), no wiring needed. Raise **Sweep** to 0.6 to take the slice all the way to the ball's edge, where it vanishes. Set it to 0 and the slice stays through the middle. **Turn** changes the box only: the sphere looks the same however you turn it in 4D.`),
   };

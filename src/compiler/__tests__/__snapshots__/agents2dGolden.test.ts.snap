@@ -520,15 +520,15 @@ exports[`2D agents and pass graphs compile as they did before 3D > agentShaderSo
 
 exports[`2D agents and pass graphs compile as they did before 3D > agentShaderWalls 1`] = `
 {
-  "agents": "1f1d01ea6432111ce1e4ecec9572:26980",
+  "agents": "0e053727e9400a16d63f1fd43967:29596",
   "errors": null,
-  "fragmentShader": "0985955f4e86b7092fc5d31a898a:8366",
-  "paramBindings": "166bce9851909c1ffc1da49eeec2:2151",
-  "paramUniforms": "00c6de4edafd8a143d5ec4f4ed35:1498",
+  "fragmentShader": "1a00fb2131eaa608e50ad7fe22e0:13800",
+  "paramBindings": "11ebd0793ea52f12bef4e35bc5de:3441",
+  "paramUniforms": "192513afdbe4900d03195dd2136e:2428",
   "passes": "167d269bbddad80189e9f9473b28:2",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
-  "web": "191abb77c331eb16bf5c772cc290:27057",
+  "web": "034bee48c2907e16b816253c5b53:29486",
 }
 `;
 
@@ -705,9 +705,9 @@ exports[`2D agents and pass graphs compile as they did before 3D > passFeedbackT
   "agents": "1fe1f0024152e81521f99e5e13c1:4",
   "errors": null,
   "fragmentShader": "0f0b2cfd75494507d28db83dc488:2446",
-  "paramBindings": "02762cc358d51c109f281ce24231:149",
-  "paramUniforms": "10b943123b4ea0144a7d423aabd9:104",
-  "passes": "11e665d8671c9806632af0c15a6f:6633",
+  "paramBindings": "12129eeab88ed005648342ce4462:2454",
+  "paramUniforms": "18dbf4e6e5646715282fe0ed0caa:1759",
+  "passes": "188463972246e11179cd2c63f372:13799",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
   "web": null,
@@ -830,10 +830,10 @@ exports[`2D agents and pass graphs compile as they did before 3D > raysLightText
 {
   "agents": "1fe1f0024152e81521f99e5e13c1:4",
   "errors": null,
-  "fragmentShader": "1f09537398192c060ae9b57add4d:10578",
-  "paramBindings": "153ab6993f11df01bf1499881bdb:391",
-  "paramUniforms": "041af57f06a92d0c1f4b202eb32c:281",
-  "passes": "09121493a1a1860d7498fed8de40:28770",
+  "fragmentShader": "08756dce56116102dae61a5bb5e8:13156",
+  "paramBindings": "0cca22b1adcf461ea23e8ccf0f41:1542",
+  "paramUniforms": "13ca93e5d520d00f5e3b3fa254fd:1100",
+  "passes": "16cfc784a67ae50fd3aa68c024cb:35357",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
   "web": null,
