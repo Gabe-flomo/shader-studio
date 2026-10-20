@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.323',
+    date: '2026-10-20',
+    title: "Follow, collide, fill each blob",
+    highlights: [
+      { area: 'Studio', text: "Combine: particles can collide with or follow a 2D shape or 3D scene (trace, cling, flow along, orbit, settle). ƒ turns any number into an expression." },
+      { area: 'Studio', text: "Replace mask can give each blob its own fill, attached by ID or by order, with a fill for the rest." },
+      { area: 'Studio', text: "Texture Lab and Combine keep a photo's own shape, so effects and masks line up. Height Light gains Keep flat parts." },
+    ],
+  },
+  {
     id: '2026.10.322',
     date: '2026-10-20',
     title: "Texture Lab",
