@@ -9,7 +9,8 @@
  *  - 3D scene: a torus, a ball and a box from the 3D builder's own thumbnail marcher;
  *  - Splat scene: a point cloud dissolving and coming back (the Splat builder's own mini cloud);
  *  - Time Cube: frames of the Ball action clip stacked into a box, the slice sweeping through (timeCubeBuilder/picture.ts);
- *  - Warp: a grid bent by a moving sine warp (the Warp Builder's warped-grid picture).
+ *  - Warp: a grid bent by a moving sine warp (the Warp Builder's warped-grid picture);
+ *  - Combine: a photo whose cat is filled with turning rings, a glowing ball passing behind and in front of it.
  */
 import { useEffect, useRef } from 'react';
 import type { SceneKind } from '../../builders/sceneKinds';
@@ -195,6 +196,45 @@ function TimeCubePicture({ width, height }: { width: number; height: number }) {
   return <canvas ref={ref} width={width} height={height} style={fluid(width, height)} />;
 }
 
+/**
+ * Combine: two products put together twice. A "photo" (a wall, a window, a floor) whose cat is replaced by turning rings
+ * (Replace mask with), and a glowing ball circling it, hidden while it is behind the cat (Place in, by depth).
+ */
+function CombinePicture({ width, height }: { width: number; height: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useTicker(20, t => {
+    const c = ref.current, ctx = c?.getContext('2d');
+    if (!c || !ctx) return;
+    const W = c.width, H = c.height, img = ctx.createImageData(W, H), px = img.data;
+    const bx = Math.sin(t * 0.9) * 0.95, bz = Math.cos(t * 0.9), by = 0.1;
+    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+      const x = ((i + 0.5) - W / 2) / (H / 2), y = (H / 2 - (j + 0.5)) / (H / 2);
+      // The photo: a warm wall, a window, a darker floor.
+      let r = 0.42 + 0.12 * y, g = 0.32 + 0.08 * y, b = 0.26 + 0.05 * y;
+      if (y < -0.45) { r = 0.22; g = 0.17; b = 0.14; }
+      if (x > 0.55 && x < 1.25 && y > -0.05 && y < 0.7) { r = 0.55; g = 0.72; b = 0.9; }
+      // The cat: a body and a head (the mask), filled with rings that turn.
+      const body = Math.hypot((x + 0.12) / 0.56, (y + 0.3) / 0.32) - 1;
+      const head = Math.hypot((x - 0.38) / 0.24, (y - 0.16) / 0.22) - 1;
+      const cat = Math.min(body, head) < 0;
+      if (cat) {
+        const a = Math.atan2(y + 0.15, x) + t * 0.6, d = Math.hypot(x, y + 0.15);
+        const ring = 0.5 + 0.5 * Math.cos(d * 18 - t * 3 + Math.cos(a * 6) * 1.5);
+        r = 0.1 + 0.8 * ring * (0.6 + 0.4 * Math.cos(a)); g = 0.15 + 0.5 * ring; b = 0.35 + 0.6 * ring;
+      }
+      // The ball: in front of the cat when it comes towards you, behind it when it goes away.
+      const db = Math.hypot(x - bx, y - by) / (0.2 + 0.05 * bz);
+      const show = !(cat && bz < 0);
+      if (db < 1 && show) { const k = Math.sqrt(1 - db * db); r = 0.95 * k + 0.2; g = 0.8 * k + 0.1; b = 0.35 * k; }
+      else if (show) { const glow = Math.exp(-Math.max(db - 1, 0) * 3) * 0.35; r += glow; g += glow * 0.8; b += glow * 0.3; }
+      const k = (j * W + i) * 4;
+      px[k] = Math.min(255, r * 255); px[k + 1] = Math.min(255, g * 255); px[k + 2] = Math.min(255, b * 255); px[k + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+  });
+  return <canvas ref={ref} width={width} height={height} style={fluid(width, height)} />;
+}
+
 /** A kind's picture for the kind page. */
 export function ScenePicture({ kind, width = 240, height = 136 }: { kind: SceneKind; width?: number; height?: number }) {
   if (kind === '2d') return <TwoDPicture width={width} height={height} />;
@@ -204,5 +244,6 @@ export function ScenePicture({ kind, width = 240, height = 136 }: { kind: SceneK
   if (kind === 'splat') return <SplatPicture width={width} height={height} />;
   if (kind === 'timecube') return <TimeCubePicture width={width} height={height} />;
   if (kind === 'warp') return <WarpPicture width={width} height={height} />;
+  if (kind === 'combine') return <CombinePicture width={width} height={height} />;
   return <span style={{ display: 'block', borderRadius: 10, overflow: 'hidden', width: '100%', maxWidth: width }}><KindPicture kind="trail" width={width} height={height} /></span>;
 }

@@ -44,11 +44,18 @@ export function fitGraphSoon(delay = FRAME_DELAY_MS): void {
   setTimeout(() => useNodeGraphStore.getState()._fitViewCallback?.(undefined, { maxZoom: 1 }), delay);
 }
 
+/** Combine's say over a builder's Done (combine/actions.ts): true when it took the build (the session stays open). */
+type DoneHook = (close: () => void, ids: ReadonlyArray<string | null | undefined>) => boolean;
+let doneHook: DoneHook | null = null;
+export function setBuilderDoneHook(h: DoneHook | null): void { doneHook = h; }
+
 /**
  * A builder's Done: close it (`close`), then frame what it made (`ids`). In a Scene builder session this is what puts
  * the scene in the graph, as one undo step (builders/sceneDraft.ts).
  */
 export function finishBuilder(close: () => void, ids: ReadonlyArray<string | null | undefined> = []): void {
+  // A builder Combine opened (New…, Edit product) or "Add to this…": its Done goes back to Combine, the session open.
+  if (doneHook?.(close, ids)) return;
   close();
   commitSceneDraft();
   frameNodes(ids);

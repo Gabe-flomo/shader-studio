@@ -129,7 +129,8 @@ beforeEach(() => {
 });
 afterEach(() => { act(() => { closeSceneKinds(); useBuilderWindows.setState({ sceneShell: null }); }); forgetSceneDraft(); });
 
-const kinds = SCENE_KINDS.map(k => k.id);
+// Combine builds nothing of its own until a layer is added: its session is covered in src/combine/__tests__/combineSession.test.ts.
+const kinds = SCENE_KINDS.map(k => k.id).filter(k => k !== 'combine');
 
 describe('nothing is in the graph until Done', () => {
   it.each(kinds)('%s: pick, edit, Apply, back, pick again, ×: the graph and the undo stack are as they were', async kind => {

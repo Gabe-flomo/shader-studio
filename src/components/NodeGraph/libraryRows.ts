@@ -280,7 +280,7 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
     { label: 'Shape the values', types: ['textureMask', 'textureLevels', 'curves', 'threshold', 'textureFlow', 'textureChange', 'distanceShape', 'heightLight'] },
     { label: 'Channels', types: ['channelPick', 'channelShuffle', 'channelColours', 'dataTexture', 'renderTargets'] },
     { label: 'Pass and time', types: ['pass', 'textureFeedback', 'cache', 'cacheRead'] },
-    { label: 'Look and track', types: ['depth', 'depthMix', 'segment', 'blobTrack', 'analyze', 'opticalFlow'] },
+    { label: 'Look and track', types: ['depth', 'depthMix', 'segment', 'blobTrack', 'blobSpace', 'analyze', 'opticalFlow'] },
   ],
   Field: [
     { label: 'Make a field', types: ['gaussianField', 'fieldAccumulate', 'noisyGridSDF'] },

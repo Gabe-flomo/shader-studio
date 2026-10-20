@@ -46,4 +46,6 @@ export const RETIRED_EXAMPLE_KEYS: readonly string[] = [
   // Not retired but not in a folder either (each folder holds its curated five): Simple Expression's own example,
   // shown under the node in the node list (Used in) and opened by key.
   'simpleExprBlend',
+  // Not in a folder either: Combine's two examples (combineExamples.ts), shown under Blob Space and Picture Card (Used in).
+  'combinePhotoInRoom', 'combinePeopleRings',
 ];

@@ -22,6 +22,7 @@ import { useSplatBuilder } from '../../splatBuilder/store';
 import { useWarpBuilder } from '../../warpBuilder/store';
 import { useTimeCubeBuilder } from '../../timeCubeBuilder/store';
 import { watchSceneDraft } from '../../builders/sceneDraft';
+import { useCombine } from '../../combine/store';
 
 /** The Agent Builder's Done (and close: in a Scene builder session × has already dropped the draft, so this only closes). */
 const finishAgentBuilder = () => finishBuilder(closeAgentBuilder, [useBuilderWindows.getState().agentBuilder?.groupId]);
@@ -41,6 +42,8 @@ const SplatBuilder = lazyWithSuspense<Record<string, never>>(() => import('../sp
 const WarpBuilder = lazyWithSuspense<Record<string, never>>(() => import('../warpBuilder/WarpBuilder').then(m => ({ default: m.WarpBuilder })));
 // The Time Cube builder (the Scene builder's Time Cube kind) loads only when it opens.
 const TimeCubeBuilder = lazyWithSuspense<Record<string, never>>(() => import('../timeCubeBuilder/TimeCubeBuilder').then(m => ({ default: m.TimeCubeBuilder })));
+// Combine (the Scene builder's Combine kind) loads only when it opens.
+const CombineWindow = lazyWithSuspense<Record<string, never>>(() => import('../combine/CombineWindow').then(m => ({ default: m.CombineWindow })));
 const ExpressionBuilderModal = lazyWithSuspense<Record<string, never>>(() => import('../exprBuilder/ExpressionBuilderModal').then(m => ({ default: m.ExpressionBuilderModal })));
 
 export function BuilderWindowsHost() {
@@ -53,6 +56,7 @@ export function BuilderWindowsHost() {
   const splatOpen = useSplatBuilder(s => s.open);
   const warpOpen = useWarpBuilder(s => s.open);
   const timeCubeOpen = useTimeCubeBuilder(s => s.open);
+  const combineOpen = useCombine(s => s.open);
   // The builder's preview comes first: the main preview waits while one with its own is open.
   useEffect(() => watchBuilderPreview(), []);
   // Any Scene builder window that opens works on a draft until its Done (builders/sceneDraft.ts).
@@ -77,6 +81,7 @@ export function BuilderWindowsHost() {
       {splatOpen && <SplatBuilder />}
       {warpOpen && <WarpBuilder />}
       {timeCubeOpen && <TimeCubeBuilder />}
+      {combineOpen && <CombineWindow />}
       {shell && <SceneBuilderShell key={`${shell.page}:${shell.note ?? ''}:${shell.keep ? 1 : 0}`} page={shell} />}
     </>
   );
