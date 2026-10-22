@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.325',
+    date: '2026-10-22',
+    title: 'Auto types',
+    highlights: [
+      { area: 'Studio', text: 'Math nodes take the type wired into them: a colour times a float is a colour, no type to pick. The widest wire wins, and the nodes after it follow.', link: { kind: 'doc', path: 'docs/auto-types.md' } },
+      { area: 'Studio', text: 'Pick a type on the card to lock it; auto puts it back. Dot, Length and Normalize keep the size you give them.' },
+    ],
+  },
+  {
     id: '2026.10.324',
     date: '2026-10-20',
     title: "Combine crash fix",

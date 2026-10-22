@@ -223,7 +223,9 @@ import type { ExampleGraph } from './exampleIndex';
 import { layoutByRank, estimateNodeHeight } from './graphLayout';
 import { getCardSize } from '../components/NodeGraph/socketRegistry';
 import { constantsItems, constantsOutputs, paramKeysOf, paramsFor, type ConstantsItem } from '../nodes/definitions/constants';
-import { typesCompatible } from '../lib/typesCompatible';
+import { coerce, typesCompatible } from '../lib/typesCompatible';
+import { applyRetypes, isAutoTyped, planRetypes, typedInputKeys, withType as withVectorType } from '../nodes/autoType';
+import { wireType } from '../compiler/sendReceive';
 import { audioEngine } from '../lib/audioEngine';
 import { videoEngine } from '../lib/videoEngine';
 import { IdGenerator } from './managers/IdGenerator';
@@ -1156,7 +1158,9 @@ interface NodeGraphState {
 
   /** Change the vector type of a vectorizable math node (sin, cos, pow, etc.).
    *  Updates params.outputType plus the primary input and output socket types. */
-  changeNodeVectorType: (nodeId: string, primaryInputKey: string, primaryOutputKey: string, outputType: DataType) => void;
+  changeNodeVectorType: (nodeId: string, primaryInputKey: string, primaryOutputKey: string, outputType: DataType, opts?: { lock?: boolean }) => void;
+  /** Put an Auto-capable math node back on Auto (nodes/autoType.ts): it takes its type from its wires again. */
+  setNodeTypeAuto: (nodeId: string) => void;
 
   /**
    * Collapse the given node IDs into a single group node.
@@ -1782,6 +1786,34 @@ function nodeInScope(state: { nodes: GraphNode[]; activeGroupPath: string[] }, i
   if (top) return top;
   if (state.activeGroupPath.length === 0) return undefined;
   return getActiveNodes(state.nodes, state.activeGroupPath)?.find(n => n.id === id);
+}
+
+/** The level a node is on (as nodeInScope finds it): its list, and the group it sits in below the top. */
+function levelOfNode(state: { nodes: GraphNode[]; activeGroupPath: string[] }, id: string): { scope: GraphNode[]; container?: GraphNode; top: boolean } | null {
+  if (state.nodes.some(n => n.id === id)) return { scope: state.nodes, top: true };
+  const path = state.activeGroupPath;
+  if (path.length === 0) return null;
+  const scope = getActiveNodes(state.nodes, path);
+  if (!scope?.some(n => n.id === id)) return null;
+  const container = (getActiveNodes(state.nodes, path.slice(0, -1)) ?? []).find(n => n.id === path[path.length - 1]);
+  return { scope, container, top: false };
+}
+
+/**
+ * Auto-typed math nodes (nodes/autoType.ts) after their wires changed: retype them, and the Auto
+ * nodes they feed, when it all still fits; otherwise leave the types as they are. Returns the new
+ * top-level list (the same one when nothing changes).
+ */
+function settleAutoTypes(state: { nodes: GraphNode[]; activeGroupPath: string[] }, seeds: string[], forced?: ReadonlyMap<string, DataType>): GraphNode[] {
+  const lv = seeds.length || forced?.size ? levelOfNode(state, seeds[0] ?? [...forced!.keys()][0]) : null;
+  if (!lv) return state.nodes;
+  const plan = planRetypes(lv.scope, lv.container, seeds, forced);
+  if (!plan.ok || plan.types.size === 0) return state.nodes;
+  const types = new Map(plan.types);
+  for (const id of forced?.keys() ?? []) types.delete(id);
+  const next = applyRetypes(lv.scope, types);
+  if (next === lv.scope) return state.nodes;
+  return lv.top ? next : (setActiveNodes(state.nodes, state.activeGroupPath, next) ?? state.nodes);
 }
 
 /** The innermost group on `path` (a top-level group, or one nested a level in). */
@@ -4416,6 +4448,28 @@ export const useNodeGraphStore = create<NodeGraphState>(passLocked((set, get) =>
         return false;
       }
     }
+    // An Auto math node takes any number or vector into its main sockets and retypes to the widest
+    // (nodes/autoType.ts). Refused, with why, only when that can't work and the wire doesn't fit as it is.
+    let autoTyped = false;
+    {
+      const st = get();
+      const lv = levelOfNode(st, targetNodeId);
+      const target = lv?.scope.find(n => n.id === targetNodeId);
+      if (lv && target && isAutoTyped(target) && typedInputKeys(target.type).includes(targetInputKey)) {
+        const wire = { nodeId: sourceNodeId, outputKey: sourceOutputKey };
+        const after = lv.scope.map(n => (n.id === targetNodeId ? { ...n, inputs: { ...n.inputs, [targetInputKey]: { ...n.inputs[targetInputKey], connection: wire } } } : n));
+        const plan = planRetypes(after, lv.container, [targetNodeId]);
+        if (plan.ok) autoTyped = true;
+        else {
+          const t = wireType(wire, lv.scope, lv.container);
+          const socket = target.inputs[targetInputKey]?.type;
+          if (t && socket && coerce('x', t, socket) === null) {
+            toast.warning(`Can’t wire a ${t} there`, { message: `${plan.reason[0].toUpperCase()}${plan.reason.slice(1)}. Pick a type on the card, or add a Swizzle.` });
+            return false;
+          }
+        }
+      }
+    }
     {
       // A wire you make teaches the suggestions (suggestions/learning.ts, recency-weighted).
       const a = nodeInScope(get(), sourceNodeId), b = nodeInScope(get(), targetNodeId);
@@ -4482,6 +4536,7 @@ export const useNodeGraphStore = create<NodeGraphState>(passLocked((set, get) =>
       const newTop = setActiveNodes(state.nodes, path, newActiveNodes);
       return { nodes: newTop ?? state.nodes };
     });
+    if (autoTyped) set(state => ({ nodes: settleAutoTypes(state, [targetNodeId]) }));
     get().compile();
     return true;
   },
@@ -4576,6 +4631,11 @@ export const useNodeGraphStore = create<NodeGraphState>(passLocked((set, get) =>
       const newTop = setActiveNodes(state.nodes, path, newActiveNodes);
       return { nodes: newTop ?? state.nodes };
     });
+    // An Auto math node narrows to the widest type still wired in (nodes/autoType.ts).
+    {
+      const n = nodeInScope(get(), nodeId);
+      if (n && typedInputKeys(n.type).includes(inputKey)) set(state => ({ nodes: settleAutoTypes(state, [nodeId]) }));
+    }
     get().compile();
   },
 
@@ -4679,6 +4739,7 @@ export const useNodeGraphStore = create<NodeGraphState>(passLocked((set, get) =>
       if (!active) return {};
       return { nodes: setActiveNodes(state.nodes, state.activeGroupPath, strip(active)) ?? state.nodes, wireHistory: history };
     });
+    set(state => ({ nodes: settleAutoTypes(state, [...new Set(targets.filter(t => typedInputKeys(scope.find(n => n.id === t.id)?.type ?? '').includes(t.key)).map(t => t.id))]) }));
     get().compile();
     return targets.length;
   },
@@ -5237,8 +5298,9 @@ export const useNodeGraphStore = create<NodeGraphState>(passLocked((set, get) =>
     get().compile();
   },
 
-  changeNodeVectorType: (nodeId, primaryInputKey, primaryOutputKey, outputType) => {
+  changeNodeVectorType: (nodeId, primaryInputKey, primaryOutputKey, outputType, opts) => {
     undoManager.push(get().nodes, { label: `Made ${nodeName(nodeInScope(get(), nodeId))} a ${outputType}`, nodeIds: [nodeId] });
+    const lv = levelOfNode(get(), nodeId);
 
     const updater = (n: import('../types/nodeGraph').GraphNode): import('../types/nodeGraph').GraphNode => {
       const newInputs = { ...n.inputs };
@@ -5247,15 +5309,19 @@ export const useNodeGraphStore = create<NodeGraphState>(passLocked((set, get) =>
       for (const key of [primaryInputKey, ...also]) {
         const existingIn = newInputs[key];
         if (!existingIn) continue;
-        // Drop the connection if the type changed (avoids type-mismatch wires)
-        const keepConn = existingIn.connection != null && existingIn.type === outputType;
-        newInputs[key] = { ...existingIn, type: outputType, connection: keepConn ? existingIn.connection : undefined };
+        // A wire that can't become the new type comes off (a float still spreads into any vector).
+        const c = existingIn.connection;
+        const carried = c && lv ? wireType(c, lv.scope, lv.container) : existingIn.type;
+        const keepConn = c != null && carried != null && coerce('x', carried, outputType) !== null;
+        newInputs[key] = { ...existingIn, type: outputType, connection: keepConn ? c : undefined };
       }
       const newOutputs = { ...n.outputs };
       for (const key of [primaryOutputKey, ...(VECTORIZABLE_NODES[n.type]?.alsoOutputs ?? [])]) {
         if (newOutputs[key]) newOutputs[key] = { ...newOutputs[key], type: outputType };
       }
-      return { ...n, params: { ...n.params, outputType }, inputs: newInputs, outputs: newOutputs };
+      const params: Record<string, unknown> = { ...n.params, outputType };
+      if (opts?.lock) params.typeLocked = true;
+      return { ...n, params, inputs: newInputs, outputs: newOutputs };
     };
 
     set(state => {
@@ -5267,6 +5333,22 @@ export const useNodeGraphStore = create<NodeGraphState>(passLocked((set, get) =>
       if (!active?.some(n => n.id === nodeId)) return {};
       const updated = setActiveNodes(state.nodes, state.activeGroupPath, active.map(n => n.id === nodeId ? updater(n) : n));
       return updated ? { nodes: updated } : {};
+    });
+    // The Auto nodes it feeds follow its new type (nodes/autoType.ts).
+    set(state => ({ nodes: settleAutoTypes(state, [], new Map([[nodeId, outputType]])) }));
+    get().compile();
+  },
+
+  setNodeTypeAuto: (nodeId) => {
+    const node = nodeInScope(get(), nodeId);
+    if (!node || node.params.typeLocked !== true) return;
+    undoManager.push(get().nodes, { label: `Set ${nodeName(node)} to Auto type`, nodeIds: [nodeId] });
+    set(state => {
+      const lv = levelOfNode(state, nodeId);
+      if (!lv) return {};
+      const scope = lv.scope.map(n => (n.id === nodeId ? withVectorType(n, (n.params.outputType as DataType) ?? 'float', false) : n));
+      const nodes = lv.top ? scope : (setActiveNodes(state.nodes, state.activeGroupPath, scope) ?? state.nodes);
+      return { nodes: settleAutoTypes({ nodes, activeGroupPath: state.activeGroupPath }, [nodeId]) };
     });
     get().compile();
   },

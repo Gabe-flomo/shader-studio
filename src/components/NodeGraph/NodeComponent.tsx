@@ -152,6 +152,7 @@ import { RenderTargetsCardBody } from './RenderTargetsCardBody';
 import { SendReceiveCardBody } from './SendReceiveCardBody';
 import { SEND_CARRIES } from '../../nodes/definitions/sendReceive';
 import { SIMPLE_EXPR_CARRIES, SIMPLE_EXPR_TYPE } from '../../nodes/definitions/simpleExpr';
+import { acceptsByRetype, isAutoTypeKind } from '../../nodes/autoType';
 import { SimpleExprCardBody, SimpleExprInputName } from './SimpleExprCard';
 import { DepthCardBody } from '../depth/DepthCardBody';
 import { BlobTrackCardBody } from '../blobs/BlobTrackCardBody';
@@ -496,6 +497,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const toggleFold     = useFoldState(s => s.toggle);
   const [randomizeMenu, setRandomizeMenu] = useState<{ x: number; y: number } | null>(null);
   const changeNodeVectorType   = useNodeGraphStore(s => s.changeNodeVectorType);
+  const setNodeTypeAuto        = useNodeGraphStore(s => s.setNodeTypeAuto);
   const updateNodeOutputs  = useNodeGraphStore(s => s.updateNodeOutputs);
   const updateNodeInputs   = useNodeGraphStore(s => s.updateNodeInputs);
   const disconnectInput    = useNodeGraphStore(s => s.disconnectInput);
@@ -3245,7 +3247,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           const slotName = inputLabelOf(node, key, input.label);
           // A Send takes any value it can carry (it retypes to it): numbers, vectors, textures.
           // A Simple Expression's input takes any number, vector or matrix (it retypes to the wire).
-          const compat0 = (t: string) => (node.type === 'send' && SEND_CARRIES.has(t)) || (node.type === SIMPLE_EXPR_TYPE && SIMPLE_EXPR_CARRIES.has(t));
+          const compat0 = (t: string) => (node.type === 'send' && SEND_CARRIES.has(t)) || (node.type === SIMPLE_EXPR_TYPE && SIMPLE_EXPR_CARRIES.has(t)) || acceptsByRetype(node, key, t);
           // …and has no colour of its own until something is wired in ("any").
           const untyped = node.type === SIMPLE_EXPR_TYPE && !isConnected;
 
@@ -3259,7 +3261,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           }
           // Mobile pending-connection highlight
           const pendingCompat = pendingMobileType
-            ? typesCompatible(pendingMobileType as DataType, input.type as DataType)
+            ? typesCompatible(pendingMobileType as DataType, input.type as DataType) || acceptsByRetype(node, key, pendingMobileType)
             : false;
           if (pendingMobileConnection && !draggingType) {
             socketOpacity = pendingCompat ? 1 : 0.25;
@@ -3615,16 +3617,38 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               onMouseDown={e => e.stopPropagation()}
             >
               <span style={{ fontSize: '10px', color: tc.surface1, marginRight: '2px' }}>type</span>
+              {isAutoTypeKind(node.type) && (() => {
+                // Auto (nodes/autoType.ts): the type follows the widest wire in; a picked type locks it.
+                const auto = node.params.typeLocked !== true;
+                return (
+                  <button
+                    key="auto"
+                    onClick={() => setNodeTypeAuto(node.id)}
+                    title={auto ? 'Auto: the type follows what’s wired in (the widest wins). Pick a type to lock it.' : 'Go back to Auto: the type follows what’s wired in'}
+                    style={{
+                      fontSize: '10px', padding: '1px 6px', borderRadius: '3px', cursor: 'pointer',
+                      background: auto ? `${tc.blue}22` : 'none',
+                      border: `1px solid ${auto ? tc.blue : `${tc.surface1}44`}`,
+                      color: auto ? tc.blue : tc.surface2,
+                    }}
+                  >
+                    auto
+                  </button>
+                );
+              })()}
               {(VEC4_CAPABLE_NODES.has(node.type) ? ['float', 'vec2', 'vec3', 'vec4'] as DataType[] : ['float', 'vec2', 'vec3'] as DataType[]).map(t => {
                 const active = current === t;
+                // On Auto the type in use is outlined; a locked type is filled.
+                const locked = !isAutoTypeKind(node.type) || node.params.typeLocked === true;
                 return (
                   <button
                     key={t}
-                    onClick={() => changeNodeVectorType(node.id, info.primaryInput, info.primaryOutput, t)}
+                    onClick={() => changeNodeVectorType(node.id, info.primaryInput, info.primaryOutput, t, { lock: true })}
+                    title={isAutoTypeKind(node.type) ? `Lock to ${t}` : undefined}
                     style={{
                       fontSize: '10px', padding: '1px 6px', borderRadius: '3px', cursor: 'pointer',
-                      background: active ? `${tc.blue}22` : 'none',
-                      border: `1px solid ${active ? tc.blue : `${tc.surface1}44`}`,
+                      background: active && locked ? `${tc.blue}22` : 'none',
+                      border: `1px ${active && !locked ? 'dashed' : 'solid'} ${active ? tc.blue : `${tc.surface1}44`}`,
                       color: active ? tc.blue : tc.surface2,
                     }}
                   >

@@ -57,24 +57,7 @@ Built: effect chains (filter, echo, reverb, distortion, compressor) on each soun
 
 ## Nodes infer their types (asked 22 October 2026)
 
-Not built. Math nodes that work on any type should take whatever is wired in and work out their output type, without picking a type on the card or using a special node. For example, Multiply should take a colour × a float, or a vec2 × a float, straight away.
-
-**Today:** the vectorizable nodes (`VECTORIZABLE_NODES` in `nodes/definitions/math.ts`: Add, Subtract, Multiply, Divide, Mix, Sin, Pow, Floor, Smoothstep…) have one type for the whole node, `params.outputType`, set with the float / vec2 / vec3 pills (`changeNodeVectorType`). Both operands follow it. The only automatic switch is dropping the node onto an existing wire (`insertIntoWire` → `genTypeFor`, `components/NodeGraph/wireFit.ts`). A plain connect still checks against the socket's current type (`lib/typesCompatible.ts`), so a vec3 colour into a float Multiply's A is refused. There is no vec4 pill.
-
-**The rule (GLSL's own):** the output takes the widest type wired in, the one with the most components. Each other input is promoted to it the way `coerce()` already does. A float broadcasts (`vec3(x)`), which is exactly `colour * 0.5`. vec2 into a vec3 node pads with 0, and vec3 → vec4 adds alpha 1. Inputs that aren't wired (sliders) broadcast too.
-
-**Plan:**
-1. **Auto as the default type.** The pills gain **Auto**, the default for new nodes. The node's type is worked out from its wires on every connect and disconnect, then written to `outputType` and the socket types (the same path as the pills). The compiler and saved graphs therefore don't change. Picking float / vec2 / vec3 / vec4 locks the type, as today.
-2. **Any type can land on an Auto input.** In Auto, the wire-drop highlight and `connectNodes` accept any of float…vec4 on the node's operand sockets. The node then re-infers its type.
-3. **Downstream follows.** When a node's output type changes, the nodes it feeds re-infer in turn, in graph order (bounded, so a loop can't spin).
-   - A fixed input downstream that can't take the new type is shown on the wire as a mismatch. It is never dropped silently.
-   - The fix offered is to lock the upstream type or to add a Swizzle.
-4. **Disconnecting** narrows the node back to the widest type still wired in, or float with nothing wired.
-5. **Add vec4** to the vectorizable arithmetic nodes, so colours with alpha work too.
-6. **Rules that aren't "widest wins":** Dot and Length always output a float. Mix's T and Smoothstep's edges may be a float or the node's type. Pow keeps broadcasting a float exponent. Each of these needs its inference spelled out per node, not the general rule.
-7. **The GLSL → nodes converter and the examples** keep their explicit (locked) types, so nothing that exists today changes what it renders.
-
-**Open question:** should a vec2 and a vec3 wired into the same node widen to vec3 (pad), or be refused? GLSL refuses this. Widening is friendlier but can hide a mistake. The suggested answer is to widen and mark the wire, as the vec2 → vec3 promotion already does on a single wire.
+Built: per-channel math nodes are **Auto** and take the widest type wired into them; a picked type locks it; Dot, Length, Normalize, Constant and Bounds keep their pills. See `auto-types.md`. Left: the suggestion pickers (Smart connect, mobile connect, search's Related group) don't offer Auto sockets for wider types yet.
 
 ## Later / skipped
 
