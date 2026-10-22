@@ -59,6 +59,15 @@ Built: effect chains (filter, echo, reverb, distortion, compressor) on each soun
 
 Built: per-channel math nodes are **Auto** and take the widest type wired into them; a picked type locks it; Dot, Length, Normalize, Constant and Bounds keep their pills. See `auto-types.md`.
 
+## Workhorse nodes (asked 22 October 2026)
+
+Nodes that make shader building easier without GLSL but keep the power, after Blender and TouchDesigner. The guiding rule: small nodes that wrap one well-known idiom, settings not code, several useful outputs. Big effects come as presets that build an editable group, not new monoliths (see the 19 October monolith sweep).
+
+- **Batch 1 (in progress):** Noise (Blender-style: Perlin, simplex, value, Worley; 2D/3D/4D; Detail, Roughness, Lacunarity, Distortion; Value, Colour and Slope outputs), Voronoi features (F2, edges, distance to edge, cell id, colour, position), Normal from Height (field socket, exact slope; bump and lit outputs), Dither (Bayer, blue noise; 1-bit, levels, two-colour).
+- **Batch 2:** Ease (named Penner curves, loop and ping-pong), Convolve / Sharpen (3×3 and 5×5 kernel with presets), SDF Bevel (a 2D shape lit as if raised).
+- **Batch 3:** Advect (move a picture along a field every frame), Kuwahara (painterly), Pixel sort, Slit-scan (per-pixel delay from a map).
+- **Group presets:** the retired fractals (Mandelbrot/Julia, Apollonian, IFS) as iterated groups you can open; reaction–diffusion as a findable preset (today a Grid Rules template); a small 2D fluid simulation.
+
 ## Later / skipped
 
 Skipped for now by the owner (27 September 2026). The write-up stays for when it comes back.
