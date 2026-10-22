@@ -15,6 +15,7 @@ distance (Circle SDF, Shape SDF, a union, a Custom Function) or a colour
 |---|---|---|
 | Grid Pattern | Shape (float), Picture (vec3) | Draws the shape and/or picture in every placed cell, in that cell's coordinates with the pattern's effects applied. Overflow evaluates the neighbouring cells too. |
 | Array | Shape (float), Picture (vec3) | Draws N copies on a line, grid or ring and combines them (min, smooth min, add, max). |
+| Normal from Height | Height (float), optional | Reads the height on four sides of the point for an exact slope (docs/normal-from-height.md). |
 
 The **Cell** node (Sources) is what a field chain uses to vary per cell or
 copy: inside a chain it outputs the cell's ID and the affect point's
@@ -78,6 +79,12 @@ shared bits in `src/compiler/fieldSockets.ts`.
 - A field socket takes no input expression (the popover does not offer
   one; a stored one is ignored), and a bypassed node ignores its field
   sockets.
+
+An **optional** field socket (`fieldOptional: true`, Normal from Height's
+Height) never rejects a chain: when the chain can't be a function (one of
+the nodes above is in it), the node gets the plain value instead, with no
+message, and falls back on its own (Normal from Height uses `dFdx` /
+`dFdy`).
 
 Nodes read a field socket through `fieldFn(inputVars.key)` from
 `src/nodes/definitions/helpers.ts`, which returns the name only when it

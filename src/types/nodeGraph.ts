@@ -50,6 +50,12 @@ export interface InputSocket extends Socket {
    * and hands the node its NAME in `inputVars[key]`; see docs/field-sockets.md.
    */
   field?: boolean;
+  /**
+   * With `field`: when the wired chain can't be a function of position (it reads the previous frame, a loop
+   * value…), the node gets the plain value instead of an error, and falls back on its own (Normal from Height
+   * takes the slope from dFdx / dFdy). The node tells the two apart with `fieldFn()`.
+   */
+  fieldOptional?: boolean;
 }
 
 // Output socket

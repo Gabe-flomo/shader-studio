@@ -172,6 +172,8 @@ export { DeepGlowTextureNode, DeepGlowTextureStageNode, GlowTextureNode } from '
 export { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
 export { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursNode, TextureChangeNode, DistanceShapeNode, TextureFadeNode, ReadTextureNode } from './textureTools';
 export { HeightLightNode } from './heightLight';
+export { NormalFromHeightNode } from './normalFromHeight';
+export { DitherNode, DITHER_GLSL } from './dither';
 export { RandomFromIdNode } from './randomFromId';
 export { ShowDataNode } from './showData';
 export { ChannelNode, ShuffleNode, ChannelColoursNode } from './channelTools';
@@ -321,6 +323,8 @@ import { ShaderTextureNode, ShaderTextureOutputNode } from './shaderTexture';
 import { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
 import { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursNode, TextureChangeNode, DistanceShapeNode, TextureFadeNode, ReadTextureNode } from './textureTools';
 import { HeightLightNode } from './heightLight';
+import { NormalFromHeightNode } from './normalFromHeight';
+import { DitherNode } from './dither';
 import { RandomFromIdNode } from './randomFromId';
 import { ShowDataNode } from './showData';
 import { ChannelNode, ShuffleNode, ChannelColoursNode } from './channelTools';
@@ -627,6 +631,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   textureChange: TextureChangeNode,
   distanceShape: DistanceShapeNode,
   heightLight: HeightLightNode,
+  normalFromHeight: NormalFromHeightNode,
   randomFromId: RandomFromIdNode,
   showData: ShowDataNode,
   channelPick: ChannelNode,
@@ -808,6 +813,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   gradient: GradientNode,
   hsv: HSVNode,
   posterize: PosterizeNode,
+  dither: DitherNode,
   invert: InvertNode,
   hueRange: HueRangeNode,
   colorRamp: ColorRampNode,

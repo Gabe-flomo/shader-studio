@@ -103,6 +103,8 @@ export function fieldChainProblems(
   const conn = consumer.inputs[key]?.connection;
   if (!conn) return [];
   const consumerDef = defOf(consumer);
+  // An optional field socket takes the plain value when the chain can't be a function: nothing to report.
+  if (consumerDef?.inputs[key]?.fieldOptional) return [];
   const consumerLabel = (typeof consumer.params.label === 'string' && consumer.params.label.trim()) || consumerDef?.label || consumer.type;
   const socketLabel = consumerDef?.inputs[key]?.label ?? key;
   const out: string[] = [];
