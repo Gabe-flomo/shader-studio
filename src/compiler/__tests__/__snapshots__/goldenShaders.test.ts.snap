@@ -1192,6 +1192,20 @@ exports[`golden shaders: every Play example exports the same bundle > newtonFrac
 }
 `;
 
+exports[`golden shaders: every Play example exports the same bundle > noiseCloudsInPlace 1`] = `
+{
+  "bundle": "1d8a4ca2a9030b195cfd206dcea6:9879",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > noiseMarble 1`] = `
+{
+  "bundle": "13da16163068c50266d32634e1b4:9273",
+  "missing": [],
+}
+`;
+
 exports[`golden shaders: every Play example exports the same bundle > p5FlowField 1`] = `
 {
   "bundle": "010cb12619b9bb094cbbe2bd1781:6397",
@@ -1860,6 +1874,13 @@ exports[`golden shaders: every Play example exports the same bundle > scriptPict
 exports[`golden shaders: every Play example exports the same bundle > splatDissolvePlay 1`] = `
 {
   "bundle": "008db9de318b2b01409a3eed1880:5035",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > voronoiCrackedEarth 1`] = `
+{
+  "bundle": "1db21f5f91a2a50bc263b8d04625:17440",
   "missing": [],
 }
 `;
@@ -15315,6 +15336,218 @@ exports[`golden shaders: every example compiles as it did > newtonFractalZ5 1`] 
 }
 `;
 
+exports[`golden shaders: every example compiles as it did > noiseCloudsInPlace 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "1a58e005ae71391f0899da714b12:8359",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "1ea6e2338e91351c2c5302d5d95d:148",
+  "paramBindings": "0d8959e15ff7701c79dcb4a93a60:527",
+  "paramUniforms": [
+    "u_p_colorpickex0_color",
+    "u_p_gradx0_color_a",
+    "u_p_gradx0_color_b",
+    "u_p_gradx0_t_offset",
+    "u_p_mixx0_t",
+    "u_p_noisex0_detail",
+    "u_p_noisex0_lacunarity",
+    "u_p_noisex0_offsetX",
+    "u_p_noisex0_offsetY",
+    "u_p_noisex0_roughness",
+    "u_p_noisex0_scale",
+    "u_p_noisex0_speed",
+    "u_p_sstepx0_edge0",
+    "u_p_sstepx0_edge1",
+  ],
+  "paramValues": "05fb91b3f7e1440d459366e8fd0d:408",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > noiseContourMap 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "0827ddd5e692ec1ac3a77737f557:8104",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "0bc510509160f70218e0bda6d30d:248",
+  "paramBindings": "0097ae4fd1d9341da23b0be6aae3:834",
+  "paramUniforms": [
+    "u_p_colorpickex0_color",
+    "u_p_mixx0_t",
+    "u_p_mulx0_b",
+    "u_p_mulx0xc2_b",
+    "u_p_noisex0_detail",
+    "u_p_noisex0_lacunarity",
+    "u_p_noisex0_offsetX",
+    "u_p_noisex0_offsetY",
+    "u_p_noisex0_roughness",
+    "u_p_noisex0_scale",
+    "u_p_noisex0_speed",
+    "u_p_rampx0_color0",
+    "u_p_rampx0_color1",
+    "u_p_rampx0_color2",
+    "u_p_rampx0_color3",
+    "u_p_rampx0_color4",
+    "u_p_remapx0_inMax",
+    "u_p_remapx0_inMin",
+    "u_p_remapx0_outMax",
+    "u_p_remapx0_outMin",
+    "u_p_sstepx0_edge0",
+    "u_p_sstepx0_edge1",
+    "u_p_subx0_b",
+  ],
+  "paramValues": "034df959fe89d9128bd4909ceb43:668",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > noiseMarble 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "172c9bbc9c14cb13b11ce0a522bc:7612",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "16771dce17990f159e35367d699f:198",
+  "paramBindings": "0f267fc843a692148ee4bf5a9f0f:647",
+  "paramUniforms": [
+    "u_p_addx0_b",
+    "u_p_mulx0_b",
+    "u_p_mulx0xc2_b",
+    "u_p_noisex0_detail",
+    "u_p_noisex0_distortion",
+    "u_p_noisex0_lacunarity",
+    "u_p_noisex0_offsetX",
+    "u_p_noisex0_offsetY",
+    "u_p_noisex0_roughness",
+    "u_p_noisex0_scale",
+    "u_p_noisex0_speed",
+    "u_p_powx0_exponent",
+    "u_p_rampx0_color0",
+    "u_p_rampx0_color1",
+    "u_p_rampx0_color2",
+    "u_p_sinx0_amp",
+    "u_p_sinx0_freq",
+    "u_p_sinx0_input",
+  ],
+  "paramValues": "0955abc285735616cebc8a8680c8:483",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > noiseSlopeFlow 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "1c768de78f2e3e04d7f1d0bbfa00:8166",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "16ffb5a8c2458e0a98a6b2c803a6:268",
+  "paramBindings": "1528d2d014a764021ec6b401e323:840",
+  "paramUniforms": [
+    "u_p_dispx0_amount",
+    "u_p_mkv2x0_x",
+    "u_p_mkv2x0_y",
+    "u_p_mulx0_b",
+    "u_p_noisex0_detail",
+    "u_p_noisex0_lacunarity",
+    "u_p_noisex0_offsetX",
+    "u_p_noisex0_offsetY",
+    "u_p_noisex0_roughness",
+    "u_p_noisex0_scale",
+    "u_p_noisex0_speed",
+    "u_p_palx0_amplitude",
+    "u_p_palx0_anim",
+    "u_p_palx0_freq",
+    "u_p_palx0_offset",
+    "u_p_palx0_phase",
+    "u_p_palx0_scale",
+    "u_p_palx0_speed",
+    "u_p_palx0_value",
+    "u_p_sinx0_amp",
+    "u_p_sinx0_freq",
+    "u_p_sinx0_input",
+    "u_p_sstepx0_edge0",
+    "u_p_sstepx0_edge1",
+  ],
+  "paramValues": "12e8650200a6240ae9bc6011c6b2:612",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > noiseWorleyPerlin 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "0ec2ce71aa53ba1fe2f140750e03:11840",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "0d9f0c0401761307f934b588f4a8:176",
+  "paramBindings": "1745e9e052637f0e8e0f0a5aa328:1160",
+  "paramUniforms": [
+    "u_p_mulx0_b",
+    "u_p_noisex0_detail",
+    "u_p_noisex0_lacunarity",
+    "u_p_noisex0_offsetX",
+    "u_p_noisex0_offsetY",
+    "u_p_noisex0_roughness",
+    "u_p_noisex0_scale",
+    "u_p_noisex0_speed",
+    "u_p_noisex0xc2_detail",
+    "u_p_noisex0xc2_distortion",
+    "u_p_noisex0xc2_lacunarity",
+    "u_p_noisex0xc2_offsetX",
+    "u_p_noisex0xc2_offsetY",
+    "u_p_noisex0xc2_roughness",
+    "u_p_noisex0xc2_scale",
+    "u_p_noisex0xc2_speed",
+    "u_p_rampx0_color0",
+    "u_p_rampx0_color1",
+    "u_p_rampx0_color2",
+    "u_p_rampx0_color3",
+    "u_p_remapx0_inMax",
+    "u_p_remapx0_inMin",
+    "u_p_remapx0_outMax",
+    "u_p_remapx0_outMin",
+    "u_p_remapx0xc2_inMax",
+    "u_p_remapx0xc2_inMin",
+    "u_p_remapx0xc2_outMax",
+    "u_p_remapx0xc2_outMin",
+  ],
+  "paramValues": "0c7027b8cdc2030d5621dbf1f941:813",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
 exports[`golden shaders: every example compiles as it did > normalColorDemo 1`] = `
 {
   "audioUniforms": {},
@@ -20825,6 +21058,208 @@ exports[`golden shaders: every example compiles as it did > volumeGlowDemo 1`] =
     "u_p_scenex0xsgxsphx0_radius",
   ],
   "paramValues": "171f42f9bc88f6120adb46b2c878:821",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > voronoiCellDots 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "111279c5edf3b60367de27085df3:7486",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "1830027af16c9d1b7945fd1aa982:166",
+  "paramBindings": "1bfdb1ce441dd5107854aac79edf:547",
+  "paramUniforms": [
+    "u_p_circx0_posX",
+    "u_p_circx0_posY",
+    "u_p_circx0_radius",
+    "u_p_fillx0_strokeWidth",
+    "u_p_lightx0_brightness",
+    "u_p_lightx0_innerFalloff",
+    "u_p_lightx0_tint",
+    "u_p_remapx0_inMax",
+    "u_p_remapx0_inMin",
+    "u_p_remapx0_outMax",
+    "u_p_remapx0_outMin",
+    "u_p_vorox0_jitter",
+    "u_p_vorox0_scale",
+    "u_p_vorox0_time_scale",
+  ],
+  "paramValues": "1447c742d9b2201b9a03a4e46dfa:377",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > voronoiCrackedEarth 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "007b4c1e5ff9c219d407ea17d7fc:14765",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "116d84120612f30054289eb99360:336",
+  "paramBindings": "0da66d67a8a7441a247b57782435:1191",
+  "paramUniforms": [
+    "u_p_colorpickex0_color",
+    "u_p_colorpickex0xc2_color",
+    "u_p_colorpickex0xc3_color",
+    "u_p_dispx0_amount",
+    "u_p_fillx0_strokeWidth",
+    "u_p_mixx0_t",
+    "u_p_mulx0_b",
+    "u_p_noisex0_detail",
+    "u_p_noisex0_lacunarity",
+    "u_p_noisex0_offsetX",
+    "u_p_noisex0_offsetY",
+    "u_p_noisex0_roughness",
+    "u_p_noisex0_scale",
+    "u_p_noisex0_speed",
+    "u_p_noisex0xc2_detail",
+    "u_p_noisex0xc2_lacunarity",
+    "u_p_noisex0xc2_offsetX",
+    "u_p_noisex0xc2_offsetY",
+    "u_p_noisex0xc2_roughness",
+    "u_p_noisex0xc2_scale",
+    "u_p_noisex0xc2_speed",
+    "u_p_remapx0_inMax",
+    "u_p_remapx0_inMin",
+    "u_p_remapx0_outMax",
+    "u_p_remapx0_outMin",
+    "u_p_subx0_b",
+    "u_p_vorox0_jitter",
+    "u_p_vorox0_scale",
+    "u_p_vorox0_time_scale",
+  ],
+  "paramValues": "0577d6260b64de1fae69cfdeb450:828",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > voronoiLivingCells 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "1ebc9d53e1e73b1d8290bd66840b:10342",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "09fd6fa7b00ce5077095808e7df9:282",
+  "paramBindings": "094e7f79eb1fa208bb6f1cecd9e0:807",
+  "paramUniforms": [
+    "u_p_colorpickex0_color",
+    "u_p_colorpickex0xc2_color",
+    "u_p_colorpickex0xc3_color",
+    "u_p_dispx0_amount",
+    "u_p_mixx0_t",
+    "u_p_mixx0xc2_t",
+    "u_p_noisex0_detail",
+    "u_p_noisex0_lacunarity",
+    "u_p_noisex0_offsetX",
+    "u_p_noisex0_offsetY",
+    "u_p_noisex0_roughness",
+    "u_p_noisex0_scale",
+    "u_p_noisex0_speed",
+    "u_p_sstepx0_edge0",
+    "u_p_sstepx0_edge1",
+    "u_p_sstepx0xc2_edge0",
+    "u_p_sstepx0xc2_edge1",
+    "u_p_vorox0_jitter",
+    "u_p_vorox0_scale",
+    "u_p_vorox0_time_scale",
+  ],
+  "paramValues": "17ccb5dfd667d207fe30baee23a9:584",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > voronoiMetricTiles 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "1896cacd228b58010e19a34ef2f4:6149",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "025ffac0258557100cb8500225c7:155",
+  "paramBindings": "050ebd200d65a4010f2d7714622b:551",
+  "paramUniforms": [
+    "u_p_colorpickex0_color",
+    "u_p_mixx0_t",
+    "u_p_palx0_amplitude",
+    "u_p_palx0_anim",
+    "u_p_palx0_freq",
+    "u_p_palx0_offset",
+    "u_p_palx0_phase",
+    "u_p_palx0_scale",
+    "u_p_palx0_speed",
+    "u_p_palx0_value",
+    "u_p_sstepx0_edge0",
+    "u_p_sstepx0_edge1",
+    "u_p_vorox0_jitter",
+    "u_p_vorox0_scale",
+    "u_p_vorox0_time_scale",
+  ],
+  "paramValues": "0bbc1f53608a1e0adbbafc217e63:418",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > voronoiStainedGlass 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "162487a446e7851d11efa93cfdfd:8419",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "14eb0b0634c2691f9d33a6eed6e0:236",
+  "paramBindings": "14f3790da334ec1112fb79a2cf63:708",
+  "paramUniforms": [
+    "u_p_colorpickex0_color",
+    "u_p_fillx0_strokeWidth",
+    "u_p_mulx0_b",
+    "u_p_palx0_amplitude",
+    "u_p_palx0_anim",
+    "u_p_palx0_freq",
+    "u_p_palx0_offset",
+    "u_p_palx0_phase",
+    "u_p_palx0_scale",
+    "u_p_palx0_speed",
+    "u_p_palx0_value",
+    "u_p_remapx0_inMax",
+    "u_p_remapx0_inMin",
+    "u_p_remapx0_outMax",
+    "u_p_remapx0_outMin",
+    "u_p_subx0_b",
+    "u_p_vorox0_jitter",
+    "u_p_vorox0_scale",
+    "u_p_vorox0_time_scale",
+  ],
+  "paramValues": "1788ecf4fbb92619cd17fcfd210a:525",
   "passes": null,
   "success": true,
   "textureUniforms": {},

@@ -26,6 +26,7 @@ import { MATRIX_EXAMPLE_INDEX } from './matrixExamples';
 import { DATA_EXAMPLE_INDEX } from './dataExampleIndex';
 import { GRID_EXAMPLE_INDEX } from './gridExamples';
 import { BOUNDS_EXAMPLE_INDEX } from './boundsExamples';
+import { NOISE_EXAMPLE_INDEX } from './noiseExamples';
 import { PASS_EXAMPLE_INDEX } from './passExamples';
 import { AGENT_EXAMPLE_INDEX, AGENT_RULE_INDEX } from './agentExamples';
 import { AGENT_SHADER_EXAMPLE_INDEX } from './agentShaderExamples';
@@ -239,6 +240,8 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...GRID_EXAMPLE_INDEX,
   // Bounds (boundsExamples.ts, docs/bounds-node.md): copies bouncing in their boxes.
   ...BOUNDS_EXAMPLE_INDEX,
+  // Noise (noiseExamples.ts, docs/noise-node.md): the Noise node's looks, and Voronoi's cell features.
+  ...NOISE_EXAMPLE_INDEX,
   // Pass nodes, render to texture (passExamples.ts).
   ...PASS_EXAMPLE_INDEX,
   // The Agents group: slime mold and walkers built from nodes (agentExamples.ts).
@@ -340,6 +343,8 @@ export const EXAMPLE_FOLDERS: ExampleFolder[] = [
   { label: "2D: Scene Builder", color: ctp.pink, keys: ['sb2Kaleidoscope','sb2RingOfRings','sb2RippleGrid','sb2DepthBeams','sb2Melt'] },
   { label: "Curves & Shapes",   color: ctp.lavender, keys: ['curveTraceBeam','curveTraceIntervals','curveTraceMorph','chladniModeFreqDemo','agentRideHarmonograph'] },
   { label: "Grid",              color: ctp.sky, keys: ['gridTourMorph','gridTourRipple','gridTourOverflow','gridDensityWave','boundsBouncingCopies'] },
+  { label: "Noise",             color: ctp.teal, keys: ['noiseMarble','noiseCloudsInPlace','noiseContourMap','noiseSlopeFlow','noiseWorleyPerlin'] },
+  { label: "Noise: cells",      color: ctp.teal, keys: ['voronoiCrackedEarth','voronoiStainedGlass','voronoiLivingCells','voronoiCellDots','voronoiMetricTiles'] },
   { label: "Matrices",          color: ctp.peach, keys: ['matrixFoldFractal','matrixLattices','matrixAnyBasis','matrixCornerPin','matrixNoiseOctaves'] },
   { label: "Node Combos",       color: ctp.flamingo, keys: ['comboDomeRepeat','comboVoxelSpheres','comboGridGroupFlower','comboArrayStars','comboRepeatCellHash'] },
   { label: "Groups & Code",     color: ctp.sapphire, keys: ['groupJuliaBreak','loopKali','ringGlow','publishAndKeyframes','convertTunnelOptimised'] },

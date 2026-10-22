@@ -15,6 +15,7 @@ export const SEARCH_WORDS: Record<string, string[]> = {
   marchCamera: ['3D camera', 'Camera 3D', 'Ray camera', 'Raymarch camera'],
   toneMap: ['Tonemap', 'HDR', 'Exposure', 'ACES', 'Filmic', 'Reinhard'],
   noiseFloat: ['Perlin', 'Perlin noise', 'Simplex', 'Simplex noise', 'Value noise'],
+  noise: ['Noise texture', 'Blender noise', 'Gradient noise', 'Marble', 'Octaves'],
   fbm: ['Perlin noise', 'Clouds', 'Octaves'],
   voronoi: ['Worley', 'Worley noise', 'Cellular', 'Cells'],
   posterize: ['Dither', 'Banding', 'Colour steps'],
