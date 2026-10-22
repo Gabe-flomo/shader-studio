@@ -51,7 +51,7 @@ export const SELF_VIZ_TYPES: ReadonlySet<string> = new Set([
   // So does a Shader Texture's (docs/texture-builder.md)
   'shaderTexture',
   // And the nodes that open into a Pass: their outputs are textures, never a value to preview.
-  'textureFeedback', 'dataTexture', 'renderTargets',
+  'textureFeedback', 'advect', 'dataTexture', 'renderTargets',
 ]);
 
 /** Always-on readouts (AgentPreviewPanels.tsx). */

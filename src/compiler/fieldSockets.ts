@@ -22,6 +22,10 @@ const CONTAINER = 'a 3D group renders its own scene, not a function of 2D positi
 /** Node type → why it can't be part of a field chain. */
 export const FIELD_IMPURE: Record<string, string> = {
   echo: READS_FRAME,
+  // Advect keeps its picture from frame to frame (its own Pass buffer, compiler/feedbackExpand.ts). The compile
+  // opens it before validating, so its step is listed too: a chain through the opened Pass reaches the step.
+  advect: READS_FRAME,
+  advectStep: READS_FRAME,
   prevFrame: READS_FRAME,
   previousFrame: READS_FRAME,
   radianceCascadesApprox: READS_FRAME,
@@ -40,6 +44,9 @@ export const FIELD_IMPURE: Record<string, string> = {
   giLitMarchGroup: CONTAINER,
   spaceWarpGroup: CONTAINER,
 };
+
+/** A step the compile made from a node (`__bindAs`): named in messages as the node it came from. */
+const STEP_LABEL: Record<string, string> = { advectStep: 'Advect' };
 
 /**
  * The first node inside `group`'s subgraph (nested groups included) that can't
@@ -112,8 +119,10 @@ export function fieldChainProblems(
     const n = nodeMap.get(id)!;
     const reason = fieldProblemOf(n, defOf);
     if (!reason) continue;
-    const label = (typeof n.params.label === 'string' && n.params.label.trim()) || defOf(n)?.label || n.type;
-    out.push(`Node ${n.id}: ${label} can't be part of a shape wired into ${consumerLabel}'s ${socketLabel}: ${reason}.`);
+    const label = (typeof n.params.label === 'string' && n.params.label.trim()) || STEP_LABEL[n.type] || defOf(n)?.label || n.type;
+    // A step made by the compile reports on the card it came from.
+    const cardId = typeof n.params.__bindAs === 'string' && n.params.__bindAs ? n.params.__bindAs : n.id;
+    out.push(`Node ${cardId}: ${label} can't be part of a shape wired into ${consumerLabel}'s ${socketLabel}: ${reason}.`);
   }
   return out;
 }

@@ -196,7 +196,7 @@ export const TYPE_STAGE: Record<string, StageOf> = {
   glassScene: 'march', sceneBuilder: 'march', timeCubeView: 'march', frameStack: 'march', volumeGlow: 'light',
   // Passes.
   pass: 'pass', blurTexture: 'rule', dofTexture: 'readout', tiltShiftTexture: 'readout', displaceTexture: 'rule', jumpFloodTexture: 'rule', displacementMap: 'bend',
-  textureFade: 'rule', textureFeedback: 'pass', textureNeighbours: 'rule', gridRules: 'rule', echo: 'pass',
+  textureFade: 'rule', textureFeedback: 'pass', advect: 'pass', textureNeighbours: 'rule', gridRules: 'rule', echo: 'pass',
   // Simulation: the Agents family, step by step.
   agentSense: 'sense', agentNeighbours: 'sense', agentSteer: 'steer',
   agentGravity: 'steer', agentWind: 'steer', agentCurl: 'steer', agentAttract: 'steer', agentVortex: 'steer', agentFlow: 'steer', agentSoundKick: 'steer',
@@ -205,7 +205,7 @@ export const TYPE_STAGE: Record<string, StageOf> = {
   agentDrag: 'steer', agentSlowInCrowd: 'steer', agentLeaveTrail: 'deposit', agentFadeWithAge: 'any',
   agentInputs: 'any', agentOutput: 'any', agentBySpecies: 'any',
   // Output: the hidden ends of passes keep their stage.
-  blurStage: 'rule', lensDofStage: 'rule', radialFastBlurStage: 'rule', deepGlowTextureStage: 'rule', gridRulesStep: 'rule', curveTraceBeamStep: 'rule', textureFeedbackStep: 'rule', memoryPack: 'rule', opticalFlowStep: 'rule', probePack: 'rule',
+  blurStage: 'rule', lensDofStage: 'rule', radialFastBlurStage: 'rule', deepGlowTextureStage: 'rule', gridRulesStep: 'rule', curveTraceBeamStep: 'rule', textureFeedbackStep: 'rule', advectStep: 'rule', memoryPack: 'rule', opticalFlowStep: 'rule', probePack: 'rule',
   // Interpolation that makes masks.
   smoothstep: 'any',
   // A picked colour is a constant (a tint fed anywhere), not a colouring step.

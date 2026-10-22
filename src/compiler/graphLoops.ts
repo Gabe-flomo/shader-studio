@@ -19,7 +19,7 @@ import { isAgentEngineOnly } from './agentGraph';
 import { GRID_TYPE } from './gridRulesExpand';
 import { isBeamTrace } from './curveBeamExpand';
 import { SHADER_TEXTURE_TYPE } from '../nodes/definitions/shaderTexture';
-import { FEEDBACK_TYPE } from '../nodes/definitions/textureFeedback';
+import { isFeedbackType } from '../nodes/definitions/textureFeedback';
 
 const PASS = 'pass';
 
@@ -39,8 +39,8 @@ export function isFrameDelayWire(c: { nodeId: string; outputKey: string }, byId:
   const src = byId.get(c.nodeId);
   if (!src) return false;
   if (src.type === PASS && (/^previous[1-3]?$/.test(c.outputKey) || c.outputKey === 'step' || c.outputKey === 'steps')) return true;
-  // A Feedback (texture) is a buffer: a loop back into it reads the buffer a frame ago (compiler/feedbackExpand.ts).
-  if (src.type === FEEDBACK_TYPE && !src.bypassed) return true;
+  // A Feedback (texture) or an Advect is a buffer: a loop back into it reads the buffer a frame ago (compiler/feedbackExpand.ts).
+  if (isFeedbackType(src.type) && !src.bypassed) return true;
   // So is a Data Texture: a read of it that feeds it sees last frame (compiler/dataTextureExpand.ts).
   if (src.type === 'dataTexture' && !src.bypassed) return true;
   // A Render Targets node's Previous outputs are its targets a frame ago (compiler/renderTargetsExpand.ts).
@@ -54,7 +54,7 @@ export function isFrameDelayWire(c: { nodeId: string; outputKey: string }, byId:
  * it for the compile to judge.
  */
 function mayHideFrameDelay(n: GraphNode): boolean {
-  if (n.type === GRID_TYPE || n.type === SHADER_TEXTURE_TYPE || isBeamTrace(n) || n.type === FEEDBACK_TYPE) return true;
+  if (n.type === GRID_TYPE || n.type === SHADER_TEXTURE_TYPE || isBeamTrace(n) || isFeedbackType(n.type)) return true;
   const sg = n.params?.subgraph as SubgraphData | undefined;
   return !!sg?.nodes?.some(x => x.type === PASS || mayHideFrameDelay(x));
 }

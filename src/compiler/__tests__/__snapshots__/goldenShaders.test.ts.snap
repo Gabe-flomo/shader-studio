@@ -1,5 +1,47 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`golden shaders: every Play example exports the same bundle > advectCandleSmoke 1`] = `
+{
+  "bundle": "0dcf624e310c410fcc1097dbd5f9:16671",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > advectInkDrops 1`] = `
+{
+  "bundle": "0e9b39d7e9fb440db386ca33b490:13255",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > advectMarbling 1`] = `
+{
+  "bundle": "14a1f40f1d759c128a2311a85854:14312",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > advectMousePaint 1`] = `
+{
+  "bundle": "05f7936a225a151a64344d3edc40:8876",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > advectPhotoMelt 1`] = `
+{
+  "bundle": "0955b932b64902073125c420d197:12565",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > advectVoronoiVortex 1`] = `
+{
+  "bundle": "0108ec3666202a0b3f18c1082ee8:11413",
+  "missing": [],
+}
+`;
+
 exports[`golden shaders: every Play example exports the same bundle > agentRuleSlime 1`] = `
 {
   "bundle": "1bda2318f4ac03045f679b74e6f4:14351",
@@ -2085,6 +2127,1464 @@ exports[`golden shaders: every Play example exports the same bundle > waveInterf
 {
   "bundle": "01710e261ba52d139cd70a601af0:5497",
   "missing": [],
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > advectCandleSmoke 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "1d93db000d040b0b72a06481a17e:2751",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "158d9d299ac01a0a22c63f14e96d:240",
+  "paramBindings": "09352438247ff3073b8e2c9611b0:1235",
+  "paramUniforms": [
+    "u_p_addx0_b",
+    "u_p_circx0_posX",
+    "u_p_circx0_posY",
+    "u_p_circx0_radius",
+    "u_p_colorpickex0_color",
+    "u_p_fillx0_antialias",
+    "u_p_fillx0_strokeWidth",
+    "u_p_mkv2x0_x",
+    "u_p_mkv2x0_y",
+    "u_p_mulx0_b",
+    "u_p_noisex0_detail",
+    "u_p_noisex0_lacunarity",
+    "u_p_noisex0_offsetX",
+    "u_p_noisex0_offsetY",
+    "u_p_noisex0_roughness",
+    "u_p_noisex0_scale",
+    "u_p_noisex0_speed",
+    "u_p_smokex0xc2_curlSize",
+    "u_p_smokex0xc2_diffuse",
+    "u_p_smokex0xc2_fade",
+    "u_p_smokex0xc2_inject",
+    "u_p_smokex0xc2_reset",
+    "u_p_smokex0xc2_speed",
+    "u_p_smokex0xc2_swirl",
+    "u_p_tlevelsx0_gain",
+    "u_p_tlevelsx0_gamma",
+    "u_p_tlevelsx0_inBlack",
+    "u_p_tlevelsx0_inWhite",
+    "u_p_tlevelsx0_offset",
+    "u_p_tlevelsx0_outBlack",
+    "u_p_tlevelsx0_outWhite",
+    "u_p_tlevelsx0_rollOff",
+  ],
+  "paramValues": "0f471875592c9d0b94c573e56b35:863",
+  "passes": [
+    {
+      "filter": "linear",
+      "format": "half",
+      "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_mkv2x0_x;
+uniform float u_p_mkv2x0_y;
+uniform vec3 u_p_colorpickex0_color;
+uniform float u_p_circx0_radius;
+uniform float u_p_circx0_posX;
+uniform float u_p_circx0_posY;
+uniform float u_p_noisex0_scale;
+uniform float u_p_noisex0_detail;
+uniform float u_p_noisex0_roughness;
+uniform float u_p_noisex0_lacunarity;
+uniform float u_p_noisex0_speed;
+uniform float u_p_noisex0_offsetX;
+uniform float u_p_noisex0_offsetY;
+uniform float u_p_fillx0_strokeWidth;
+uniform float u_p_fillx0_antialias;
+uniform float u_p_mulx0_b;
+uniform float u_p_addx0_b;
+uniform float u_p_smokex0xc2_speed;
+uniform float u_p_smokex0xc2_swirl;
+uniform float u_p_smokex0xc2_curlSize;
+uniform float u_p_smokex0xc2_inject;
+uniform float u_p_smokex0xc2_fade;
+uniform float u_p_smokex0xc2_diffuse;
+uniform float u_p_smokex0xc2_reset;
+uniform sampler2D u_pass_smoke_0_c2;
+uniform vec2 u_pass_smoke_0_c2_px;
+uniform sampler2D u_passprev_smoke_0_c2;
+uniform vec2 u_passprev_smoke_0_c2_px;
+uniform float u_frameDt;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+float circleSDF(vec2 point, float size) { return length(point) - size; }
+vec2 nzMod289(vec2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+
+
+vec3 nzMod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+
+
+vec4 nzMod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+
+
+float nzMod289(float x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+
+
+vec3 nzPermute(vec3 x) { return nzMod289(((x * 34.0) + 10.0) * x); }
+
+
+vec4 nzPermute(vec4 x) { return nzMod289(((x * 34.0) + 10.0) * x); }
+
+
+float nzPermute(float x) { return nzMod289(((x * 34.0) + 10.0) * x); }
+
+
+vec4 nzTaylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+
+
+float nzTaylorInvSqrt(float r) { return 1.79284291400159 - 0.85373472095314 * r; }
+
+
+vec2 nzFade(vec2 t) { return t * t * t * (t * (t * 6.0 - 15.0) + 10.0); }
+
+
+vec3 nzFade(vec3 t) { return t * t * t * (t * (t * 6.0 - 15.0) + 10.0); }
+
+
+vec4 nzFade(vec4 t) { return t * t * t * (t * (t * 6.0 - 15.0) + 10.0); }
+float nzPerlin3(vec3 P) {
+    vec3 Pi0 = floor(P); vec3 Pi1 = Pi0 + vec3(1.0);
+    Pi0 = nzMod289(Pi0); Pi1 = nzMod289(Pi1);
+    vec3 Pf0 = fract(P); vec3 Pf1 = Pf0 - vec3(1.0);
+    vec4 ix = vec4(Pi0.x, Pi1.x, Pi0.x, Pi1.x);
+    vec4 iy = vec4(Pi0.yy, Pi1.yy);
+    vec4 iz0 = Pi0.zzzz; vec4 iz1 = Pi1.zzzz;
+    vec4 ixy = nzPermute(nzPermute(ix) + iy);
+    vec4 ixy0 = nzPermute(ixy + iz0);
+    vec4 ixy1 = nzPermute(ixy + iz1);
+    vec4 gx0 = ixy0 * (1.0 / 7.0);
+    vec4 gy0 = fract(floor(gx0) * (1.0 / 7.0)) - 0.5;
+    gx0 = fract(gx0);
+    vec4 gz0 = vec4(0.5) - abs(gx0) - abs(gy0);
+    vec4 sz0 = step(gz0, vec4(0.0));
+    gx0 -= sz0 * (step(0.0, gx0) - 0.5);
+    gy0 -= sz0 * (step(0.0, gy0) - 0.5);
+    vec4 gx1 = ixy1 * (1.0 / 7.0);
+    vec4 gy1 = fract(floor(gx1) * (1.0 / 7.0)) - 0.5;
+    gx1 = fract(gx1);
+    vec4 gz1 = vec4(0.5) - abs(gx1) - abs(gy1);
+    vec4 sz1 = step(gz1, vec4(0.0));
+    gx1 -= sz1 * (step(0.0, gx1) - 0.5);
+    gy1 -= sz1 * (step(0.0, gy1) - 0.5);
+    vec3 g000 = vec3(gx0.x, gy0.x, gz0.x); vec3 g100 = vec3(gx0.y, gy0.y, gz0.y);
+    vec3 g010 = vec3(gx0.z, gy0.z, gz0.z); vec3 g110 = vec3(gx0.w, gy0.w, gz0.w);
+    vec3 g001 = vec3(gx1.x, gy1.x, gz1.x); vec3 g101 = vec3(gx1.y, gy1.y, gz1.y);
+    vec3 g011 = vec3(gx1.z, gy1.z, gz1.z); vec3 g111 = vec3(gx1.w, gy1.w, gz1.w);
+    vec4 norm0 = nzTaylorInvSqrt(vec4(dot(g000, g000), dot(g010, g010), dot(g100, g100), dot(g110, g110)));
+    g000 *= norm0.x; g010 *= norm0.y; g100 *= norm0.z; g110 *= norm0.w;
+    vec4 norm1 = nzTaylorInvSqrt(vec4(dot(g001, g001), dot(g011, g011), dot(g101, g101), dot(g111, g111)));
+    g001 *= norm1.x; g011 *= norm1.y; g101 *= norm1.z; g111 *= norm1.w;
+    float n000 = dot(g000, Pf0);
+    float n100 = dot(g100, vec3(Pf1.x, Pf0.yz));
+    float n010 = dot(g010, vec3(Pf0.x, Pf1.y, Pf0.z));
+    float n110 = dot(g110, vec3(Pf1.xy, Pf0.z));
+    float n001 = dot(g001, vec3(Pf0.xy, Pf1.z));
+    float n101 = dot(g101, vec3(Pf1.x, Pf0.y, Pf1.z));
+    float n011 = dot(g011, vec3(Pf0.x, Pf1.yz));
+    float n111 = dot(g111, Pf1);
+    vec3 fxyz = nzFade(Pf0);
+    vec4 nz = mix(vec4(n000, n100, n010, n110), vec4(n001, n101, n011, n111), fxyz.z);
+    vec2 nyz = mix(nz.xy, nz.zw, fxyz.y);
+    return 2.2 * mix(nyz.x, nyz.y, fxyz.x);
+}
+float nzNoisePerlin3(vec3 p, float detail, float roughness, float lacunarity) {
+    float dt = clamp(detail, 0.0, 8.0);
+    float whole = floor(dt);
+    float sum = 0.0;
+    float amp = 1.0;
+    float norm = 0.0;
+    for (int i = 0; i <= 8; i++) {
+        if (float(i) > whole) break;
+        sum += amp * nzPerlin3(p);
+        norm += amp;
+        amp *= roughness;
+        p *= lacunarity;
+    }
+    float part = dt - whole;
+    if (part > 0.0) {
+        float more = sum + amp * nzPerlin3(p);
+        return mix(sum / norm, more / (norm + amp), part);
+    }
+    return sum / norm;
+}
+
+
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // UV: this pixel's place in the picture.
+    vec2 uv_0_uv = (vUv - 0.5) * 2.0;
+    uv_0_uv.x *= u_resolution.x / u_resolution.y;
+    // Make Vec2: straight up, 1 long: hot smoke rises.
+    vec2 mkv2_0_xy = vec2(u_p_mkv2x0_x, u_p_mkv2x0_y);
+    // Colour: warm candle smoke, orange and lit from below.
+    vec3 colorpicke_0_rgb = u_p_colorpickex0_color;
+    float colorpicke_0_r = colorpicke_0_rgb.x;
+    float colorpicke_0_g = colorpicke_0_rgb.y;
+    float colorpicke_0_b = colorpicke_0_rgb.z;
+    // Circle SDF: the flame, a small circle near the bottom middle.
+    float circ_0_dist = circleSDF(uv_0_uv - vec2(u_p_circx0_posX, u_p_circx0_posY), u_p_circx0_radius);
+    // Noise (Perlin, 3D, Speed 0.4): air that stirs on its own. Its Slope says which way the noise rises: a wobbling sideways push.
+    vec3 noise_0_P = vec3((uv_0_uv + vec2(u_p_noisex0_offsetX, u_p_noisex0_offsetY)) * (u_p_noisex0_scale), (u_time) * (u_p_noisex0_speed));
+    float noise_0_signed = nzNoisePerlin3(noise_0_P, u_p_noisex0_detail, u_p_noisex0_roughness, u_p_noisex0_lacunarity);
+    float noise_0_value = clamp(noise_0_signed * 0.5 + 0.5, 0.0, 1.0);
+    vec3 noise_0_colour = clamp(vec3(noise_0_signed, nzNoisePerlin3(noise_0_P + vec3(-71.7, 24.9, 53.1), u_p_noisex0_detail, u_p_noisex0_roughness, u_p_noisex0_lacunarity), nzNoisePerlin3(noise_0_P + vec3(117.3, -43.5, 11.1), u_p_noisex0_detail, u_p_noisex0_roughness, u_p_noisex0_lacunarity)) * 0.5 + 0.5, 0.0, 1.0);
+    vec2 noise_0_slope = (vec2(nzNoisePerlin3(noise_0_P + vec3(0.002, 0.0, 0.0), u_p_noisex0_detail, u_p_noisex0_roughness, u_p_noisex0_lacunarity), nzNoisePerlin3(noise_0_P + vec3(0.0, 0.002, 0.0), u_p_noisex0_detail, u_p_noisex0_roughness, u_p_noisex0_lacunarity)) - noise_0_signed) * (250.0 * (u_p_noisex0_scale));
+    // SDF Fill: its Alpha is 1 in the flame with a wide soft edge: where smoke is made.
+    float fill_0_d  = circ_0_dist;
+    float fill_0_sw = u_p_fillx0_strokeWidth;
+    float fill_0_aa = max(u_p_fillx0_antialias, 0.00001);
+    float fill_0_fill   = 1.0 - smoothstep(-fill_0_aa, fill_0_aa, fill_0_d);
+    float fill_0_stroke = (1.0 - smoothstep(-fill_0_aa, fill_0_aa, abs(fill_0_d) - fill_0_sw * 0.5)) * step(0.000001, fill_0_sw);
+    vec3  fill_0_result = mix(mix(vec3(0.0), vec3(1.0), fill_0_fill), vec3(0.0), fill_0_stroke);
+    float fill_0_alpha  = max(fill_0_fill, fill_0_stroke);
+    // Multiply: half of the slope, so the wobble stays gentle.
+    vec2 mul_0_result = noise_0_slope * vec2(u_p_mulx0_b);
+    // Add: up plus the wobble: the flow the smoke follows.
+    vec2 add_0_result = mkv2_0_xy + mul_0_result;
+    // Advect: the smoke. Every frame the old smoke moves 3 pixels along the draught, and a little warm colour is added in the flame (Add mode: thick where lots has gathered).
+    // Fade 0.9 thins it as it climbs, so it vanishes before the top; Soften 0.12 blurs it a little each frame, so it spreads into soft plumes.
+    float smoke_0_c2_dt = u_frameDt > 0.0 ? u_frameDt : 1.0 / 60.0;
+    float smoke_0_c2_fr = smoke_0_c2_dt * 60.0;
+    vec2 smoke_0_c2_f0 = add_0_result;
+    float smoke_0_c2_sw = radians(u_p_smokex0xc2_swirl);
+    vec2 smoke_0_c2_fl = vec2(cos(smoke_0_c2_sw) * smoke_0_c2_f0.x - sin(smoke_0_c2_sw) * smoke_0_c2_f0.y, sin(smoke_0_c2_sw) * smoke_0_c2_f0.x + cos(smoke_0_c2_sw) * smoke_0_c2_f0.y);
+    vec2 smoke_0_c2_back = g_uv - smoke_0_c2_fl * u_p_smokex0xc2_speed * smoke_0_c2_fr * (2.0 / u_resolution.y);
+    vec2 smoke_0_c2_st = (smoke_0_c2_back / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5);
+    vec2 smoke_0_c2_px = u_passprev_smoke_0_c2_px;
+    vec4 smoke_0_c2_c0 = texture2D(u_passprev_smoke_0_c2, smoke_0_c2_st);
+    vec4 smoke_0_c2_nb = (texture2D(u_passprev_smoke_0_c2, smoke_0_c2_st + vec2(smoke_0_c2_px.x, 0.0)) + texture2D(u_passprev_smoke_0_c2, smoke_0_c2_st - vec2(smoke_0_c2_px.x, 0.0)) + texture2D(u_passprev_smoke_0_c2, smoke_0_c2_st + vec2(0.0, smoke_0_c2_px.y)) + texture2D(u_passprev_smoke_0_c2, smoke_0_c2_st - vec2(0.0, smoke_0_c2_px.y))) * 0.25;
+    vec4 smoke_0_c2_old = mix(smoke_0_c2_c0, smoke_0_c2_nb, clamp(u_p_smokex0xc2_diffuse * smoke_0_c2_fr, 0.0, 1.0));
+    smoke_0_c2_old *= exp(-max(u_p_smokex0xc2_fade, 0.0) * smoke_0_c2_dt) * step(u_p_smokex0xc2_reset, 0.5);
+    vec4 smoke_0_c2_src = vec4(colorpicke_0_rgb, 1.0);
+    float smoke_0_c2_m = clamp(u_p_smokex0xc2_inject, 0.0, 1.0) * clamp(fill_0_alpha, 0.0, 1.0) * clamp(smoke_0_c2_src.a, 0.0, 1.0);
+    vec3 smoke_0_c2_c = smoke_0_c2_old.rgb + smoke_0_c2_src.rgb * smoke_0_c2_m * smoke_0_c2_fr;
+    float smoke_0_c2_a = clamp(smoke_0_c2_old.a + smoke_0_c2_m * smoke_0_c2_fr, 0.0, 1.0);
+    gl_FragColor = vec4(smoke_0_c2_c, smoke_0_c2_a);
+}",
+      "label": "Smoke",
+      "live": true,
+      "nodeId": "smoke",
+      "nodeIds": [
+        "smoke__fbstep",
+        "flame",
+        "wick",
+        "uv",
+        "draught",
+        "wobble",
+        "air",
+        "up",
+        "warm",
+        "smoke",
+      ],
+      "previous": true,
+      "reads": [],
+      "readsPrevious": [
+        "smoke_0_c2",
+      ],
+      "scale": 1,
+      "slug": "smoke_0_c2",
+      "wrap": "clamp",
+    },
+  ],
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > advectInkDrops 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "14946ff3146e631b88ff0edbb12c:1580",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "13a94d2afd45c30456d504aecaa8:298",
+  "paramBindings": "11e3c061974809137079e3df9149:1385",
+  "paramUniforms": [
+    "u_p_brushx0_radius",
+    "u_p_brushx0_scale",
+    "u_p_brushx0_softness",
+    "u_p_brushx0_value",
+    "u_p_circx0_posX",
+    "u_p_circx0_posY",
+    "u_p_circx0_radius",
+    "u_p_fillx0_strokeWidth",
+    "u_p_lfox0_amplitude",
+    "u_p_lfox0_freq",
+    "u_p_lfox0_offset",
+    "u_p_lfox0_phase",
+    "u_p_maxx0_b",
+    "u_p_mkv2x0_x",
+    "u_p_mkv2x0_y",
+    "u_p_mulx0_b",
+    "u_p_palx0_amplitude",
+    "u_p_palx0_anim",
+    "u_p_palx0_freq",
+    "u_p_palx0_offset",
+    "u_p_palx0_phase",
+    "u_p_palx0_scale",
+    "u_p_palx0_speed",
+    "u_p_palx0_value",
+    "u_p_sinx0_amp",
+    "u_p_sinx0_freq",
+    "u_p_sinx0_input",
+    "u_p_sinx0xc2_amp",
+    "u_p_sinx0xc2_freq",
+    "u_p_sinx0xc2_input",
+    "u_p_waterx0xc2_curlSize",
+    "u_p_waterx0xc2_diffuse",
+    "u_p_waterx0xc2_fade",
+    "u_p_waterx0xc2_inject",
+    "u_p_waterx0xc2_reset",
+    "u_p_waterx0xc2_speed",
+    "u_p_waterx0xc2_swirl",
+  ],
+  "paramValues": "0c788f148d7e461593a22257d9d0:954",
+  "passes": [
+    {
+      "filter": "linear",
+      "format": "half",
+      "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_brushx0_radius;
+uniform float u_p_brushx0_softness;
+uniform float u_p_brushx0_value;
+uniform float u_p_brushx0_scale;
+uniform float u_p_lfox0_freq;
+uniform float u_p_lfox0_phase;
+uniform float u_p_lfox0_amplitude;
+uniform float u_p_lfox0_offset;
+uniform float u_p_sinx0xc2_input;
+uniform float u_p_sinx0xc2_freq;
+uniform float u_p_sinx0xc2_amp;
+uniform float u_p_sinx0_input;
+uniform float u_p_sinx0_freq;
+uniform float u_p_sinx0_amp;
+uniform float u_p_palx0_value;
+uniform float u_p_palx0_anim;
+uniform float u_p_palx0_scale;
+uniform float u_p_palx0_speed;
+uniform vec3 u_p_palx0_offset;
+uniform vec3 u_p_palx0_amplitude;
+uniform vec3 u_p_palx0_freq;
+uniform vec3 u_p_palx0_phase;
+uniform float u_p_mkv2x0_x;
+uniform float u_p_mkv2x0_y;
+uniform float u_p_circx0_radius;
+uniform float u_p_circx0_posX;
+uniform float u_p_circx0_posY;
+uniform float u_p_fillx0_strokeWidth;
+uniform float u_p_mulx0_b;
+uniform float u_p_maxx0_b;
+uniform float u_p_waterx0xc2_speed;
+uniform float u_p_waterx0xc2_swirl;
+uniform float u_p_waterx0xc2_curlSize;
+uniform float u_p_waterx0xc2_inject;
+uniform float u_p_waterx0xc2_fade;
+uniform float u_p_waterx0xc2_diffuse;
+uniform float u_p_waterx0xc2_reset;
+uniform sampler2D u_pass_water_0_c2;
+uniform vec2 u_pass_water_0_c2_px;
+uniform sampler2D u_passprev_water_0_c2;
+uniform vec2 u_passprev_water_0_c2_px;
+uniform float u_mousebtn;
+uniform float u_frameDt;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+vec3 palette(float t, vec3 offset, vec3 amplitude, vec3 freq, vec3 phase) {
+    return offset + amplitude * cos(6.28318 * (freq * t + phase));
+}
+float circleSDF(vec2 point, float size) { return length(point) - size; }
+float advPsi(vec2 p, float t) {
+    return 0.5 * sin(p.x * 1.7 + t * 0.31) * cos(p.y * 1.3 - t * 0.23)
+         + 0.25 * sin(p.x * 2.9 - p.y * 2.3 + t * 0.47)
+         + 0.17 * cos(p.x * 4.3 + p.y * 3.7 - t * 0.19);
+}
+
+
+vec2 advCurl(vec2 p, float t) {
+    const float e = 0.01;
+    float dy = advPsi(p + vec2(0.0, e), t) - advPsi(p - vec2(0.0, e), t);
+    float dx = advPsi(p + vec2(e, 0.0), t) - advPsi(p - vec2(e, 0.0), t);
+    return vec2(dy, -dx) / (2.0 * e);
+}
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // Brush: 1 under the pointer while the mouse button (or a finger) is down: press and drag to drop ink yourself.
+    float brush_0_d = length(gl_FragCoord.xy - u_mouse * u_p_brushx0_scale) - u_p_brushx0_radius;
+    float brush_0_mask = (1.0 - smoothstep(-max(u_p_brushx0_softness, 1e-5), max(u_p_brushx0_softness, 1e-5), brush_0_d)) * u_p_brushx0_value * u_mousebtn;
+    // Time: seconds since the start. It moves the drop point and times the drops.
+    float time_0_time = u_time;
+    // UV: this pixel's place in the picture (0, 0 in the middle, −1 to 1 from bottom to top).
+    vec2 uv_0_uv = (vUv - 0.5) * 2.0;
+    uv_0_uv.x *= u_resolution.x / u_resolution.y;
+    // LFO, Square: 1 for half of every 1.5 seconds, 0 for the other half: when the drop is falling.
+    float lfo_0_value = sign(sin(time_0_time * u_p_lfox0_freq * 6.2831853 + u_p_lfox0_phase)) * u_p_lfox0_amplitude + u_p_lfox0_offset;
+    // Sin: its up–down place, at a different speed, so the drop point wanders all over.
+    float sin_0_c2_output = u_p_sinx0xc2_amp * sin(time_0_time * u_p_sinx0xc2_freq);
+    // Sin: the drop point's left–right place, swinging slowly between −0.55 and 0.55.
+    float sin_0_output = u_p_sinx0_amp * sin(time_0_time * u_p_sinx0_freq);
+    // Palette: the ink's colour, its hue turning slowly with time, so each drop has its own colour.
+    vec3 pal_0_color = palette((time_0_time * u_p_palx0_scale + u_p_palx0_anim * u_p_palx0_speed), u_p_palx0_offset, u_p_palx0_amplitude, u_p_palx0_freq, u_p_palx0_phase);
+    // Make Vec2: the drop point.
+    vec2 mkv2_0_xy = vec2(sin_0_output, sin_0_c2_output);
+    // Circle SDF: the drop, a circle 0.07 across round the drop point (negative inside).
+    float circ_0_dist = circleSDF(uv_0_uv - mkv2_0_xy, u_p_circx0_radius);
+    // SDF Fill: its Alpha is 1 inside the circle and 0 outside, with a smooth edge.
+    float fill_0_d  = circ_0_dist;
+    float fill_0_sw = u_p_fillx0_strokeWidth;
+    float fill_0_fw = fwidth(fill_0_d);
+    float fill_0_px = 2.0 / max(u_resolution.y, 1.0);
+    float fill_0_aa = max(fill_0_fw > 4.0 * fill_0_px ? fill_0_px : fill_0_fw, 0.00001);
+    float fill_0_fill   = 1.0 - smoothstep(-fill_0_aa, fill_0_aa, fill_0_d);
+    float fill_0_stroke = (1.0 - smoothstep(-fill_0_aa, fill_0_aa, abs(fill_0_d) - fill_0_sw * 0.5)) * step(0.000001, fill_0_sw);
+    vec3  fill_0_result = mix(mix(vec3(0.0), vec3(1.0), fill_0_fill), vec3(0.0), fill_0_stroke);
+    float fill_0_alpha  = max(fill_0_fill, fill_0_stroke);
+    // Multiply: the drop only while the LFO is on: one drop every second and a half.
+    float mul_0_result = fill_0_alpha * lfo_0_value;
+    // Max: ink where either the timed drop or your brush is.
+    float max_0_result = max(mul_0_result, brush_0_mask);
+    // Advect: the water. It keeps the picture from frame to frame and each frame carries every pixel Speed pixels along the flow. Flow is empty, so it uses its built-in gentle curl: slow swirls that never pile up.
+    // Colour is the ink; Inject mask says where it goes in. Mix paints the ink over what is there, so a new drop covers the old water. Fade 0.08 lets old ink fade very slowly; Soften blurs it a touch, so the edges go cloudy.
+    float water_0_c2_dt = u_frameDt > 0.0 ? u_frameDt : 1.0 / 60.0;
+    float water_0_c2_fr = water_0_c2_dt * 60.0;
+    vec2 water_0_c2_f0 = advCurl(g_uv * u_p_waterx0xc2_curlSize, u_time);
+    float water_0_c2_sw = radians(u_p_waterx0xc2_swirl);
+    vec2 water_0_c2_fl = vec2(cos(water_0_c2_sw) * water_0_c2_f0.x - sin(water_0_c2_sw) * water_0_c2_f0.y, sin(water_0_c2_sw) * water_0_c2_f0.x + cos(water_0_c2_sw) * water_0_c2_f0.y);
+    vec2 water_0_c2_back = g_uv - water_0_c2_fl * u_p_waterx0xc2_speed * water_0_c2_fr * (2.0 / u_resolution.y);
+    vec2 water_0_c2_st = (water_0_c2_back / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5);
+    vec2 water_0_c2_px = u_passprev_water_0_c2_px;
+    vec4 water_0_c2_c0 = texture2D(u_passprev_water_0_c2, water_0_c2_st);
+    vec4 water_0_c2_nb = (texture2D(u_passprev_water_0_c2, water_0_c2_st + vec2(water_0_c2_px.x, 0.0)) + texture2D(u_passprev_water_0_c2, water_0_c2_st - vec2(water_0_c2_px.x, 0.0)) + texture2D(u_passprev_water_0_c2, water_0_c2_st + vec2(0.0, water_0_c2_px.y)) + texture2D(u_passprev_water_0_c2, water_0_c2_st - vec2(0.0, water_0_c2_px.y))) * 0.25;
+    vec4 water_0_c2_old = mix(water_0_c2_c0, water_0_c2_nb, clamp(u_p_waterx0xc2_diffuse * water_0_c2_fr, 0.0, 1.0));
+    water_0_c2_old *= exp(-max(u_p_waterx0xc2_fade, 0.0) * water_0_c2_dt) * step(u_p_waterx0xc2_reset, 0.5);
+    vec4 water_0_c2_src = vec4(pal_0_color, 1.0);
+    float water_0_c2_m = clamp(u_p_waterx0xc2_inject, 0.0, 1.0) * clamp(max_0_result, 0.0, 1.0) * clamp(water_0_c2_src.a, 0.0, 1.0);
+    float water_0_c2_t = 1.0 - pow(1.0 - water_0_c2_m, water_0_c2_fr);
+    vec3 water_0_c2_c = mix(water_0_c2_old.rgb, water_0_c2_src.rgb, water_0_c2_t);
+    float water_0_c2_a = clamp(mix(water_0_c2_old.a, 1.0, water_0_c2_t), 0.0, 1.0);
+    gl_FragColor = vec4(water_0_c2_c, water_0_c2_a);
+}",
+      "label": "Water",
+      "live": true,
+      "nodeId": "water",
+      "nodeIds": [
+        "water__fbstep",
+        "anyInk",
+        "finger",
+        "timed",
+        "beat",
+        "time",
+        "dropMask",
+        "drop",
+        "where",
+        "dropY",
+        "dropX",
+        "uv",
+        "inkColour",
+        "water",
+      ],
+      "previous": true,
+      "reads": [],
+      "readsPrevious": [
+        "water_0_c2",
+      ],
+      "scale": 1,
+      "slug": "water_0_c2",
+      "wrap": "clamp",
+    },
+  ],
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > advectMarbling 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "19bad2e9ca684c11f272062ff549:1590",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "0411477f25dc680c0ccc3eb41287:191",
+  "paramBindings": "05cf0b2a3f61100731a901054d93:785",
+  "paramUniforms": [
+    "u_p_comparex0_smoothing",
+    "u_p_marblingx0xc2_curlSize",
+    "u_p_marblingx0xc2_diffuse",
+    "u_p_marblingx0xc2_fade",
+    "u_p_marblingx0xc2_inject",
+    "u_p_marblingx0xc2_reset",
+    "u_p_marblingx0xc2_speed",
+    "u_p_marblingx0xc2_swirl",
+    "u_p_noisex0_detail",
+    "u_p_noisex0_lacunarity",
+    "u_p_noisex0_offsetX",
+    "u_p_noisex0_offsetY",
+    "u_p_noisex0_roughness",
+    "u_p_noisex0_scale",
+    "u_p_noisex0_speed",
+    "u_p_palx0_anim",
+    "u_p_palx0_scale",
+    "u_p_palx0_speed",
+    "u_p_palx0_value",
+  ],
+  "paramValues": "136d4b51a5ff1c1789b9345828a2:527",
+  "passes": [
+    {
+      "filter": "linear",
+      "format": "half",
+      "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_comparex0_smoothing;
+uniform float u_p_noisex0_scale;
+uniform float u_p_noisex0_detail;
+uniform float u_p_noisex0_roughness;
+uniform float u_p_noisex0_lacunarity;
+uniform float u_p_noisex0_speed;
+uniform float u_p_noisex0_offsetX;
+uniform float u_p_noisex0_offsetY;
+uniform float u_p_palx0_value;
+uniform float u_p_palx0_anim;
+uniform float u_p_palx0_scale;
+uniform float u_p_palx0_speed;
+uniform float u_p_marblingx0xc2_speed;
+uniform float u_p_marblingx0xc2_swirl;
+uniform float u_p_marblingx0xc2_curlSize;
+uniform float u_p_marblingx0xc2_inject;
+uniform float u_p_marblingx0xc2_fade;
+uniform float u_p_marblingx0xc2_diffuse;
+uniform float u_p_marblingx0xc2_reset;
+uniform sampler2D u_pass_marbling_0_c2;
+uniform vec2 u_pass_marbling_0_c2_px;
+uniform sampler2D u_passprev_marbling_0_c2;
+uniform vec2 u_passprev_marbling_0_c2_px;
+uniform float u_frameDt;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+vec2 nzMod289(vec2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+
+
+vec3 nzMod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+
+
+vec4 nzMod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+
+
+float nzMod289(float x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+
+
+vec3 nzPermute(vec3 x) { return nzMod289(((x * 34.0) + 10.0) * x); }
+
+
+vec4 nzPermute(vec4 x) { return nzMod289(((x * 34.0) + 10.0) * x); }
+
+
+float nzPermute(float x) { return nzMod289(((x * 34.0) + 10.0) * x); }
+
+
+vec4 nzTaylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+
+
+float nzTaylorInvSqrt(float r) { return 1.79284291400159 - 0.85373472095314 * r; }
+
+
+vec2 nzFade(vec2 t) { return t * t * t * (t * (t * 6.0 - 15.0) + 10.0); }
+
+
+vec3 nzFade(vec3 t) { return t * t * t * (t * (t * 6.0 - 15.0) + 10.0); }
+
+
+vec4 nzFade(vec4 t) { return t * t * t * (t * (t * 6.0 - 15.0) + 10.0); }
+float nzPerlin3(vec3 P) {
+    vec3 Pi0 = floor(P); vec3 Pi1 = Pi0 + vec3(1.0);
+    Pi0 = nzMod289(Pi0); Pi1 = nzMod289(Pi1);
+    vec3 Pf0 = fract(P); vec3 Pf1 = Pf0 - vec3(1.0);
+    vec4 ix = vec4(Pi0.x, Pi1.x, Pi0.x, Pi1.x);
+    vec4 iy = vec4(Pi0.yy, Pi1.yy);
+    vec4 iz0 = Pi0.zzzz; vec4 iz1 = Pi1.zzzz;
+    vec4 ixy = nzPermute(nzPermute(ix) + iy);
+    vec4 ixy0 = nzPermute(ixy + iz0);
+    vec4 ixy1 = nzPermute(ixy + iz1);
+    vec4 gx0 = ixy0 * (1.0 / 7.0);
+    vec4 gy0 = fract(floor(gx0) * (1.0 / 7.0)) - 0.5;
+    gx0 = fract(gx0);
+    vec4 gz0 = vec4(0.5) - abs(gx0) - abs(gy0);
+    vec4 sz0 = step(gz0, vec4(0.0));
+    gx0 -= sz0 * (step(0.0, gx0) - 0.5);
+    gy0 -= sz0 * (step(0.0, gy0) - 0.5);
+    vec4 gx1 = ixy1 * (1.0 / 7.0);
+    vec4 gy1 = fract(floor(gx1) * (1.0 / 7.0)) - 0.5;
+    gx1 = fract(gx1);
+    vec4 gz1 = vec4(0.5) - abs(gx1) - abs(gy1);
+    vec4 sz1 = step(gz1, vec4(0.0));
+    gx1 -= sz1 * (step(0.0, gx1) - 0.5);
+    gy1 -= sz1 * (step(0.0, gy1) - 0.5);
+    vec3 g000 = vec3(gx0.x, gy0.x, gz0.x); vec3 g100 = vec3(gx0.y, gy0.y, gz0.y);
+    vec3 g010 = vec3(gx0.z, gy0.z, gz0.z); vec3 g110 = vec3(gx0.w, gy0.w, gz0.w);
+    vec3 g001 = vec3(gx1.x, gy1.x, gz1.x); vec3 g101 = vec3(gx1.y, gy1.y, gz1.y);
+    vec3 g011 = vec3(gx1.z, gy1.z, gz1.z); vec3 g111 = vec3(gx1.w, gy1.w, gz1.w);
+    vec4 norm0 = nzTaylorInvSqrt(vec4(dot(g000, g000), dot(g010, g010), dot(g100, g100), dot(g110, g110)));
+    g000 *= norm0.x; g010 *= norm0.y; g100 *= norm0.z; g110 *= norm0.w;
+    vec4 norm1 = nzTaylorInvSqrt(vec4(dot(g001, g001), dot(g011, g011), dot(g101, g101), dot(g111, g111)));
+    g001 *= norm1.x; g011 *= norm1.y; g101 *= norm1.z; g111 *= norm1.w;
+    float n000 = dot(g000, Pf0);
+    float n100 = dot(g100, vec3(Pf1.x, Pf0.yz));
+    float n010 = dot(g010, vec3(Pf0.x, Pf1.y, Pf0.z));
+    float n110 = dot(g110, vec3(Pf1.xy, Pf0.z));
+    float n001 = dot(g001, vec3(Pf0.xy, Pf1.z));
+    float n101 = dot(g101, vec3(Pf1.x, Pf0.y, Pf1.z));
+    float n011 = dot(g011, vec3(Pf0.x, Pf1.yz));
+    float n111 = dot(g111, Pf1);
+    vec3 fxyz = nzFade(Pf0);
+    vec4 nz = mix(vec4(n000, n100, n010, n110), vec4(n001, n101, n011, n111), fxyz.z);
+    vec2 nyz = mix(nz.xy, nz.zw, fxyz.y);
+    return 2.2 * mix(nyz.x, nyz.y, fxyz.x);
+}
+float nzNoisePerlin3(vec3 p, float detail, float roughness, float lacunarity) {
+    float dt = clamp(detail, 0.0, 8.0);
+    float whole = floor(dt);
+    float sum = 0.0;
+    float amp = 1.0;
+    float norm = 0.0;
+    for (int i = 0; i <= 8; i++) {
+        if (float(i) > whole) break;
+        sum += amp * nzPerlin3(p);
+        norm += amp;
+        amp *= roughness;
+        p *= lacunarity;
+    }
+    float part = dt - whole;
+    if (part > 0.0) {
+        float more = sum + amp * nzPerlin3(p);
+        return mix(sum / norm, more / (norm + amp), part);
+    }
+    return sum / norm;
+}
+
+
+vec3 palette(float t, vec3 offset, vec3 amplitude, vec3 freq, vec3 phase) {
+    return offset + amplitude * cos(6.28318 * (freq * t + phase));
+}
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // Time: seconds since the start (↺ starts it over).
+    float time_0_time = u_time;
+    // UV: this pixel's place in the picture.
+    vec2 uv_0_uv = (vUv - 0.5) * 2.0;
+    uv_0_uv.x *= u_resolution.x / u_resolution.y;
+    // Compare: 1 for the first 0.35 seconds, then 0 for ever: the stripes go in once, at the start.
+    float compare_0_mask = 1.0 - smoothstep(0.0 - max(u_p_comparex0_smoothing, 1e-5), 0.0 + max(u_p_comparex0_smoothing, 1e-5), time_0_time);
+    // Noise (Perlin, 3D, slow): a smooth field of hills. Its Slope points uphill.
+    vec3 noise_0_P = vec3((uv_0_uv + vec2(u_p_noisex0_offsetX, u_p_noisex0_offsetY)) * (u_p_noisex0_scale), (u_time) * (u_p_noisex0_speed));
+    float noise_0_signed = nzNoisePerlin3(noise_0_P, u_p_noisex0_detail, u_p_noisex0_roughness, u_p_noisex0_lacunarity);
+    float noise_0_value = clamp(noise_0_signed * 0.5 + 0.5, 0.0, 1.0);
+    vec3 noise_0_colour = clamp(vec3(noise_0_signed, nzNoisePerlin3(noise_0_P + vec3(-71.7, 24.9, 53.1), u_p_noisex0_detail, u_p_noisex0_roughness, u_p_noisex0_lacunarity), nzNoisePerlin3(noise_0_P + vec3(117.3, -43.5, 11.1), u_p_noisex0_detail, u_p_noisex0_roughness, u_p_noisex0_lacunarity)) * 0.5 + 0.5, 0.0, 1.0);
+    vec2 noise_0_slope = (vec2(nzNoisePerlin3(noise_0_P + vec3(0.002, 0.0, 0.0), u_p_noisex0_detail, u_p_noisex0_roughness, u_p_noisex0_lacunarity), nzNoisePerlin3(noise_0_P + vec3(0.0, 0.002, 0.0), u_p_noisex0_detail, u_p_noisex0_roughness, u_p_noisex0_lacunarity)) - noise_0_signed) * (250.0 * (u_p_noisex0_scale));
+    // Split Vec2: just the left–right place.
+    float splitvec2_0_x = (uv_0_uv).x;
+    float splitvec2_0_y = (uv_0_uv).y;
+    // Palette: colour bands across the picture: the colour changes with the left–right place, over and over, so the paper starts striped.
+    vec3 pal_0_color = palette((splitvec2_0_x * u_p_palx0_scale + u_p_palx0_anim * u_p_palx0_speed), vec3(0.5, 0.5, 0.5), vec3(0.5, 0.5, 0.5), vec3(1.0, 1.0, 0.5), vec3(0.8, 0.9, 0.3));
+    // Advect: the marbling bath. For the first moment the stripes are painted in fully (Inject 1 where the mask is 1); after that nothing new goes in, and the stripes keep being carried round.
+    // Swirl 90 turns the uphill Slope sideways, so the paint runs along the hills' contours instead of piling up on them: it folds round and round like a comb dragged through floating paint. Fade 0 and Soften 0 keep the colours crisp.
+    float marbling_0_c2_dt = u_frameDt > 0.0 ? u_frameDt : 1.0 / 60.0;
+    float marbling_0_c2_fr = marbling_0_c2_dt * 60.0;
+    vec2 marbling_0_c2_f0 = noise_0_slope;
+    float marbling_0_c2_sw = radians(u_p_marblingx0xc2_swirl);
+    vec2 marbling_0_c2_fl = vec2(cos(marbling_0_c2_sw) * marbling_0_c2_f0.x - sin(marbling_0_c2_sw) * marbling_0_c2_f0.y, sin(marbling_0_c2_sw) * marbling_0_c2_f0.x + cos(marbling_0_c2_sw) * marbling_0_c2_f0.y);
+    vec2 marbling_0_c2_back = g_uv - marbling_0_c2_fl * u_p_marblingx0xc2_speed * marbling_0_c2_fr * (2.0 / u_resolution.y);
+    vec2 marbling_0_c2_st = (marbling_0_c2_back / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5);
+    vec2 marbling_0_c2_px = u_passprev_marbling_0_c2_px;
+    vec4 marbling_0_c2_c0 = texture2D(u_passprev_marbling_0_c2, marbling_0_c2_st);
+    vec4 marbling_0_c2_nb = (texture2D(u_passprev_marbling_0_c2, marbling_0_c2_st + vec2(marbling_0_c2_px.x, 0.0)) + texture2D(u_passprev_marbling_0_c2, marbling_0_c2_st - vec2(marbling_0_c2_px.x, 0.0)) + texture2D(u_passprev_marbling_0_c2, marbling_0_c2_st + vec2(0.0, marbling_0_c2_px.y)) + texture2D(u_passprev_marbling_0_c2, marbling_0_c2_st - vec2(0.0, marbling_0_c2_px.y))) * 0.25;
+    vec4 marbling_0_c2_old = mix(marbling_0_c2_c0, marbling_0_c2_nb, clamp(u_p_marblingx0xc2_diffuse * marbling_0_c2_fr, 0.0, 1.0));
+    marbling_0_c2_old *= exp(-max(u_p_marblingx0xc2_fade, 0.0) * marbling_0_c2_dt) * step(u_p_marblingx0xc2_reset, 0.5);
+    vec4 marbling_0_c2_src = vec4(pal_0_color, 1.0);
+    float marbling_0_c2_m = clamp(u_p_marblingx0xc2_inject, 0.0, 1.0) * clamp(compare_0_mask, 0.0, 1.0) * clamp(marbling_0_c2_src.a, 0.0, 1.0);
+    float marbling_0_c2_t = 1.0 - pow(1.0 - marbling_0_c2_m, marbling_0_c2_fr);
+    vec3 marbling_0_c2_c = mix(marbling_0_c2_old.rgb, marbling_0_c2_src.rgb, marbling_0_c2_t);
+    float marbling_0_c2_a = clamp(mix(marbling_0_c2_old.a, 1.0, marbling_0_c2_t), 0.0, 1.0);
+    gl_FragColor = vec4(marbling_0_c2_c, marbling_0_c2_a);
+}",
+      "label": "Marbling",
+      "live": true,
+      "nodeId": "paper",
+      "nodeIds": [
+        "paper__fbstep",
+        "start",
+        "time",
+        "comb",
+        "uv",
+        "stripes",
+        "xy",
+        "paper",
+      ],
+      "previous": true,
+      "reads": [],
+      "readsPrevious": [
+        "marbling_0_c2",
+      ],
+      "scale": 1,
+      "slug": "marbling_0_c2",
+      "wrap": "mirror",
+    },
+  ],
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > advectMousePaint 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "1aec4dd9f3a53a126d7e3cc93cdc:1567",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "1cb2a2471c165a030cca9d049b29:123",
+  "paramBindings": "0064563ce57d1a1df18829473607:569",
+  "paramUniforms": [
+    "u_p_brushx0_radius",
+    "u_p_brushx0_scale",
+    "u_p_brushx0_softness",
+    "u_p_brushx0_value",
+    "u_p_paintx0xc2_curlSize",
+    "u_p_paintx0xc2_diffuse",
+    "u_p_paintx0xc2_fade",
+    "u_p_paintx0xc2_inject",
+    "u_p_paintx0xc2_reset",
+    "u_p_paintx0xc2_speed",
+    "u_p_paintx0xc2_swirl",
+    "u_p_palx0_anim",
+    "u_p_palx0_scale",
+    "u_p_palx0_speed",
+    "u_p_palx0_value",
+  ],
+  "paramValues": "1701a1885dcef80de19a916d5183:397",
+  "passes": [
+    {
+      "filter": "linear",
+      "format": "half",
+      "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_brushx0_radius;
+uniform float u_p_brushx0_softness;
+uniform float u_p_brushx0_value;
+uniform float u_p_brushx0_scale;
+uniform float u_p_palx0_value;
+uniform float u_p_palx0_anim;
+uniform float u_p_palx0_scale;
+uniform float u_p_palx0_speed;
+uniform float u_p_paintx0xc2_speed;
+uniform float u_p_paintx0xc2_swirl;
+uniform float u_p_paintx0xc2_curlSize;
+uniform float u_p_paintx0xc2_inject;
+uniform float u_p_paintx0xc2_fade;
+uniform float u_p_paintx0xc2_diffuse;
+uniform float u_p_paintx0xc2_reset;
+uniform sampler2D u_pass_paint_0_c2;
+uniform vec2 u_pass_paint_0_c2_px;
+uniform sampler2D u_passprev_paint_0_c2;
+uniform vec2 u_passprev_paint_0_c2_px;
+uniform float u_mousebtn;
+uniform float u_frameDt;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+vec3 palette(float t, vec3 offset, vec3 amplitude, vec3 freq, vec3 phase) {
+    return offset + amplitude * cos(6.28318 * (freq * t + phase));
+}
+float advPsi(vec2 p, float t) {
+    return 0.5 * sin(p.x * 1.7 + t * 0.31) * cos(p.y * 1.3 - t * 0.23)
+         + 0.25 * sin(p.x * 2.9 - p.y * 2.3 + t * 0.47)
+         + 0.17 * cos(p.x * 4.3 + p.y * 3.7 - t * 0.19);
+}
+
+
+vec2 advCurl(vec2 p, float t) {
+    const float e = 0.01;
+    float dy = advPsi(p + vec2(0.0, e), t) - advPsi(p - vec2(0.0, e), t);
+    float dx = advPsi(p + vec2(e, 0.0), t) - advPsi(p - vec2(e, 0.0), t);
+    return vec2(dy, -dx) / (2.0 * e);
+}
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // Brush: 1 under the pointer, wherever it is (Paint: Always), with a soft edge: where the paint goes in.
+    float brush_0_d = length(gl_FragCoord.xy - u_mouse * u_p_brushx0_scale) - u_p_brushx0_radius;
+    float brush_0_mask = (1.0 - smoothstep(-max(u_p_brushx0_softness, 1e-5), max(u_p_brushx0_softness, 1e-5), brush_0_d)) * u_p_brushx0_value;
+    // Time: seconds since the start.
+    float time_0_time = u_time;
+    // Palette: the paint's colour, turning through the hues as time goes on.
+    vec3 pal_0_color = palette((time_0_time * u_p_palx0_scale + u_p_palx0_anim * u_p_palx0_speed), vec3(0.5, 0.5, 0.5), vec3(0.5, 0.5, 0.5), vec3(1.0, 1.0, 1.0), vec3(0.0, 0.33, 0.67));
+    // Advect: the paint under the brush goes in (Max: the brighter of new and old, so trails never wash out), and everything is carried off along the built-in curl (Flow is empty).
+    // Fade 0.25 dims the old paint slowly; Soften blurs it a little, so trails turn into soft streams.
+    float paint_0_c2_dt = u_frameDt > 0.0 ? u_frameDt : 1.0 / 60.0;
+    float paint_0_c2_fr = paint_0_c2_dt * 60.0;
+    vec2 paint_0_c2_f0 = advCurl(g_uv * u_p_paintx0xc2_curlSize, u_time);
+    float paint_0_c2_sw = radians(u_p_paintx0xc2_swirl);
+    vec2 paint_0_c2_fl = vec2(cos(paint_0_c2_sw) * paint_0_c2_f0.x - sin(paint_0_c2_sw) * paint_0_c2_f0.y, sin(paint_0_c2_sw) * paint_0_c2_f0.x + cos(paint_0_c2_sw) * paint_0_c2_f0.y);
+    vec2 paint_0_c2_back = g_uv - paint_0_c2_fl * u_p_paintx0xc2_speed * paint_0_c2_fr * (2.0 / u_resolution.y);
+    vec2 paint_0_c2_st = (paint_0_c2_back / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5);
+    vec2 paint_0_c2_px = u_passprev_paint_0_c2_px;
+    vec4 paint_0_c2_c0 = texture2D(u_passprev_paint_0_c2, paint_0_c2_st);
+    vec4 paint_0_c2_nb = (texture2D(u_passprev_paint_0_c2, paint_0_c2_st + vec2(paint_0_c2_px.x, 0.0)) + texture2D(u_passprev_paint_0_c2, paint_0_c2_st - vec2(paint_0_c2_px.x, 0.0)) + texture2D(u_passprev_paint_0_c2, paint_0_c2_st + vec2(0.0, paint_0_c2_px.y)) + texture2D(u_passprev_paint_0_c2, paint_0_c2_st - vec2(0.0, paint_0_c2_px.y))) * 0.25;
+    vec4 paint_0_c2_old = mix(paint_0_c2_c0, paint_0_c2_nb, clamp(u_p_paintx0xc2_diffuse * paint_0_c2_fr, 0.0, 1.0));
+    paint_0_c2_old *= exp(-max(u_p_paintx0xc2_fade, 0.0) * paint_0_c2_dt) * step(u_p_paintx0xc2_reset, 0.5);
+    vec4 paint_0_c2_src = vec4(pal_0_color, 1.0);
+    float paint_0_c2_m = clamp(u_p_paintx0xc2_inject, 0.0, 1.0) * clamp(brush_0_mask, 0.0, 1.0) * clamp(paint_0_c2_src.a, 0.0, 1.0);
+    vec3 paint_0_c2_c = max(paint_0_c2_old.rgb, paint_0_c2_src.rgb * paint_0_c2_m);
+    float paint_0_c2_a = clamp(max(paint_0_c2_old.a, paint_0_c2_m), 0.0, 1.0);
+    gl_FragColor = vec4(paint_0_c2_c, paint_0_c2_a);
+}",
+      "label": "Paint",
+      "live": true,
+      "nodeId": "paint",
+      "nodeIds": [
+        "paint__fbstep",
+        "tip",
+        "hue",
+        "time",
+        "paint",
+      ],
+      "previous": true,
+      "reads": [],
+      "readsPrevious": [
+        "paint_0_c2",
+      ],
+      "scale": 1,
+      "slug": "paint_0_c2",
+      "wrap": "clamp",
+    },
+  ],
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > advectPhotoMelt 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "013785b835bd4011674e85834277:1570",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "0a2bc880333557055d404a95ce95:152",
+  "paramBindings": "1ecacd89cc11871978f7a9c9e432:636",
+  "paramUniforms": [
+    "u_p_addx0_b",
+    "u_p_meltx0xc2_curlSize",
+    "u_p_meltx0xc2_diffuse",
+    "u_p_meltx0xc2_fade",
+    "u_p_meltx0xc2_inject",
+    "u_p_meltx0xc2_reset",
+    "u_p_meltx0xc2_speed",
+    "u_p_meltx0xc2_swirl",
+    "u_p_mkv2x0_x",
+    "u_p_mkv2x0_y",
+    "u_p_noisex0_detail",
+    "u_p_noisex0_lacunarity",
+    "u_p_noisex0_offsetX",
+    "u_p_noisex0_offsetY",
+    "u_p_noisex0_roughness",
+    "u_p_noisex0_scale",
+    "u_p_noisex0_speed",
+  ],
+  "paramValues": "1c17b2bef9b3931792c4ef0d0a61:439",
+  "passes": [
+    {
+      "filter": "linear",
+      "format": "half",
+      "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_mkv2x0_x;
+uniform float u_p_mkv2x0_y;
+uniform float u_p_noisex0_scale;
+uniform float u_p_noisex0_detail;
+uniform float u_p_noisex0_roughness;
+uniform float u_p_noisex0_lacunarity;
+uniform float u_p_noisex0_speed;
+uniform float u_p_noisex0_offsetX;
+uniform float u_p_noisex0_offsetY;
+uniform float u_p_addx0_b;
+uniform float u_p_meltx0xc2_speed;
+uniform float u_p_meltx0xc2_swirl;
+uniform float u_p_meltx0xc2_curlSize;
+uniform float u_p_meltx0xc2_inject;
+uniform float u_p_meltx0xc2_fade;
+uniform float u_p_meltx0xc2_diffuse;
+uniform float u_p_meltx0xc2_reset;
+uniform sampler2D u_tex_tex_0;
+uniform sampler2D u_pass_melt_0_c2;
+uniform vec2 u_pass_melt_0_c2_px;
+uniform sampler2D u_passprev_melt_0_c2;
+uniform vec2 u_passprev_melt_0_c2_px;
+#define u_tex_tex_0_px (vec2(1.0) / u_resolution)
+uniform float u_frameDt;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+vec2 nzMod289(vec2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+
+
+vec3 nzMod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+
+
+vec4 nzMod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+
+
+float nzMod289(float x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+
+
+vec3 nzPermute(vec3 x) { return nzMod289(((x * 34.0) + 10.0) * x); }
+
+
+vec4 nzPermute(vec4 x) { return nzMod289(((x * 34.0) + 10.0) * x); }
+
+
+float nzPermute(float x) { return nzMod289(((x * 34.0) + 10.0) * x); }
+
+
+vec4 nzTaylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+
+
+float nzTaylorInvSqrt(float r) { return 1.79284291400159 - 0.85373472095314 * r; }
+
+
+
+
+
+
+float nzSimplex3(vec3 v) {
+    const vec2 C = vec2(1.0 / 6.0, 1.0 / 3.0);
+    const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+    vec3 i = floor(v + dot(v, C.yyy));
+    vec3 x0 = v - i + dot(i, C.xxx);
+    vec3 g = step(x0.yzx, x0.xyz);
+    vec3 l = 1.0 - g;
+    vec3 i1 = min(g.xyz, l.zxy);
+    vec3 i2 = max(g.xyz, l.zxy);
+    vec3 x1 = x0 - i1 + C.xxx;
+    vec3 x2 = x0 - i2 + C.yyy;
+    vec3 x3 = x0 - D.yyy;
+    i = nzMod289(i);
+    vec4 p = nzPermute(nzPermute(nzPermute(
+                i.z + vec4(0.0, i1.z, i2.z, 1.0))
+              + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+              + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+    float n_ = 0.142857142857;
+    vec3 ns = n_ * D.wyz - D.xzx;
+    vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+    vec4 x_ = floor(j * ns.z);
+    vec4 y_ = floor(j - 7.0 * x_);
+    vec4 x = x_ * ns.x + ns.yyyy;
+    vec4 y = y_ * ns.x + ns.yyyy;
+    vec4 h = 1.0 - abs(x) - abs(y);
+    vec4 b0 = vec4(x.xy, y.xy);
+    vec4 b1 = vec4(x.zw, y.zw);
+    vec4 s0 = floor(b0) * 2.0 + 1.0;
+    vec4 s1 = floor(b1) * 2.0 + 1.0;
+    vec4 sh = -step(h, vec4(0.0));
+    vec4 a0 = b0.xzyw + s0.xzyw * sh.xxyy;
+    vec4 a1 = b1.xzyw + s1.xzyw * sh.zzww;
+    vec3 p0 = vec3(a0.xy, h.x);
+    vec3 p1 = vec3(a0.zw, h.y);
+    vec3 p2 = vec3(a1.xy, h.z);
+    vec3 p3 = vec3(a1.zw, h.w);
+    vec4 norm = nzTaylorInvSqrt(vec4(dot(p0, p0), dot(p1, p1), dot(p2, p2), dot(p3, p3)));
+    p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+    vec4 m = max(0.6 - vec4(dot(x0, x0), dot(x1, x1), dot(x2, x2), dot(x3, x3)), 0.0);
+    m = m * m;
+    return 42.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
+}
+float nzNoiseSimplex3(vec3 p, float detail, float roughness, float lacunarity) {
+    float dt = clamp(detail, 0.0, 8.0);
+    float whole = floor(dt);
+    float sum = 0.0;
+    float amp = 1.0;
+    float norm = 0.0;
+    for (int i = 0; i <= 8; i++) {
+        if (float(i) > whole) break;
+        sum += amp * nzSimplex3(p);
+        norm += amp;
+        amp *= roughness;
+        p *= lacunarity;
+    }
+    float part = dt - whole;
+    if (part > 0.0) {
+        float more = sum + amp * nzSimplex3(p);
+        return mix(sum / norm, more / (norm + amp), part);
+    }
+    return sum / norm;
+}
+
+
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // UV: this pixel's place in the picture.
+    vec2 uv_0_uv = (vUv - 0.5) * 2.0;
+    uv_0_uv.x *= u_resolution.x / u_resolution.y;
+    // Make Vec2: straight down, 1 long: wet paint runs down.
+    vec2 mkv2_0_xy = vec2(u_p_mkv2x0_x, u_p_mkv2x0_y);
+    // Texture Input: the built-in photo Room and cat. Choose your own picture on this card. Its Texture is the picture Advect paints in.
+    vec4 tex_0_sample = texture2D(u_tex_tex_0, clamp((g_uv / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5), 0.0, 1.0));
+    vec3 tex_0_color = tex_0_sample.rgb;
+    float tex_0_alpha = tex_0_sample.a;
+    // Noise (Simplex, 3D): slowly changing bumps. Its Slope makes the melt run unevenly, in drips.
+    vec3 noise_0_P = vec3((uv_0_uv + vec2(u_p_noisex0_offsetX, u_p_noisex0_offsetY)) * (u_p_noisex0_scale), (u_time) * (u_p_noisex0_speed));
+    float noise_0_signed = nzNoiseSimplex3(noise_0_P, u_p_noisex0_detail, u_p_noisex0_roughness, u_p_noisex0_lacunarity);
+    float noise_0_value = clamp(noise_0_signed * 0.5 + 0.5, 0.0, 1.0);
+    vec3 noise_0_colour = clamp(vec3(noise_0_signed, nzNoiseSimplex3(noise_0_P + vec3(-71.7, 24.9, 53.1), u_p_noisex0_detail, u_p_noisex0_roughness, u_p_noisex0_lacunarity), nzNoiseSimplex3(noise_0_P + vec3(117.3, -43.5, 11.1), u_p_noisex0_detail, u_p_noisex0_roughness, u_p_noisex0_lacunarity)) * 0.5 + 0.5, 0.0, 1.0);
+    vec2 noise_0_slope = (vec2(nzNoiseSimplex3(noise_0_P + vec3(0.002, 0.0, 0.0), u_p_noisex0_detail, u_p_noisex0_roughness, u_p_noisex0_lacunarity), nzNoiseSimplex3(noise_0_P + vec3(0.0, 0.002, 0.0), u_p_noisex0_detail, u_p_noisex0_roughness, u_p_noisex0_lacunarity)) - noise_0_signed) * (250.0 * (u_p_noisex0_scale));
+    // Add: down plus the drips: the way the photo runs.
+    vec2 add_0_result = mkv2_0_xy + noise_0_slope;
+    // Advect: the photo is the Source. Each frame the picture already there runs 1.2 pixels along the flow (down, with drips), and Inject 0.02 lays the photo back in a little.
+    // The two pull against each other: the melt drags the picture down, the fresh photo pulls it back, so it smears and recovers at the same time. No Inject mask: the photo goes in everywhere.
+    float melt_0_c2_dt = u_frameDt > 0.0 ? u_frameDt : 1.0 / 60.0;
+    float melt_0_c2_fr = melt_0_c2_dt * 60.0;
+    vec2 melt_0_c2_f0 = add_0_result;
+    float melt_0_c2_sw = radians(u_p_meltx0xc2_swirl);
+    vec2 melt_0_c2_fl = vec2(cos(melt_0_c2_sw) * melt_0_c2_f0.x - sin(melt_0_c2_sw) * melt_0_c2_f0.y, sin(melt_0_c2_sw) * melt_0_c2_f0.x + cos(melt_0_c2_sw) * melt_0_c2_f0.y);
+    vec2 melt_0_c2_back = g_uv - melt_0_c2_fl * u_p_meltx0xc2_speed * melt_0_c2_fr * (2.0 / u_resolution.y);
+    vec2 melt_0_c2_st = (melt_0_c2_back / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5);
+    vec2 melt_0_c2_px = u_passprev_melt_0_c2_px;
+    vec4 melt_0_c2_c0 = texture2D(u_passprev_melt_0_c2, melt_0_c2_st);
+    vec4 melt_0_c2_nb = (texture2D(u_passprev_melt_0_c2, melt_0_c2_st + vec2(melt_0_c2_px.x, 0.0)) + texture2D(u_passprev_melt_0_c2, melt_0_c2_st - vec2(melt_0_c2_px.x, 0.0)) + texture2D(u_passprev_melt_0_c2, melt_0_c2_st + vec2(0.0, melt_0_c2_px.y)) + texture2D(u_passprev_melt_0_c2, melt_0_c2_st - vec2(0.0, melt_0_c2_px.y))) * 0.25;
+    vec4 melt_0_c2_old = mix(melt_0_c2_c0, melt_0_c2_nb, clamp(u_p_meltx0xc2_diffuse * melt_0_c2_fr, 0.0, 1.0));
+    melt_0_c2_old *= exp(-max(u_p_meltx0xc2_fade, 0.0) * melt_0_c2_dt) * step(u_p_meltx0xc2_reset, 0.5);
+    vec4 melt_0_c2_src = texture2D(u_tex_tex_0, (g_uv / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5));
+    float melt_0_c2_m = clamp(u_p_meltx0xc2_inject, 0.0, 1.0) * 1.0 * clamp(melt_0_c2_src.a, 0.0, 1.0);
+    float melt_0_c2_t = 1.0 - pow(1.0 - melt_0_c2_m, melt_0_c2_fr);
+    vec3 melt_0_c2_c = mix(melt_0_c2_old.rgb, melt_0_c2_src.rgb, melt_0_c2_t);
+    float melt_0_c2_a = clamp(mix(melt_0_c2_old.a, 1.0, melt_0_c2_t), 0.0, 1.0);
+    gl_FragColor = vec4(melt_0_c2_c, melt_0_c2_a);
+}",
+      "label": "Melt",
+      "live": true,
+      "nodeId": "melt",
+      "nodeIds": [
+        "melt__fbstep",
+        "run",
+        "drip",
+        "uv",
+        "down",
+        "photo",
+        "melt",
+      ],
+      "previous": true,
+      "reads": [],
+      "readsPrevious": [
+        "melt_0_c2",
+      ],
+      "scale": 1,
+      "slug": "melt_0_c2",
+      "wrap": "clamp",
+    },
+  ],
+  "success": true,
+  "textureUniforms": {
+    "u_tex_tex_0": "photo",
+  },
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > advectVoronoiVortex 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "0c0ad26370c3830a83ac6bb0aee9:1595",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "0373907ca79aee040f9b1b41d198:174",
+  "paramBindings": "1292e46c8aaf391aaa4e697bd281:649",
+  "paramUniforms": [
+    "u_p_addx0_b",
+    "u_p_mkv2x0_x",
+    "u_p_mkv2x0_y",
+    "u_p_vectorfielx0_scale",
+    "u_p_vectorfielx0_speed",
+    "u_p_vectorfielx0_strength",
+    "u_p_vorox0_jitter",
+    "u_p_vorox0_scale",
+    "u_p_vorox0_time_scale",
+    "u_p_whirlpoolx0xc2_curlSize",
+    "u_p_whirlpoolx0xc2_diffuse",
+    "u_p_whirlpoolx0xc2_fade",
+    "u_p_whirlpoolx0xc2_inject",
+    "u_p_whirlpoolx0xc2_reset",
+    "u_p_whirlpoolx0xc2_speed",
+    "u_p_whirlpoolx0xc2_swirl",
+  ],
+  "paramValues": "041db731f456511c82ecf9e1c15a:455",
+  "passes": [
+    {
+      "filter": "linear",
+      "format": "half",
+      "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_mkv2x0_x;
+uniform float u_p_mkv2x0_y;
+uniform float u_p_addx0_b;
+uniform float u_p_vorox0_scale;
+uniform float u_p_vorox0_jitter;
+uniform float u_p_vorox0_time_scale;
+uniform float u_p_vectorfielx0_scale;
+uniform float u_p_vectorfielx0_speed;
+uniform float u_p_vectorfielx0_strength;
+uniform float u_p_whirlpoolx0xc2_speed;
+uniform float u_p_whirlpoolx0xc2_swirl;
+uniform float u_p_whirlpoolx0xc2_curlSize;
+uniform float u_p_whirlpoolx0xc2_inject;
+uniform float u_p_whirlpoolx0xc2_fade;
+uniform float u_p_whirlpoolx0xc2_diffuse;
+uniform float u_p_whirlpoolx0xc2_reset;
+uniform sampler2D u_pass_whirlpool_0_c2;
+uniform vec2 u_pass_whirlpool_0_c2_px;
+uniform sampler2D u_passprev_whirlpool_0_c2;
+uniform vec2 u_passprev_whirlpool_0_c2_px;
+uniform float u_frameDt;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+// IQ-style 2D Voronoi returning minimum distance
+
+
+float voronoi(vec2 p, float jitter) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    float minDist = 8.0;
+    for (int y = -1; y <= 1; y++) {
+        for (int x = -1; x <= 1; x++) {
+            vec2 neighbor = vec2(float(x), float(y));
+            // One random point per cell, from the cell's own integer coordinates (fract() of them was always 0, so every cell had the same point).
+            vec2 point = noiseHash2(i + neighbor);
+            point = 0.5 + 0.5 * sin(jitter * 6.2831853 * point);
+            vec2 diff = neighbor + point - f;
+            float dist = length(diff);
+            minDist = min(minDist, dist);
+        }
+    }
+    return minDist;
+}
+vec2 voroPoint(vec2 cell, float jitter) {
+    // The cell's random point, as voronoi() places it (0–1 inside the cell).
+    return 0.5 + 0.5 * sin(jitter * 6.2831853 * noiseHash2(cell));
+}
+
+
+float voroDist(vec2 d, int metric) {
+    // Distance by metric: 0 straight line (Euclidean), 1 Manhattan, 2 Chebyshev.
+    if (metric == 1) return abs(d.x) + abs(d.y);
+    if (metric == 2) return max(abs(d.x), abs(d.y));
+    return length(d);
+}
+
+
+vec4 voroCells(vec2 p, float jitter, int metric) {
+    // x = F1, y = F2 (nearest and second-nearest point), zw = the nearest point's cell (whole numbers).
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    float f1 = 8.0;
+    float f2 = 8.0;
+    vec2 cell = i;
+    for (int y = -2; y <= 2; y++) {
+        for (int x = -2; x <= 2; x++) {
+            vec2 g = vec2(float(x), float(y));
+            float d = voroDist(g + voroPoint(i + g, jitter) - f, metric);
+            if (d < f1) { f2 = f1; f1 = d; cell = i + g; }
+            else if (d < f2) { f2 = d; }
+        }
+    }
+    return vec4(f1, f2, cell);
+}
+
+
+
+
+
+
+vec2 voroCellId(vec2 p, float jitter, int metric) { return voroCells(p, jitter, metric).zw; }
+
+
+
+
+vec3 voroCellColour(vec2 cell) {
+    // A steady random colour per cell.
+    return fract(sin(vec3(dot(cell, vec2(127.1, 311.7)), dot(cell, vec2(269.5, 183.3)), dot(cell, vec2(419.2, 371.9)))) * 43758.5453);
+}
+
+
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // Make Vec2: (0.5, 0.5). Vector Field's Vortex turns round the point (0.5, 0.5), so the UV is moved by this much to put that point in the middle of the picture.
+    vec2 mkv2_0_xy = vec2(u_p_mkv2x0_x, u_p_mkv2x0_y);
+    // UV: this pixel's place in the picture.
+    vec2 uv_0_uv = (vUv - 0.5) * 2.0;
+    uv_0_uv.x *= u_resolution.x / u_resolution.y;
+    // Add: UV moved so the whirlpool turns round the middle.
+    vec2 add_0_result = uv_0_uv + mkv2_0_xy;
+    // Voronoi: cells round random points. Cell colour is one flat random colour per cell.
+    float voro_0_dist = voronoi((uv_0_uv + u_time * u_p_vorox0_time_scale * vec2(0.13, 0.27)) * u_p_vorox0_scale, u_p_vorox0_jitter);
+    // Vector Field, Vortex: at every pixel a direction 1 long going round the middle, anticlockwise.
+    float vectorfiel_0_ang = atan(add_0_result.y - 0.5, add_0_result.x - 0.5) + 1.5708;
+    vec2  vectorfiel_0_dir = vec2(cos(vectorfiel_0_ang), sin(vectorfiel_0_ang)) * u_p_vectorfielx0_strength;
+    float vectorfiel_0_str = u_p_vectorfielx0_strength;
+    // Advect: the cells are laid in a little every frame (Inject 0.03, Mix) and everything is carried 1.5 pixels round the whirlpool.
+    // Every pixel moves the same distance, so the middle turns fast and the edge slowly: the cells wind into spiral arms, and the fresh cells keep showing through.
+    float whirlpool_0_c2_dt = u_frameDt > 0.0 ? u_frameDt : 1.0 / 60.0;
+    float whirlpool_0_c2_fr = whirlpool_0_c2_dt * 60.0;
+    vec2 whirlpool_0_c2_f0 = vectorfiel_0_dir;
+    float whirlpool_0_c2_sw = radians(u_p_whirlpoolx0xc2_swirl);
+    vec2 whirlpool_0_c2_fl = vec2(cos(whirlpool_0_c2_sw) * whirlpool_0_c2_f0.x - sin(whirlpool_0_c2_sw) * whirlpool_0_c2_f0.y, sin(whirlpool_0_c2_sw) * whirlpool_0_c2_f0.x + cos(whirlpool_0_c2_sw) * whirlpool_0_c2_f0.y);
+    vec2 whirlpool_0_c2_back = g_uv - whirlpool_0_c2_fl * u_p_whirlpoolx0xc2_speed * whirlpool_0_c2_fr * (2.0 / u_resolution.y);
+    vec2 whirlpool_0_c2_st = (whirlpool_0_c2_back / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5);
+    vec2 whirlpool_0_c2_px = u_passprev_whirlpool_0_c2_px;
+    vec4 whirlpool_0_c2_c0 = texture2D(u_passprev_whirlpool_0_c2, whirlpool_0_c2_st);
+    vec4 whirlpool_0_c2_nb = (texture2D(u_passprev_whirlpool_0_c2, whirlpool_0_c2_st + vec2(whirlpool_0_c2_px.x, 0.0)) + texture2D(u_passprev_whirlpool_0_c2, whirlpool_0_c2_st - vec2(whirlpool_0_c2_px.x, 0.0)) + texture2D(u_passprev_whirlpool_0_c2, whirlpool_0_c2_st + vec2(0.0, whirlpool_0_c2_px.y)) + texture2D(u_passprev_whirlpool_0_c2, whirlpool_0_c2_st - vec2(0.0, whirlpool_0_c2_px.y))) * 0.25;
+    vec4 whirlpool_0_c2_old = mix(whirlpool_0_c2_c0, whirlpool_0_c2_nb, clamp(u_p_whirlpoolx0xc2_diffuse * whirlpool_0_c2_fr, 0.0, 1.0));
+    whirlpool_0_c2_old *= exp(-max(u_p_whirlpoolx0xc2_fade, 0.0) * whirlpool_0_c2_dt) * step(u_p_whirlpoolx0xc2_reset, 0.5);
+    vec4 whirlpool_0_c2_src = vec4(voroCellColour(voroCellId((uv_0_uv + u_time * u_p_vorox0_time_scale * vec2(0.13, 0.27)) * u_p_vorox0_scale, u_p_vorox0_jitter, 0)), 1.0);
+    float whirlpool_0_c2_m = clamp(u_p_whirlpoolx0xc2_inject, 0.0, 1.0) * 1.0 * clamp(whirlpool_0_c2_src.a, 0.0, 1.0);
+    float whirlpool_0_c2_t = 1.0 - pow(1.0 - whirlpool_0_c2_m, whirlpool_0_c2_fr);
+    vec3 whirlpool_0_c2_c = mix(whirlpool_0_c2_old.rgb, whirlpool_0_c2_src.rgb, whirlpool_0_c2_t);
+    float whirlpool_0_c2_a = clamp(mix(whirlpool_0_c2_old.a, 1.0, whirlpool_0_c2_t), 0.0, 1.0);
+    gl_FragColor = vec4(whirlpool_0_c2_c, whirlpool_0_c2_a);
+}",
+      "label": "Whirlpool",
+      "live": true,
+      "nodeId": "drag",
+      "nodeIds": [
+        "drag__fbstep",
+        "whirl",
+        "centred",
+        "shift",
+        "uv",
+        "cells",
+        "drag",
+      ],
+      "previous": true,
+      "reads": [],
+      "readsPrevious": [
+        "whirlpool_0_c2",
+      ],
+      "scale": 1,
+      "slug": "whirlpool_0_c2",
+      "wrap": "clamp",
+    },
+  ],
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
 }
 `;
 

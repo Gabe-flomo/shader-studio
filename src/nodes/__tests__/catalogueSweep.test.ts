@@ -454,7 +454,8 @@ describe('C2: Brush, for painting into grid simulations', () => {
   });
 
   it('the 8 grid examples paint with a Brush (no Mouse → Circle SDF → Compare chain, no Play mapping for the button)', () => {
-    const keys = Object.keys(EXAMPLE_GRAPHS).filter(k => typesOf(EXAMPLE_GRAPHS[k].nodes).includes('brush'));
+    // The Advect examples (advectExamples.ts) paint with a Brush too, into Advect rather than a grid.
+    const keys = Object.keys(EXAMPLE_GRAPHS).filter(k => typesOf(EXAMPLE_GRAPHS[k].nodes).includes('brush') && !k.startsWith('advect'));
     expect(keys.length).toBe(8);
     for (const k of keys) {
       expect(EXAMPLE_GRAPHS[k].nodes.some(n => n.id === 'brushDist' || n.id === 'brushOn'), k).toBe(false);

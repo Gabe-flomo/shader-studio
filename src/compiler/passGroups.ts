@@ -29,8 +29,8 @@ function hasPass(nodes: GraphNode[]): boolean {
     // A Grid Rules node is a Pass too, once compiled (compiler/gridRulesExpand.ts).
     // So is a Curve Trace in Draw: Beam (compiler/curveBeamExpand.ts).
     // And a Shader Texture, a Pass with a graph inside (compiler/shaderTextureExpand.ts).
-    // And a Feedback (texture) (compiler/feedbackExpand.ts).
-    if (n.type === PASS_TYPE || n.type === 'gridRules' || n.type === 'shaderTexture' || (n.type === 'curveTrace' && n.params?.draw === 'beam') || n.type === 'textureFeedback' || n.type === 'dataTexture' || n.type === 'renderTargets') return true;
+    // And a Feedback (texture) or an Advect (compiler/feedbackExpand.ts).
+    if (n.type === PASS_TYPE || n.type === 'gridRules' || n.type === 'shaderTexture' || (n.type === 'curveTrace' && n.params?.draw === 'beam') || n.type === 'textureFeedback' || n.type === 'advect' || n.type === 'dataTexture' || n.type === 'renderTargets') return true;
     const sg = n.params?.subgraph as { nodes?: GraphNode[] } | undefined;
     if (sg?.nodes && hasPass(sg.nodes)) return true;
   }

@@ -28,6 +28,13 @@ import { FRAME_DT_UNIFORM, ReadTextureNode, TEXTURE_TOOLS_CATEGORY, TextureFadeN
 
 export const FEEDBACK_TYPE = 'textureFeedback';
 export const FEEDBACK_STEP_TYPE = 'textureFeedbackStep';
+/** Advect (advect.ts) is a sibling: the same Pass machinery, its own step. */
+export const ADVECT_TYPE = 'advect';
+export const ADVECT_STEP_TYPE = 'advectStep';
+/** Every node the compiler opens into a step and a Pass of its own (compiler/feedbackExpand.ts), with its step's type. */
+export const FEEDBACK_STEP_OF: Readonly<Record<string, string>> = { [FEEDBACK_TYPE]: FEEDBACK_STEP_TYPE, [ADVECT_TYPE]: ADVECT_STEP_TYPE };
+/** A Feedback (texture) or an Advect: a node that keeps a buffer of its own from frame to frame. */
+export const isFeedbackType = (type: string): boolean => Object.prototype.hasOwnProperty.call(FEEDBACK_STEP_OF, type);
 
 /** The sliders that are live uniforms (and can be wired from outside). */
 const LIVE_KEYS = ['tail', 'clean', 'tint', 'amount', 'zoom', 'turn', 'moveX', 'moveY', 'pivotX', 'pivotY', 'flowAmount', 'hueDrift'] as const;
@@ -162,7 +169,7 @@ export const TextureFeedbackStepNode: NodeDefinition = withParamSockets({
 
 /** The Pass params a Feedback node's settings give. */
 export function feedbackPassParams(n: GraphNode): Record<string, unknown> {
-  const label = typeof n.params.label === 'string' && n.params.label.trim() ? n.params.label.trim() : 'Feedback';
+  const label = typeof n.params.label === 'string' && n.params.label.trim() ? n.params.label.trim() : n.type === ADVECT_TYPE ? 'Advect' : 'Feedback';
   return {
     label, scale: sel(n.params.scale, FEEDBACK_SCALES, '1'), format: 'half', filter: 'linear',
     wrap: sel(n.params.wrap, FEEDBACK_WRAPS, 'clamp'), repeat: 1,

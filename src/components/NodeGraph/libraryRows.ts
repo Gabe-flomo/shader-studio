@@ -36,6 +36,8 @@ export const HIDDEN_NODES = new Set([
   'curveTraceBeamStep',
   // One frame of a Feedback (texture) buffer (compiler/feedbackExpand.ts).
   'textureFeedbackStep',
+  // One frame of an Advect buffer (compiler/feedbackExpand.ts).
+  'advectStep',
   // The shared memory Pass's program and a memory node's read (compiler/memoryExpand.ts).
   'memoryPack', 'memoryRead',
   // An Optical Flow's step and read (compiler/opticalFlowExpand.ts).
@@ -279,7 +281,7 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
     { label: 'Read', types: ['sampleTexture', 'readTexture', 'readChannels', 'readNeighbours', 'textureNeighbours', 'showData'] },
     { label: 'Shape the values', types: ['textureMask', 'textureLevels', 'curves', 'threshold', 'textureFlow', 'textureChange', 'distanceShape', 'heightLight', 'normalFromHeight'] },
     { label: 'Channels', types: ['channelPick', 'channelShuffle', 'channelColours', 'dataTexture', 'renderTargets'] },
-    { label: 'Pass and time', types: ['pass', 'textureFeedback', 'cache', 'cacheRead'] },
+    { label: 'Pass and time', types: ['pass', 'textureFeedback', 'advect', 'cache', 'cacheRead'] },
     { label: 'Look and track', types: ['depth', 'depthMix', 'segment', 'blobTrack', 'blobSpace', 'analyze', 'opticalFlow'] },
   ],
   Field: [

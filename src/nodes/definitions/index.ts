@@ -185,6 +185,7 @@ export { CurvesNode, ThresholdNode } from './curves';
 export { BoundsNode } from './bounds';
 export { GlitchNode } from './glitch';
 export { TextureFeedbackNode, TextureFeedbackStepNode } from './textureFeedback';
+export { AdvectNode, AdvectStepNode } from './advect';
 export { DataTextureNode, DataTexturePackNode, ReadChannelsNode } from './dataTexture';
 export { RenderTargetsNode, RenderTargetsPackNode } from './renderTargets';
 export { ReadNeighboursNode } from './readNeighbours';
@@ -340,6 +341,7 @@ import { CurvesNode, ThresholdNode } from './curves';
 import { BoundsNode } from './bounds';
 import { GlitchNode } from './glitch';
 import { TextureFeedbackNode, TextureFeedbackStepNode } from './textureFeedback';
+import { AdvectNode, AdvectStepNode } from './advect';
 import { DataTextureNode, DataTexturePackNode, ReadChannelsNode } from './dataTexture';
 import { RenderTargetsNode, RenderTargetsPackNode } from './renderTargets';
 import { ReadNeighboursNode } from './readNeighbours';
@@ -654,6 +656,9 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   // Feedback (texture): a Pass, Fade and Read in one node (compiler/feedbackExpand.ts opens it).
   textureFeedback: TextureFeedbackNode,
   textureFeedbackStep: TextureFeedbackStepNode,
+  // Advect (docs/advect.md): Feedback's sibling: the picture carried along a flow every frame (smoke, ink, marbling)
+  advect: AdvectNode,
+  advectStep: AdvectStepNode,
   dataTexture: DataTextureNode,
   dataTexturePack: DataTexturePackNode,
   readChannels: ReadChannelsNode,

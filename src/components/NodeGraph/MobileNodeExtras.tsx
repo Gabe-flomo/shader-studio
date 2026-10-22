@@ -47,7 +47,7 @@ import { EmitScanCardBody } from '../splats/EmitScanCardBody';
 import { isAudioToolType } from '../../nodes/definitions/audioTools';
 
 /** Cards whose body is always a live picture on desktop (a Pass's texture, a Shuffle's channels…): shown here too. */
-const ALWAYS_VIZ = new Set(['pass', 'dataTexture', 'renderTargets', 'textureFeedback', 'trailField', 'channelShuffle']);
+const ALWAYS_VIZ = new Set(['pass', 'dataTexture', 'renderTargets', 'textureFeedback', 'advect', 'trailField', 'channelShuffle']);
 
 export function MobileNodeExtras({ node, nodes }: { node: GraphNode; nodes: GraphNode[] }) {
   const tk = useTokens();

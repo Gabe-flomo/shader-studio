@@ -19,18 +19,22 @@
  * buffer as it was a frame ago: Texture becomes the Pass's Previous, and Color / Alpha a read of it
  * (`<id>__fbprev`).
  *
- * Graphs without a Feedback node come back as they are (the same array).
+ * Advect (nodes/definitions/advect.ts) opens exactly the same way, into an `advectStep` instead: its buffer is a
+ * Pass like Feedback's, with the same loops, reset, exports and pages.
+ *
+ * Graphs without a Feedback or Advect node come back as they are (the same array).
  */
 import type { GraphNode } from '../types/nodeGraph';
 import { PassNode } from '../nodes/definitions/passes';
-import { FEEDBACK_STEP_TYPE, FEEDBACK_TYPE, feedbackPassParams } from '../nodes/definitions/textureFeedback';
+import { FEEDBACK_STEP_OF, feedbackPassParams, isFeedbackType } from '../nodes/definitions/textureFeedback';
 
 type Wire = { nodeId: string; outputKey: string };
 
 export const feedbackStepId = (id: string) => `${id}__fbstep`;
 export const feedbackPrevId = (id: string) => `${id}__fbprev`;
 
-export const isFeedbackNode = (n: GraphNode): boolean => n.type === FEEDBACK_TYPE;
+/** A Feedback (texture) or an Advect (nodes/definitions/advect.ts): both open the same way, each into its own step. */
+export const isFeedbackNode = (n: GraphNode): boolean => isFeedbackType(n.type);
 
 const passOutputs = (): GraphNode['outputs'] => Object.fromEntries(Object.entries(PassNode.outputs).map(([k, o]) => [k, { type: o.type, label: o.label }]));
 const wire = (nodeId: string, outputKey: string, type: GraphNode['inputs'][string]['type'], label: string) => ({ type, label, connection: { nodeId, outputKey } });
@@ -39,7 +43,7 @@ const wire = (nodeId: string, outputKey: string, type: GraphNode['inputs'][strin
 function delayed(c: Wire, byId: Map<string, GraphNode>): boolean {
   const src = byId.get(c.nodeId);
   if (!src) return true;
-  if ((src.type === 'pass' || src.type === FEEDBACK_TYPE) && (c.outputKey === 'previous' || c.outputKey === 'step' || c.outputKey === 'steps')) return true;
+  if ((src.type === 'pass' || isFeedbackType(src.type)) && (c.outputKey === 'previous' || c.outputKey === 'step' || c.outputKey === 'steps')) return true;
   return false;
 }
 
@@ -108,7 +112,7 @@ export function expandFeedback(nodes: GraphNode[]): { nodes: GraphNode[]; bindAs
     if (!isFeedbackNode(n) || n.bypassed) { out.push(n); continue; }
     const wired = Object.fromEntries(Object.entries(n.inputs).filter(([, i]) => i.connection).map(([k, i]) => [k, { ...i, connection: { ...i.connection! } }]));
     const step: GraphNode = {
-      id: feedbackStepId(n.id), type: FEEDBACK_STEP_TYPE, position: n.position,
+      id: feedbackStepId(n.id), type: FEEDBACK_STEP_OF[n.type], position: n.position,
       outputs: { color: { type: 'vec3', label: 'Color' }, alpha: { type: 'float', label: 'Alpha' } },
       params: { ...n.params, __bindAs: n.id },
       inputs: { ...wired, prev: wire(n.id, 'previous', 'texture', 'Buffer a frame ago') },

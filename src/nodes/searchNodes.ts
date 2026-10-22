@@ -21,6 +21,7 @@ export const SEARCH_WORDS: Record<string, string[]> = {
   posterize: ['Banding', 'Colour steps'],
   dither: ['Dithering', 'Dots', 'Newspaper', 'Print'],
   normalFromHeight: ['Embossed', 'Terrain', 'Shiny'],
+  advect: ['Smoke', 'Ink', 'Marbling', 'Fluid', 'Liquid', 'Flow', 'TouchDesigner feedback displace'],
   convolve: ['Sharpen', 'Emboss', 'Edge detect', 'Filter', 'Kernel', 'TouchDesigner convolve'],
   sdfBevel: ['Bevel', 'Emboss', '3D button', 'Raised', 'Engraved', 'Inset', 'Drop shadow'],
   glitch: ['VHS'],

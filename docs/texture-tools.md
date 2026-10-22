@@ -120,6 +120,9 @@ wired for you (`nodes/definitions/textureFeedback.ts`).
   Texture into its Flow). Such reads take the buffer as it was a frame ago (Texture becomes
   the Pass's Previous, Color and Alpha a read of it).
 - **Bypassed**, it passes the picture through with no trail.
+- **Advect** (`docs/advect.md`) is its sibling for smoke, ink and marbling: the same step-and-Pass
+  machinery (`advectStep` instead of `textureFeedbackStep`), with the picture carried along a Flow
+  per pixel, Fade per second, Soften, Inject and Mix / Add / Max.
 
 ## Change on a video
 

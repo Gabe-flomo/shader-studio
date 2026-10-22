@@ -5500,6 +5500,7 @@ function NodeInlineVizSwitch({ node, onEnterGroup }: { node: GraphNode; onEnterG
     case 'dataTexture':      return <DataTextureThumb        node={node} />;
     case 'renderTargets':    return <PassThumbViz            node={node} />;
     case 'textureFeedback':  return <PassThumbViz            node={node} />;
+    case 'advect':           return <PassThumbViz            node={node} />;
     case 'agentsGroup':      return <AgentsGroupViz          node={node} onEnterGroup={onEnterGroup} />;
     case 'trailField':       return <TrailThumbViz           node={node} />;
     case 'channelShuffle':   return <ShuffleGridViz          node={node} />;
