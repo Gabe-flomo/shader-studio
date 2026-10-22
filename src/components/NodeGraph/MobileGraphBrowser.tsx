@@ -21,6 +21,7 @@ import { useNodeGraphStore, getActiveNodes, getActiveLooseGroups } from '../../s
 import { getNodeDefinitionFor } from '../../nodes/definitions';
 import { isAssignable, legacyAssignOp } from '../../nodes/assignable';
 import { GROUP_PORT_SENTINEL } from '../../types/nodeGraph';
+import { inputTakes } from '../../nodes/autoType';
 import type { GraphNode, DataType, LooseGroup, ParamDef } from '../../types/nodeGraph';
 import { TYPE_COLORS } from './typeColors';
 import { NodeSearchPalette } from './NodeSearchPalette';
@@ -185,13 +186,19 @@ function wouldCreateCycle(nodes: GraphNode[], sourceId: string, targetId: string
 
 // `sourceType` finds a compatible INPUT on `node` — node.inputs are the sink,
 // so the wire runs sourceType -> inp.type.
+// An exact or plain-rule fit first; an Auto math node's main socket (it retypes, nodes/autoType.ts) after.
 function firstCompatibleInputKey(node: GraphNode, sourceType: string): string | undefined {
-  return Object.entries(node.inputs).find(([, inp]) => typesCompatible(sourceType, inp.type))?.[0];
+  const ins = Object.entries(node.inputs);
+  return ins.find(([, inp]) => typesCompatible(sourceType, inp.type))?.[0]
+    ?? ins.find(([k, inp]) => inputTakes(node, k, inp.type, sourceType))?.[0];
 }
 // `targetType` finds a compatible OUTPUT on `node` — node.outputs are the
 // source, so the wire runs out.type -> targetType.
-function firstCompatibleOutputKey(node: GraphNode, targetType: string): string | undefined {
-  return Object.entries(node.outputs).find(([, out]) => typesCompatible(out.type, targetType))?.[0];
+// `into` is the input the wire goes to, when known: an Auto one takes any number or vector.
+function firstCompatibleOutputKey(node: GraphNode, targetType: string, into?: { node: GraphNode | undefined; key: string }): string | undefined {
+  const outs = Object.entries(node.outputs);
+  return outs.find(([, out]) => typesCompatible(out.type, targetType))?.[0]
+    ?? (into?.node ? outs.find(([, out]) => inputTakes(into.node!, into.key, targetType, out.type))?.[0] : undefined);
 }
 
 type PendingSocket =
@@ -1948,7 +1955,7 @@ export function MobileGraphBrowser() {
   const handleNodePlacedForInput = (newId: string, socket: Extract<PendingSocket, { dir: 'input' }>) => {
     const newNode = getFreshActiveNodes().find(n => n.id === newId);
     if (!newNode) return;
-    const outKey = firstCompatibleOutputKey(newNode, socket.type);
+    const outKey = firstCompatibleOutputKey(newNode, socket.type, { node: getFreshActiveNodes().find(n => n.id === socket.nodeId), key: socket.key });
     if (outKey) connectNodes(newId, outKey, socket.nodeId, socket.key);
     pushFocus(newId);
   };
@@ -1983,11 +1990,12 @@ export function MobileGraphBrowser() {
   // vec3→vec2, ...); among equally-good candidates, first-in-nodes wins —
   // not a meaningful ordering on its own, just a deterministic one so the
   // suggestion doesn't change between renders.
-  const bestConnectCandidate = (targetNodeId: string, type: string): { node: GraphNode; outKey: string } | undefined => {
+  const bestConnectCandidate = (targetNodeId: string, type: string, inputKey?: string): { node: GraphNode; outKey: string } | undefined => {
     let best: { node: GraphNode; outKey: string; exact: boolean } | undefined;
+    const into = inputKey ? { node: nodes.find(n => n.id === targetNodeId), key: inputKey } : undefined;
     for (const n of nodes) {
       if (n.id === targetNodeId || wouldCreateCycle(nodes, n.id, targetNodeId)) continue;
-      const outKey = firstCompatibleOutputKey(n, type);
+      const outKey = firstCompatibleOutputKey(n, type, into);
       if (!outKey) continue;
       const exact = n.outputs[outKey].type === type;
       if (!best || (exact && !best.exact)) best = { node: n, outKey, exact };
@@ -1997,11 +2005,12 @@ export function MobileGraphBrowser() {
   // Same scan as bestConnectCandidate, but the full list (exact-type
   // matches first) — used by an expanded WIRING row's inline candidate
   // list, which replaced the separate "Connect Existing" sheet for inputs.
-  const allConnectCandidatesFor = (targetNodeId: string, type: string): Array<{ node: GraphNode; outKey: string; exact: boolean }> => {
+  const allConnectCandidatesFor = (targetNodeId: string, type: string, inputKey?: string): Array<{ node: GraphNode; outKey: string; exact: boolean }> => {
     const results: Array<{ node: GraphNode; outKey: string; exact: boolean }> = [];
+    const into = inputKey ? { node: nodes.find(n => n.id === targetNodeId), key: inputKey } : undefined;
     for (const n of nodes) {
       if (n.id === targetNodeId || wouldCreateCycle(nodes, n.id, targetNodeId)) continue;
-      const outKey = firstCompatibleOutputKey(n, type);
+      const outKey = firstCompatibleOutputKey(n, type, into);
       if (!outKey) continue;
       results.push({ node: n, outKey, exact: n.outputs[outKey].type === type });
     }
@@ -2012,18 +2021,19 @@ export function MobileGraphBrowser() {
   // ── Connect-existing candidate list ──────────────────────────────────────
   const connectCandidates = useMemo(() => {
     if (!connectPicker) return [];
+    const pickerNode = nodes.find(n => n.id === connectPicker.nodeId);
     if (connectPicker.dir === 'input') {
       // picking a node whose OUTPUT will feed this input
       return nodes.filter(n =>
         n.id !== connectPicker.nodeId &&
-        Object.values(n.outputs).some(o => typesCompatible(o.type, connectPicker.type)) &&
+        Object.values(n.outputs).some(o => (pickerNode ? inputTakes(pickerNode, connectPicker.key, connectPicker.type, o.type) : typesCompatible(o.type, connectPicker.type))) &&
         !wouldCreateCycle(nodes, n.id, connectPicker.nodeId),
       );
     }
     // picking a node whose INPUT will consume this output
     return nodes.filter(n =>
       n.id !== connectPicker.nodeId &&
-      Object.values(n.inputs).some(i => typesCompatible(connectPicker.type, i.type)) &&
+      Object.entries(n.inputs).some(([k, i]) => inputTakes(n, k, i.type, connectPicker.type)) &&
       !wouldCreateCycle(nodes, connectPicker.nodeId, n.id),
     );
   }, [connectPicker, nodes]);
@@ -2033,7 +2043,7 @@ export function MobileGraphBrowser() {
     const other = nodes.find(n => n.id === otherId);
     if (!other) return;
     if (connectPicker.dir === 'input') {
-      const outKey = firstCompatibleOutputKey(other, connectPicker.type);
+      const outKey = firstCompatibleOutputKey(other, connectPicker.type, { node: nodes.find(n => n.id === connectPicker.nodeId), key: connectPicker.key });
       if (outKey) connectNodes(otherId, outKey, connectPicker.nodeId, connectPicker.key);
     } else {
       const inKey = firstCompatibleInputKey(other, connectPicker.type);
@@ -2404,12 +2414,12 @@ export function MobileGraphBrowser() {
       // allConnectCandidatesFor), so these are the most sensible matches; a
       // long candidate list buried the actually-useful ones in scroll. Search
       // ("+ Add New Node" below) still reaches anything past the top 3.
-      const allCandidates = (isExpanded && !upstream && !isPortSourced) ? allConnectCandidatesFor(node.id, inp.type) : [];
+      const allCandidates = (isExpanded && !upstream && !isPortSourced) ? allConnectCandidatesFor(node.id, inp.type, key) : [];
       const candidates = allCandidates.slice(0, 3);
       // Collapsed-row hint — lets a glance down the whole Wiring list show
       // which open sockets already have a good suggestion, without
       // expanding each one to find out.
-      const ghostCandidate = (!isExpanded && !upstream && !isPortSourced) ? bestConnectCandidate(node.id, inp.type) : undefined;
+      const ghostCandidate = (!isExpanded && !upstream && !isPortSourced) ? bestConnectCandidate(node.id, inp.type, key) : undefined;
       const typeColor = TYPE_COLORS[inp.type] ?? tk.text.faint;
       const candStyle: React.CSSProperties = {
         height: 38, display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', border: 0, borderRadius: 10, cursor: 'pointer',

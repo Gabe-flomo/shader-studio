@@ -1,3 +1,4 @@
+import { inputTakes } from '../../nodes/autoType';
 import type React from 'react';
 /**
  * MobileNodeBrowser — the "Nodes" tab inside the mobile Examples sheet.
@@ -20,7 +21,6 @@ import { getNodeDefinition, getNodeDefinitionFor } from '../../nodes/definitions
 import { useUserNodesVersion } from '../../nodes/userNodes/useUserNodes';
 import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
 import { useNodeGraphStore, getActiveNodes } from '../../store/useNodeGraphStore';
-import { typesCompatible } from '../../lib/typesCompatible';
 import { HIDDEN_TYPES } from './nodeCategoryMeta';
 import { libraryLayout, rowLabel, rowOfType } from './libraryRows';
 import { useHiddenHere } from './useAddScope';
@@ -76,13 +76,14 @@ function pairingsFor(newDef: NodeDefinition, existing: GraphNode): Pairing[] {
   const out: Pairing[] = [];
   for (const [newInKey, newIn] of Object.entries(newDef.inputs)) {
     for (const [exOutKey, exOut] of Object.entries(existingDef.outputs)) {
-      if (!typesCompatible(exOut.type, newIn.type)) continue;
+      // An Auto math node (nodes/autoType.ts) takes any number or vector into its main sockets.
+      if (!inputTakes({ type: newDef.type, params: newDef.defaultParams ?? {} }, newInKey, newIn.type, exOut.type)) continue;
       out.push({ direction: 'intoNew', newKey: newInKey, newLabel: newIn.label, existingKey: exOutKey, existingLabel: exOut.label, exact: exOut.type === newIn.type });
     }
   }
   for (const [newOutKey, newOut] of Object.entries(newDef.outputs)) {
     for (const [exInKey, exIn] of Object.entries(existingDef.inputs)) {
-      if (!typesCompatible(newOut.type, exIn.type)) continue;
+      if (!inputTakes(existing, exInKey, exIn.type, newOut.type)) continue;
       out.push({ direction: 'fromNew', newKey: newOutKey, newLabel: newOut.label, existingKey: exInKey, existingLabel: exIn.label, exact: newOut.type === exIn.type });
     }
   }

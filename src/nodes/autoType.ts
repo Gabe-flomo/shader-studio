@@ -21,7 +21,7 @@
  */
 import type { DataType, GraphNode, SubgraphData } from '../types/nodeGraph';
 import { VECTORIZABLE_NODES, VEC4_CAPABLE_NODES } from './definitions/math';
-import { coerce } from '../lib/typesCompatible';
+import { coerce, typesCompatible } from '../lib/typesCompatible';
 import { wireType } from '../compiler/sendReceive';
 
 /** Vectorizable nodes whose type is only ever picked on the card. */
@@ -61,6 +61,15 @@ export function currentType(node: Pick<GraphNode, 'params'>): DataType {
 export function acceptsByRetype(node: Pick<GraphNode, 'type' | 'params'>, inputKey: string, t: string): boolean {
   if (!isAutoTyped(node) || !typedInputKeys(node.type).includes(inputKey) || !(t in RANK)) return false;
   return t !== 'vec4' || VEC4_CAPABLE_NODES.has(node.type);
+}
+
+/**
+ * Can a wire of `fromType` go into this input: by the plain wire rule, or by an Auto node retyping?
+ * The pickers that offer sockets (Smart connect, the mobile connect lists, search) use this, so they
+ * offer what a drag would take. `node` may be a definition's defaults (a node not placed yet).
+ */
+export function inputTakes(node: Pick<GraphNode, 'type' | 'params'>, inputKey: string, inputType: string, fromType: string): boolean {
+  return typesCompatible(fromType, inputType) || acceptsByRetype(node, inputKey, fromType);
 }
 
 /** The widest of these types, or null when there are none. */

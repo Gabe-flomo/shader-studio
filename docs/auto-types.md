@@ -48,8 +48,9 @@ The type row reads **auto · f · v2 · v3 · v4**.
 - Dropping a node onto a wire already took the wire's type (`nodeDrop.insertIntoWire`). It still does,
   and the node stays Auto.
 
-## Not done
+## The pickers
 
-The suggestion features (Smart connect, the mobile connect pickers, the Related group in search)
-still offer sockets by the plain wire rule. They don't yet offer an Auto float Multiply for a vec3
-output. Dragging a wire there works.
+Smart connect, the mobile connect lists (Connect existing, the wiring rows' candidates, a new node
+placed for a socket) and the mobile new-node pairings all use `inputTakes()`. They offer an Auto
+node's main sockets to any number or vector, as a drag would. A plain-rule fit still ranks first.
+Search's Related group already did this through `genTypeFor` (`wireFit.ts`).

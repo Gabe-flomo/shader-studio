@@ -16,7 +16,8 @@ vi.hoisted(() => {
 import type { GraphNode } from '../../types/nodeGraph';
 import { getActiveNodes, useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { compileGraph } from '../../compiler/graphCompiler';
-import { acceptsByRetype, isAutoTyped, isAutoTypeKind, planRetypes, widest } from '../autoType';
+import { suggestConnections } from '../../components/NodeGraph/smartConnect';
+import { acceptsByRetype, inputTakes, isAutoTyped, isAutoTypeKind, planRetypes, widest } from '../autoType';
 
 const S = () => useNodeGraphStore.getState();
 const level = () => getActiveNodes(S().nodes, S().activeGroupPath) ?? S().nodes;
@@ -180,5 +181,27 @@ describe('planRetypes', () => {
     const m = add('multiply', 400);
     const p = planRetypes(level(), undefined, [m]);
     expect(p.ok && p.types.size).toBe(0);
+  });
+});
+
+describe('the pickers offer Auto sockets', () => {
+  it('Smart connect offers a float Multiply’s A to a colour, but not a locked one or Sin’s Freq', () => {
+    const c = vec3Src();
+    const m = add('multiply', 400);
+    const locked = add('multiply', 400);
+    S().changeNodeVectorType(locked, 'a', 'result', 'float', { lock: true });
+    const s = add('sin', 400);
+    level().forEach(n => { if (n.id !== c) n.position.x = 400; else n.position.x = 0; });
+    const got = suggestConnections({ nodes: level(), from: { nodeId: c, key: firstOut(c), dir: 'out' }, socketPos: () => null, labelOf: n => n.id });
+    const keys = got.map(g => `${g.nodeId}.${g.key}`);
+    expect(keys).toContain(`${m}.a`);
+    expect(keys).not.toContain(`${locked}.a`);
+    expect(keys).not.toContain(`${s}.freq`);
+  });
+
+  it('inputTakes: the plain rule, or an Auto main socket', () => {
+    expect(inputTakes({ type: 'multiply', params: {} }, 'a', 'float', 'vec3')).toBe(true);
+    expect(inputTakes({ type: 'multiply', params: { typeLocked: true } }, 'a', 'float', 'vec3')).toBe(false);
+    expect(inputTakes({ type: 'output', params: {} }, 'color', 'vec3', 'float')).toBe(true);
   });
 });

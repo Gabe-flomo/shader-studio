@@ -1,5 +1,6 @@
 import type { GraphNode } from '../../types/nodeGraph';
 import { typesCompatible } from '../../lib/typesCompatible';
+import { inputTakes } from '../../nodes/autoType';
 
 /**
  * Smart connect: the three most likely places to wire a clicked socket, among nodes already on
@@ -85,7 +86,7 @@ export function suggestConnections(opts: {
     if (!onFlowSide) continue;
     if (from.dir === 'out') {
       for (const [key, input] of Object.entries(node.inputs)) {
-        if (key.startsWith('__') || !typesCompatible(type, input.type)) continue;
+        if (key.startsWith('__') || !inputTakes(node, key, input.type, type)) continue;
         // Already fed by this very socket: nothing to do
         if (input.connection?.nodeId === origin.id && input.connection.outputKey === from.key) continue;
         const p = socketPos(node.id, 'in', key) ?? node.position;
@@ -100,7 +101,7 @@ export function suggestConnections(opts: {
       }
     } else {
       for (const [key, output] of Object.entries(node.outputs)) {
-        if (key.startsWith('__') || !typesCompatible(output.type, type)) continue;
+        if (key.startsWith('__') || !inputTakes(origin, from.key, type, output.type)) continue;
         const p = socketPos(node.id, 'out', key) ?? node.position;
         out.push({ nodeId: node.id, key, nodeLabel: labelOf(node), socketLabel: output.label, type: output.type, exact: output.type === type, distance: Math.hypot(p.x - originPos.x, p.y - originPos.y) });
       }

@@ -57,7 +57,7 @@ Built: effect chains (filter, echo, reverb, distortion, compressor) on each soun
 
 ## Nodes infer their types (asked 22 October 2026)
 
-Built: per-channel math nodes are **Auto** and take the widest type wired into them; a picked type locks it; Dot, Length, Normalize, Constant and Bounds keep their pills. See `auto-types.md`. Left: the suggestion pickers (Smart connect, mobile connect, search's Related group) don't offer Auto sockets for wider types yet.
+Built: per-channel math nodes are **Auto** and take the widest type wired into them; a picked type locks it; Dot, Length, Normalize, Constant and Bounds keep their pills. See `auto-types.md`.
 
 ## Later / skipped
 
