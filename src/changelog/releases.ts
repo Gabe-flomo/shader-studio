@@ -39,6 +39,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.327',
+    date: '2026-10-22',
+    title: 'Ease, Convolve and Bevel',
+    highlights: [
+      { area: 'Studio', text: 'Ease: named motion curves (Sine, Cubic, Back, Elastic, Bounce…) In, Out or both, playing once, on repeat or there and back, with a hold at each end. Value, Progress and Speed out.', link: { kind: 'doc', path: 'docs/ease-node.md' } },
+      { area: 'Studio', text: 'Convolve: sharpen, unsharp mask, emboss, outline, edges and blurs from one node, or type your own 3×3 or 5×5 kernel on the card. Works on a picture, a Pass or any chain of nodes.', link: { kind: 'doc', path: 'docs/convolve.md' } },
+      { area: 'Studio', text: 'SDF Bevel: any shape lit as if raised or engraved, with six bevel profiles, a soft drop shadow and an outline. Icons, badges, tiles and terraced maps.', link: { kind: 'doc', path: 'docs/sdf-bevel.md' } },
+      { area: 'Studio', text: '18 new examples in three folders: Ease & Motion, Convolve and Bevel.', link: { kind: 'example', key: 'bevelAppIcon' } },
+    ],
+  },
+  {
     id: '2026.10.326',
     date: '2026-10-22',
     title: 'Noise, bumps and dither',
