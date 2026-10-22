@@ -27,6 +27,7 @@ import { DATA_EXAMPLE_INDEX } from './dataExampleIndex';
 import { GRID_EXAMPLE_INDEX } from './gridExamples';
 import { BOUNDS_EXAMPLE_INDEX } from './boundsExamples';
 import { SURFACE_EXAMPLE_INDEX, SURFACE_SHOWCASE_KEYS } from './surfaceExamples';
+import { BEVEL_EXAMPLE_INDEX, BEVEL_SHOWCASE_KEYS } from './bevelExamples';
 import { NOISE_EXAMPLE_INDEX } from './noiseExamples';
 import { CONVOLVE_EXAMPLE_INDEX, CONVOLVE_SHOWCASE_KEYS } from './convolveExamples';
 import { PASS_EXAMPLE_INDEX } from './passExamples';
@@ -244,6 +245,8 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...BOUNDS_EXAMPLE_INDEX,
   // Normal from Height and Dither (surfaceExamples.ts, docs/normal-from-height.md, docs/dither.md): bumps lit by a lamp, dithering.
   ...SURFACE_EXAMPLE_INDEX,
+  // SDF Bevel (bevelExamples.ts, docs/sdf-bevel.md): flat shapes lit as if raised or engraved.
+  ...BEVEL_EXAMPLE_INDEX,
   // Noise (noiseExamples.ts, docs/noise-node.md): the Noise node's looks, and Voronoi's cell features.
   ...NOISE_EXAMPLE_INDEX,
   // Convolve (convolveExamples.ts, docs/convolve.md): every kernel filter in one node.
@@ -358,6 +361,7 @@ export const EXAMPLE_FOLDERS: ExampleFolder[] = [
   { label: "Passes",            color: ctp.maroon, keys: ['passFeedbackTrails','passGlowBright','passJumpFlood','passEdgesFromPicture','displaceNoiseMap'] },
   { label: "Bump & Dither",     color: ctp.yellow, keys: SURFACE_SHOWCASE_KEYS },
   { label: "Convolve",          color: ctp.flamingo, keys: CONVOLVE_SHOWCASE_KEYS },
+  { label: "Bevel",             color: ctp.peach, keys: BEVEL_SHOWCASE_KEYS },
   { label: "Effects & Lens",    color: ctp.mauve, keys: ['raysLightText','motionBlurTrails','dofDepthBlur','cmykNoise','crtTv'] },
   { label: "Texture tools",     color: ctp.flamingo, keys: ['ttRenderTargets','ttDataAdvect','ttCacheTimeMachine','ttDistanceRings','ttFeedbackTunnel'] },
   { label: "Seeing: segment, flow, track", color: ctp.flamingo, keys: ['ttSegmentPeople','ttSegmentPick','ttOpticalFlow','ttAnalyze','ttBlobStamp'] },

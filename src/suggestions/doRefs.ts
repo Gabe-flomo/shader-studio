@@ -103,6 +103,7 @@ export const TYPE_WORDS: Readonly<Record<string, string[]>> = {
   noise: ['fbm', 'noiseFloat', 'voronoi', 'noise'], fbm: ['fbm'], clouds: ['fbm'], cells: ['voronoi'],
   palette: ['palette', 'stopPalette'], gradient: ['gradient'],
   fill: ['sdfFill'],
+  bevel: ['sdfBevel'], emboss: ['sdfBevel'], engrave: ['sdfBevel'],
   uv: ['uv'], space: ['uv'], coordinates: ['uv'],
   output: ['output'],
   time: ['time'], clock: ['time'],

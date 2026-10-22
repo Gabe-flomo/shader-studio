@@ -28,6 +28,8 @@ const SKIP = new Set(['output', 'vec4Output']);
  * declared but legitimately unread; a `showWhen` can't express a connection.
  */
 const CONNECTION_GATED = new Set([
+  // SDF Bevel: the drop shadow reads the distance towards the light, so only when Distance is a field function
+  'sdfBevel.shadow', 'sdfBevel.shadowDistance', 'sdfBevel.shadowSoftness',
   'normalFromHeight.distance', // Sample distance: only when Height is a field function (a wired chain that can be read elsewhere)
   'neighborDist.dispScale',   // only in the hash-displacement path (cellID wired, displacement not)
   'glassScene.diffuseness',   // the node emits no code at all until its scene inputs are wired

@@ -22,6 +22,7 @@ export const SEARCH_WORDS: Record<string, string[]> = {
   dither: ['Dithering', 'Dots', 'Newspaper', 'Print'],
   normalFromHeight: ['Embossed', 'Terrain', 'Shiny'],
   convolve: ['Sharpen', 'Emboss', 'Edge detect', 'Filter', 'Kernel', 'TouchDesigner convolve'],
+  sdfBevel: ['Bevel', 'Emboss', '3D button', 'Raised', 'Engraved', 'Inset', 'Drop shadow'],
   glitch: ['VHS'],
   crtScreen: ['CRT', 'Old TV'],
   scanlines: ['CRT', 'VHS', 'TV lines'],

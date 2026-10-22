@@ -256,7 +256,7 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
   ],
   SDF: [
     { label: 'Combine', types: ['sdfUnion', 'sdfIntersect', 'sdfSubtract'] },
-    { label: 'Modify & fill', types: ['sdfOffset', 'sdfOnion', 'sdfSharpen', 'sdfFill'] },
+    { label: 'Modify & fill', types: ['sdfOffset', 'sdfOnion', 'sdfSharpen', 'sdfFill', 'sdfBevel'] },
   ],
   '2D Space': [
     { label: 'Basic',   types: ['transform', 'mirror2D', 'motion2D', 'shear', 'perspective2d', 'fract', 'displace'] },

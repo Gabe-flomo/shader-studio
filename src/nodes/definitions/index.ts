@@ -175,6 +175,7 @@ export { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursN
 export { HeightLightNode } from './heightLight';
 export { NormalFromHeightNode } from './normalFromHeight';
 export { ConvolveNode } from './convolve';
+export { SdfBevelNode } from './sdfBevel';
 export { DitherNode, DITHER_GLSL } from './dither';
 export { RandomFromIdNode } from './randomFromId';
 export { ShowDataNode } from './showData';
@@ -328,6 +329,7 @@ import { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursN
 import { HeightLightNode } from './heightLight';
 import { NormalFromHeightNode } from './normalFromHeight';
 import { ConvolveNode } from './convolve';
+import { SdfBevelNode } from './sdfBevel';
 import { DitherNode } from './dither';
 import { RandomFromIdNode } from './randomFromId';
 import { ShowDataNode } from './showData';
@@ -509,6 +511,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   mask: MaskNode,
   addColor: AddColorNode,
   sdfFill: SDFFillNode,
+  sdfBevel: SdfBevelNode,
   sdfColorize: SDFColorizeNode,
   alphaBlend: AlphaBlendNode,
   light2d: Light2DNode,

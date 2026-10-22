@@ -49,7 +49,7 @@ describe('bundled examples', () => {
 
   it('the curated showcase: five per category (From the Internet and the new-node folders hold more), the courses under Learn', () => {
     // The new-node folders show every example they have, more than five allowed (owner, 22 October 2026).
-    const ROOMY = new Set(['From the Internet', 'Bump & Dither', 'Noise', 'Convolve']);
+    const ROOMY = new Set(['From the Internet', 'Bump & Dither', 'Noise', 'Convolve', 'Bevel']);
     for (const f of SHOWCASE_FOLDERS) {
       if (ROOMY.has(f.label)) expect(f.keys.length, f.label).toBeGreaterThanOrEqual(5);
       else expect(f.keys.length, f.label).toBe(5);

@@ -159,7 +159,7 @@ export const TYPE_STAGE: Record<string, StageOf> = {
   // Noise: a warp is a bend.
   domainWarp: 'bend',
   // SDF: the style nodes paint the distance.
-  sdfFill: 'shapeIt', sdfColorize: 'colour',
+  sdfFill: 'shapeIt', sdfBevel: 'shapeIt', sdfColorize: 'colour',
   // Union / Subtract / Intersect: Combine in 3D (a 2D flow reads Combine as Shape).
   sdfUnion: 'combine', sdfSubtract: 'combine', sdfIntersect: 'combine',
   // Field: thresholds and falloffs shape a field.
