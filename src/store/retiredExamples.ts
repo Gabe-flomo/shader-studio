@@ -51,6 +51,4 @@ export const RETIRED_EXAMPLE_KEYS: readonly string[] = [
   'combinePhotoInRoom', 'combinePeopleRings', 'combineSparksTrace', 'combineFireflies', 'combineTwoLooks',
   // Texture Lab's two (textureLabExamples.ts): the Texture tools folder holds its five; these open by key and from What's new.
   'texLabThermal', 'texLabTrails',
-  // Normal from Height and Dither's other three (surfaceExamples.ts): the Bump & Dither folder holds five; these open by key.
-  'bumpPhotoRelief', 'bumpBevelShape', 'ditherBlueSwirl',
 ];

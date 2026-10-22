@@ -45,7 +45,8 @@ export const SURFACE_EXAMPLE_INDEX: Record<string, { label: string; description:
 };
 export const SURFACE_EXAMPLE_KEYS = Object.keys(SURFACE_EXAMPLE_INDEX);
 /** Listed in the Bump & Dither folder (five, as every showcase folder); the rest open by key. */
-export const SURFACE_SHOWCASE_KEYS = ['bumpEmbossedMetal', 'bumpTerrainSun', 'bumpWaterRipples', 'ditherOneBit', 'ditherGameBoy'];
+// All of them are shown: the new-node folders may hold more than five (owner, 22 October 2026).
+export const SURFACE_SHOWCASE_KEYS = SURFACE_EXAMPLE_KEYS;
 
 
 export function buildSurfaceExamples(): Record<string, ExampleGraph> {

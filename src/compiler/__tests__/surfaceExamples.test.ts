@@ -18,10 +18,11 @@ const parses = (fs: string) => { try { parser.parse(fs.replace(/^#version.*$/m, 
 
 describe('Normal from Height and Dither examples', () => {
   const ex = buildSurfaceExamples();
-  it('there are eight, five in the Bump & Dither folder and three that open by key', () => {
+  it('there are eight, all in the Bump & Dither folder', () => {
     expect(Object.keys(ex).sort()).toEqual([...SURFACE_EXAMPLE_KEYS].sort());
     expect(EXAMPLE_FOLDERS.find(f => f.label === 'Bump & Dither')?.keys).toEqual(SURFACE_SHOWCASE_KEYS);
-    expect(SURFACE_EXAMPLE_KEYS.filter(k => !SURFACE_SHOWCASE_KEYS.includes(k)).every(k => RETIRED_EXAMPLE_KEYS.includes(k))).toBe(true);
+    expect(SURFACE_SHOWCASE_KEYS).toHaveLength(8);
+    expect(SURFACE_EXAMPLE_KEYS.filter(k => RETIRED_EXAMPLE_KEYS.includes(k))).toEqual([]);
   });
   for (const k of SURFACE_EXAMPLE_KEYS) {
     it(`${k} compiles, parses, and explains every node`, () => {

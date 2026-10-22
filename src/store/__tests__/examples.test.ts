@@ -47,8 +47,13 @@ describe('bundled examples', () => {
     expect(RETIRED_EXAMPLE_KEYS.filter(k => filed.includes(k)), 'retired but listed').toEqual([]);
   });
 
-  it('the curated showcase: five per category (From the Internet as it is), the courses under Learn', () => {
-    for (const f of SHOWCASE_FOLDERS) if (f.label !== 'From the Internet') expect(f.keys.length, f.label).toBe(5);
+  it('the curated showcase: five per category (From the Internet and the new-node folders hold more), the courses under Learn', () => {
+    // The new-node folders show every example they have, more than five allowed (owner, 22 October 2026).
+    const ROOMY = new Set(['From the Internet', 'Bump & Dither', 'Noise']);
+    for (const f of SHOWCASE_FOLDERS) {
+      if (ROOMY.has(f.label)) expect(f.keys.length, f.label).toBeGreaterThanOrEqual(5);
+      else expect(f.keys.length, f.label).toBe(5);
+    }
     expect(EXAMPLE_FOLDERS.filter(f => f.course).map(f => f.label)).toEqual(['Learn · Play course', 'Learn · Book of Shaders course', 'Learn · 3D course']);
     expect(EXAMPLE_FOLDERS.find(f => f.label === 'Learn · Play course')!.keys).toEqual(PLAY_EXAMPLE_KEYS);
     // Audio examples are off the lists (user feedback 2026-10-19); they still open by key.
