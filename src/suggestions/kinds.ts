@@ -40,7 +40,7 @@ const MASK_NODES = new Set(['smoothstep', 'step', 'compare', 'sdfMask', 'dotMask
 const DISTANCE_CATEGORIES = new Set(['2D Primitives']);
 const DISTANCE_SUBCATEGORIES = new Set(['Combine', 'Modify']);
 /** Node types that take a distance whatever the socket is called. */
-const DISTANCE_TAKERS = new Set(['sdfFill', 'sdfColorize', 'light', 'glowLayer', 'deepGlow', 'sdfOffset', 'sdfOnion', 'sdfSharpen', 'sdfUnion', 'sdfSubtract', 'sdfIntersect', 'distanceShape', 'sdfMask', 'gridPaint']);
+const DISTANCE_TAKERS = new Set(['sdfFill', 'sdfBevel', 'sdfColorize', 'light', 'glowLayer', 'deepGlow', 'sdfOffset', 'sdfOnion', 'sdfSharpen', 'sdfUnion', 'sdfSubtract', 'sdfIntersect', 'distanceShape', 'sdfMask', 'gridPaint']);
 
 const is3dDef = (def: NodeDefinition | undefined) => !!def && /^(3D|Volumetric)/.test(def.category);
 

@@ -12,6 +12,31 @@ import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
 import { fieldFn, p, pv3, withParamSockets } from './helpers';
 import { TEXTURE_TOOLS_CATEGORY } from './textureTools';
 
+/**
+ * The lamp, shared with SDF Bevel (sdfBevel.ts): given a unit normal `${id}_n`, the lines that declare the lamp's
+ * direction `${id}_l` (from Light from and Light height, in degrees), the diffuse light `${id}_d`, the Blinn-Phong
+ * highlight `${id}_sp` and the light alone, clamped, `${id}_s` (Ambient + lamp + highlight). The params are read
+ * under the keys lightAngle, lightHeight, ambient, specular, shininess.
+ */
+export function lampGLSL(id: string, P: Record<string, unknown>): string[] {
+  const amb = `(${p(P.ambient, 0.2)})`;
+  const la = `radians(${p(P.lightAngle, 135)})`, lh = `radians(${p(P.lightHeight, 40)})`;
+  return [
+    `    vec3 ${id}_l = vec3(cos(${la}) * cos(${lh}), sin(${la}) * cos(${lh}), sin(${lh}));\n`,
+    `    float ${id}_d = max(dot(${id}_n, ${id}_l), 0.0);\n`,
+    // Blinn-Phong: the highlight is where the normal points halfway between the lamp and the viewer (straight out).
+    `    float ${id}_sp = ${id}_d > 0.0 ? pow(max(dot(${id}_n, normalize(${id}_l + vec3(0.0, 0.0, 1.0))), 0.0), max(${p(P.shininess, 32)}, 1.0)) * (${p(P.specular, 0.35)}) : 0.0;\n`,
+    `    float ${id}_s = clamp(${amb} + (1.0 - ${amb}) * ${id}_d + ${id}_sp, 0.0, 1.0);\n`,
+  ];
+}
+
+/** A surface colour `colour` lit by lampGLSL's lamp (after its lines): Colour × (Ambient + rest × lamp × Light colour) + highlight. */
+export function litColourGLSL(id: string, P: Record<string, unknown>, colour: string): string {
+  const amb = `(${p(P.ambient, 0.2)})`;
+  const lc = pv3(P.lightColour, [1, 0.97, 0.9]);
+  return `${colour} * (${amb} + (1.0 - ${amb}) * ${id}_d * ${lc}) + ${lc} * ${id}_sp`;
+}
+
 type Mode = 'lit' | 'normal' | 'slope';
 const modeOf = (n: GraphNode): Mode => (['lit', 'normal', 'slope'].includes(String(n.params.mode)) ? String(n.params.mode) as Mode : 'lit');
 
@@ -79,21 +104,15 @@ export const NormalFromHeightNode: NodeDefinition = withParamSockets({
     } else {
       lines.push(`    vec2 ${id}_g = vec2(0.0);\n`);
     }
-    const amb = `(${p(P.ambient, 0.2)})`, str = `(${p(P.strength, 0.15)})`;
-    const la = `radians(${p(P.lightAngle, 135)})`, lh = `radians(${p(P.lightHeight, 40)})`;
-    const lc = pv3(P.lightColour, [1, 0.97, 0.9]);
+    const str = `(${p(P.strength, 0.15)})`;
     lines.push(
       `    vec3 ${id}_n = normalize(vec3(-${id}_g * ${str}, 1.0));\n`,
-      `    vec3 ${id}_l = vec3(cos(${la}) * cos(${lh}), sin(${la}) * cos(${lh}), sin(${lh}));\n`,
-      `    float ${id}_d = max(dot(${id}_n, ${id}_l), 0.0);\n`,
-      // Blinn-Phong: the highlight is where the normal points halfway between the lamp and the viewer (straight out).
-      `    float ${id}_sp = ${id}_d > 0.0 ? pow(max(dot(${id}_n, normalize(${id}_l + vec3(0.0, 0.0, 1.0))), 0.0), max(${p(P.shininess, 32)}, 1.0)) * (${p(P.specular, 0.35)}) : 0.0;\n`,
-      `    float ${id}_s = clamp(${amb} + (1.0 - ${amb}) * ${id}_d + ${id}_sp, 0.0, 1.0);\n`,
+      ...lampGLSL(id, P),
     );
     const mode = modeOf(node);
     if (mode === 'normal') lines.push(`    vec3 ${id}_c = ${id}_n * 0.5 + 0.5;\n`);
     else if (mode === 'slope') lines.push(`    vec3 ${id}_c = vec3(clamp(${id}_g * ${str} * 0.5 + 0.5, 0.0, 1.0), 0.5);\n`);
-    else lines.push(`    vec3 ${id}_c = ${v.colour ?? 'vec3(1.0)'} * (${amb} + (1.0 - ${amb}) * ${id}_d * ${lc}) + ${lc} * ${id}_sp;\n`);
+    else lines.push(`    vec3 ${id}_c = ${litColourGLSL(id, P, v.colour ?? 'vec3(1.0)')};\n`);
     return { code: lines.join(''), outputVars: outs };
   },
 }, ['strength', 'lightAngle', 'lightHeight', 'ambient', 'specular']);

@@ -174,6 +174,7 @@ export { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurText
 export { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursNode, TextureChangeNode, DistanceShapeNode, TextureFadeNode, ReadTextureNode } from './textureTools';
 export { HeightLightNode } from './heightLight';
 export { NormalFromHeightNode } from './normalFromHeight';
+export { SdfBevelNode } from './sdfBevel';
 export { DitherNode, DITHER_GLSL } from './dither';
 export { RandomFromIdNode } from './randomFromId';
 export { ShowDataNode } from './showData';
@@ -326,6 +327,7 @@ import { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurText
 import { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursNode, TextureChangeNode, DistanceShapeNode, TextureFadeNode, ReadTextureNode } from './textureTools';
 import { HeightLightNode } from './heightLight';
 import { NormalFromHeightNode } from './normalFromHeight';
+import { SdfBevelNode } from './sdfBevel';
 import { DitherNode } from './dither';
 import { RandomFromIdNode } from './randomFromId';
 import { ShowDataNode } from './showData';
@@ -507,6 +509,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   mask: MaskNode,
   addColor: AddColorNode,
   sdfFill: SDFFillNode,
+  sdfBevel: SdfBevelNode,
   sdfColorize: SDFColorizeNode,
   alphaBlend: AlphaBlendNode,
   light2d: Light2DNode,
