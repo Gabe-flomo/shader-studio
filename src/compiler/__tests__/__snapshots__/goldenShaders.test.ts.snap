@@ -415,6 +415,48 @@ exports[`golden shaders: every Play example exports the same bundle > drumPads 1
 }
 `;
 
+exports[`golden shaders: every Play example exports the same bundle > easeBouncingBall 1`] = `
+{
+  "bundle": "1f85a10bae484b1d85cb21f2ff25:9659",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > easeCurveChart 1`] = `
+{
+  "bundle": "01407e7a0f52311402999d976729:23642",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > easeDotWave 1`] = `
+{
+  "bundle": "1a04fd7e3f6a440e109f925d505e:8425",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > easeElasticPop 1`] = `
+{
+  "bundle": "0eb2dde820658703f34c11e96849:9664",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > easePingPongPan 1`] = `
+{
+  "bundle": "0f352729f518a70e85c140a53dfc:7809",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > easeSlideInMenu 1`] = `
+{
+  "bundle": "11a1daffb293e60f14b9a6551166:12279",
+  "missing": [],
+}
+`;
+
 exports[`golden shaders: every Play example exports the same bundle > finishDatamoshEcho 1`] = `
 {
   "bundle": "135f41d52cf9c616d8114be800ed:5543",
@@ -6156,6 +6198,316 @@ exports[`golden shaders: every example compiles as it did > drumPads 1`] = `
     "u_p_lightx0_tint",
   ],
   "paramValues": "1a1f72ffc4ab5301275f9c42fdf8:165",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > easeBouncingBall 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "0e135c1a3e435a186728a01a8fa1:7627",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "0ff24eec20225a113c8c45020780:287",
+  "paramBindings": "06d42dcc0add74107a721dc85ae1:903",
+  "paramUniforms": [
+    "u_p_boxsdfx0_height",
+    "u_p_boxsdfx0_posX",
+    "u_p_boxsdfx0_posY",
+    "u_p_boxsdfx0_width",
+    "u_p_circx0_posX",
+    "u_p_circx0_posY",
+    "u_p_circx0_radius",
+    "u_p_colorpickex0_color",
+    "u_p_colorpickex0xc2_color",
+    "u_p_colorpickex0xc3_color",
+    "u_p_easex0_duration",
+    "u_p_easex0_from",
+    "u_p_easex0_hold",
+    "u_p_easex0_to",
+    "u_p_fillx0_fillColor",
+    "u_p_fillx0_strokeWidth",
+    "u_p_fillx0xc2_strokeWidth",
+    "u_p_mixx0_t",
+    "u_p_mkv2x0_x",
+    "u_p_mkv2x0_y",
+    "u_p_remapx0_inMax",
+    "u_p_remapx0_inMin",
+    "u_p_remapx0_outMax",
+    "u_p_remapx0_outMin",
+  ],
+  "paramValues": "035dd8af47e5a011561761001a4b:667",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > easeCurveChart 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "06b45773f883a01c327edb834fad:19189",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "1c3e112a12d9fe0f2feeefd0eae0:798",
+  "paramBindings": "0a6266be075b6903e2831cea4ed7:2298",
+  "paramUniforms": [
+    "u_p_boxsdfx0_height",
+    "u_p_boxsdfx0_posX",
+    "u_p_boxsdfx0_posY",
+    "u_p_boxsdfx0_width",
+    "u_p_colorpickex0_color",
+    "u_p_colorpickex0xc2_color",
+    "u_p_colorpickex0xc3_color",
+    "u_p_colorpickex0xc4_color",
+    "u_p_colorpickex0xc5_color",
+    "u_p_colorpickex0xc6_color",
+    "u_p_colorpickex0xc7_color",
+    "u_p_colorpickex0xc8_color",
+    "u_p_easex0_duration",
+    "u_p_easex0_from",
+    "u_p_easex0_hold",
+    "u_p_easex0_to",
+    "u_p_easex0xc2_duration",
+    "u_p_easex0xc2_from",
+    "u_p_easex0xc2_hold",
+    "u_p_easex0xc2_to",
+    "u_p_easex0xc3_duration",
+    "u_p_easex0xc3_from",
+    "u_p_easex0xc3_hold",
+    "u_p_easex0xc3_to",
+    "u_p_easex0xc4_amount",
+    "u_p_easex0xc4_duration",
+    "u_p_easex0xc4_from",
+    "u_p_easex0xc4_hold",
+    "u_p_easex0xc4_to",
+    "u_p_easex0xc5_amount",
+    "u_p_easex0xc5_duration",
+    "u_p_easex0xc5_from",
+    "u_p_easex0xc5_hold",
+    "u_p_easex0xc5_to",
+    "u_p_easex0xc6_duration",
+    "u_p_easex0xc6_from",
+    "u_p_easex0xc6_hold",
+    "u_p_easex0xc6_to",
+    "u_p_fillx0_strokeWidth",
+    "u_p_fillx0xc2_strokeWidth",
+    "u_p_fillx0xc3_strokeWidth",
+    "u_p_fillx0xc4_strokeWidth",
+    "u_p_fillx0xc5_strokeWidth",
+    "u_p_fillx0xc6_strokeWidth",
+    "u_p_fillx0xc7_strokeWidth",
+    "u_p_remapx0_inMax",
+    "u_p_remapx0_inMin",
+    "u_p_remapx0_outMax",
+    "u_p_remapx0_outMin",
+    "u_p_subx0_b",
+    "u_p_subx0xc2_b",
+    "u_p_subx0xc3_b",
+    "u_p_subx0xc4_b",
+    "u_p_subx0xc5_b",
+    "u_p_subx0xc6_b",
+  ],
+  "paramValues": "1ad40eb187f7cd120c6af5f43262:1628",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > easeDotWave 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "04f97152a77b0401a7a6b6fd0026:6634",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "130f2f345a63671a0f635a14763b:242",
+  "paramBindings": "0daf15dc5a774f039e3e4cbc58ef:765",
+  "paramUniforms": [
+    "u_p_addx0_b",
+    "u_p_circx0_posX",
+    "u_p_circx0_posY",
+    "u_p_circx0_radius",
+    "u_p_colorpickex0_color",
+    "u_p_easex0_amount",
+    "u_p_easex0_duration",
+    "u_p_easex0_from",
+    "u_p_easex0_hold",
+    "u_p_easex0_to",
+    "u_p_fillx0_strokeWidth",
+    "u_p_gridlayoutx0_columns",
+    "u_p_mulx0_b",
+    "u_p_palx0_amplitude",
+    "u_p_palx0_anim",
+    "u_p_palx0_freq",
+    "u_p_palx0_offset",
+    "u_p_palx0_phase",
+    "u_p_palx0_scale",
+    "u_p_palx0_speed",
+    "u_p_palx0_value",
+    "u_p_subx0_b",
+  ],
+  "paramValues": "17367fa1991ef21ac6c14a5df67c:574",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > easeElasticPop 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "0e633258fe7d2109837f0226c8ea:7830",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "1a27606677133713d68c8f5bc7bf:206",
+  "paramBindings": "0a8529ff47b3db00d8a10e96463f:726",
+  "paramUniforms": [
+    "u_p_circx0_posX",
+    "u_p_circx0_posY",
+    "u_p_circx0_radius",
+    "u_p_colorpickex0_color",
+    "u_p_colorpickex0xc2_color",
+    "u_p_easex0_amount",
+    "u_p_easex0_duration",
+    "u_p_easex0_from",
+    "u_p_easex0_hold",
+    "u_p_easex0_to",
+    "u_p_easex0xc2_duration",
+    "u_p_easex0xc2_from",
+    "u_p_easex0xc2_hold",
+    "u_p_easex0xc2_to",
+    "u_p_fillx0_strokeWidth",
+    "u_p_fillx0xc2_fillColor",
+    "u_p_fillx0xc2_strokeWidth",
+    "u_p_shapex0_r",
+    "u_p_shapex0_rf",
+  ],
+  "paramValues": "1d0fbb8b5058a116dcb263261e55:543",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > easePingPongPan 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "01b76dbdbba0770d82ebbf98c36d:6049",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "14f3007d64517609cb1c2031aad0:139",
+  "paramBindings": "1984a30910ee8708eadb92b24ad5:753",
+  "paramUniforms": [
+    "u_p_addx0_b",
+    "u_p_easex0_duration",
+    "u_p_easex0_from",
+    "u_p_easex0_hold",
+    "u_p_easex0_to",
+    "u_p_easex0xc2_duration",
+    "u_p_easex0xc2_from",
+    "u_p_easex0xc2_hold",
+    "u_p_easex0xc2_to",
+    "u_p_mkv2x0_x",
+    "u_p_mkv2x0_y",
+    "u_p_palx0_amplitude",
+    "u_p_palx0_anim",
+    "u_p_palx0_freq",
+    "u_p_palx0_offset",
+    "u_p_palx0_phase",
+    "u_p_palx0_scale",
+    "u_p_palx0_speed",
+    "u_p_palx0_value",
+    "u_p_vorox0_jitter",
+    "u_p_vorox0_scale",
+    "u_p_vorox0_time_scale",
+  ],
+  "paramValues": "19cf4a50de94bd0dfe4b6370c37b:561",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > easeSlideInMenu 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "0d7e344296a3b61b782b57397f3e:9168",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "0f25a91496144402b069381049bf:405",
+  "paramBindings": "0a79bd9617481a15861d3cfbd25e:1570",
+  "paramUniforms": [
+    "u_p_boxsdfx0_height",
+    "u_p_boxsdfx0_posX",
+    "u_p_boxsdfx0_posY",
+    "u_p_boxsdfx0_width",
+    "u_p_boxsdfx0xc2_height",
+    "u_p_boxsdfx0xc2_posX",
+    "u_p_boxsdfx0xc2_posY",
+    "u_p_boxsdfx0xc2_width",
+    "u_p_boxsdfx1_height",
+    "u_p_boxsdfx1_posX",
+    "u_p_boxsdfx1_posY",
+    "u_p_boxsdfx1_width",
+    "u_p_boxsdfx2_height",
+    "u_p_boxsdfx2_posX",
+    "u_p_boxsdfx2_posY",
+    "u_p_boxsdfx2_width",
+    "u_p_colorpickex0_color",
+    "u_p_easex0_amount",
+    "u_p_easex0_duration",
+    "u_p_easex0_from",
+    "u_p_easex0_hold",
+    "u_p_easex0_to",
+    "u_p_easex0xc2_amount",
+    "u_p_easex0xc2_duration",
+    "u_p_easex0xc2_from",
+    "u_p_easex0xc2_hold",
+    "u_p_easex0xc2_to",
+    "u_p_fillx0_fillColor",
+    "u_p_fillx0_strokeWidth",
+    "u_p_fillx0xc2_fillColor",
+    "u_p_fillx0xc2_strokeWidth",
+    "u_p_mkv2x0_x",
+    "u_p_mkv2x0_y",
+    "u_p_mkv2x0xc2_x",
+    "u_p_mkv2x0xc2_y",
+    "u_p_mkv2x1_x",
+    "u_p_mkv2x1_y",
+    "u_p_mkv2x2_x",
+    "u_p_mkv2x2_y",
+    "u_p_sdfunionx01_k",
+    "u_p_sdfunionx0_k",
+    "u_p_subx0_b",
+  ],
+  "paramValues": "1ccbd6d7627f2b1e6bf99687f7d8:1134",
   "passes": null,
   "success": true,
   "textureUniforms": {},

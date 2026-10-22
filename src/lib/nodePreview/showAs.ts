@@ -143,6 +143,7 @@ export const SINGLE_INPUT_TRANSFORMS: ReadonlySet<string> = new Set([
   'clamp', 'quantize', 'minMath', 'max',
   'expEase', 'doubleExpSeat', 'doubleExpSigmoid', 'logisticSigmoid', 'circularEaseIn', 'circularEaseOut',
   'doubleCircleSeat', 'doubleCircleSigmoid', 'doubleEllipticSigmoid', 'quadBezierShaper', 'shaper', 'cubicBezierShaper',
+  'ease',
 ]);
 
 /**

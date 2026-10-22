@@ -160,6 +160,7 @@ export { ScopeNode } from './utility';
 
 // Animation
 export { LFONode, BPMSyncNode } from './animations';
+export { EaseNode } from './ease';
 
 // Halftone
 export { GridUVNode, PixelateNode, DotMaskNode, SdfMaskNode, LumaRadiusNode, RGBToCMYKNode, CMYKHalftoneNode } from './halftone';
@@ -296,6 +297,7 @@ import { ScopeNode } from './utility';
 import { MatConstNode, Mat2ConstructNode, Mat3ConstructNode, Mat2InspectNode, Mat3InspectNode, Mat2MulVecNode, Mat3MulVecNode, RotationMatrixNode } from './matrix';
 import { Mat2MulNode, Mat3MulNode, Mat2InverseNode, Mat3InverseNode, Mat2MixNode, Mat3MixNode, ScaleMatrixNode, ShearMatrixNode, StretchMatrixNode, Mat3MulPointNode, CornerPinNode, ColorMatrixNode } from './matrixOps';
 import { LFONode, BPMSyncNode } from './animations';
+import { EaseNode } from './ease';
 import {
   AddNode, SubtractNode, MultiplyNode, DivideNode,
   SinNode, CosNode, TanNode, ExpNode, PowNode, NegateNode, LengthNode,
@@ -910,6 +912,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   // Animation
   lfo: LFONode,
   bpmSync: BPMSyncNode,
+  // Ease (docs/ease-node.md): named easing curves (Penner), From → To, playing by itself from Time or driven by a 0–1 Value
+  ease: EaseNode,
 };
 
 /** Built-ins first, then user-published node types (see nodes/userNodes/userNodeRegistry.ts). */

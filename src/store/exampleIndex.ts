@@ -30,6 +30,7 @@ import { SURFACE_EXAMPLE_INDEX, SURFACE_SHOWCASE_KEYS } from './surfaceExamples'
 import { BEVEL_EXAMPLE_INDEX, BEVEL_SHOWCASE_KEYS } from './bevelExamples';
 import { NOISE_EXAMPLE_INDEX } from './noiseExamples';
 import { CONVOLVE_EXAMPLE_INDEX, CONVOLVE_SHOWCASE_KEYS } from './convolveExamples';
+import { EASE_EXAMPLE_INDEX, EASE_EXAMPLE_KEYS } from './easeExamples';
 import { PASS_EXAMPLE_INDEX } from './passExamples';
 import { AGENT_EXAMPLE_INDEX, AGENT_RULE_INDEX } from './agentExamples';
 import { AGENT_SHADER_EXAMPLE_INDEX } from './agentShaderExamples';
@@ -251,6 +252,8 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...NOISE_EXAMPLE_INDEX,
   // Convolve (convolveExamples.ts, docs/convolve.md): every kernel filter in one node.
   ...CONVOLVE_EXAMPLE_INDEX,
+  // Ease (easeExamples.ts, docs/ease-node.md): named motion curves, the Ease & Motion folder.
+  ...EASE_EXAMPLE_INDEX,
   // Pass nodes, render to texture (passExamples.ts).
   ...PASS_EXAMPLE_INDEX,
   // The Agents group: slime mold and walkers built from nodes (agentExamples.ts).
@@ -351,6 +354,7 @@ export const EXAMPLE_FOLDERS: ExampleFolder[] = [
   { label: "2D: Shapes, Space & Colour", color: ctp.peach, keys: ['fractalRings','colorStopsCycle','spaceAtlas','perspectivePlanes','newtonFractalZ5'] },
   { label: "2D: Scene Builder", color: ctp.pink, keys: ['sb2Kaleidoscope','sb2RingOfRings','sb2RippleGrid','sb2DepthBeams','sb2Melt'] },
   { label: "Curves & Shapes",   color: ctp.lavender, keys: ['curveTraceBeam','curveTraceIntervals','curveTraceMorph','chladniModeFreqDemo','agentRideHarmonograph'] },
+  { label: "Ease & Motion",     color: ctp.peach, keys: EASE_EXAMPLE_KEYS },
   { label: "Grid",              color: ctp.sky, keys: ['gridTourMorph','gridTourRipple','gridTourOverflow','gridDensityWave','boundsBouncingCopies'] },
   { label: "Noise",             color: ctp.teal, keys: ['noiseMarble','noiseCloudsInPlace','noiseContourMap','noiseSlopeFlow','noiseWorleyPerlin'] },
   { label: "Noise: cells",      color: ctp.teal, keys: ['voronoiCrackedEarth','voronoiStainedGlass','voronoiLivingCells','voronoiCellDots','voronoiMetricTiles'] },

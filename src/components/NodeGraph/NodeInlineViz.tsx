@@ -1,4 +1,5 @@
 import { shaperCurveType } from '../../nodes/definitions/shapers';
+import { easeCurveOf, easeDirectionOf, easeJs } from '../../nodes/definitions/ease';
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { toast } from '../ui/toastStore';
 import { candidateFor, collectPlayCandidates } from '../../play/playControls';
@@ -1699,6 +1700,42 @@ export function ShaperCurveViz({ node }: { node: GraphNode }) {
         onClick={() => { showCrosshairRef.current = !showCrosshairRef.current; }}
         style={{ display: 'block', width: '100%', height: '80px', cursor: 'pointer' }}
       />
+    </div>
+  );
+}
+
+// ─── Viz — Ease: the curve it plays (nodes/definitions/ease.ts easeJs) ─────────
+// Progress across, the eased 0…1 up (From at the bottom line, To at the top one); Back and Elastic
+// go past the lines, so the picture is scaled to fit them.
+export function EaseCurveViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const paramsKey = JSON.stringify(node.params);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
+    const curve = easeCurveOf(node.params), dir = easeDirectionOf(node.params);
+    const a = curve === 'steps' ? (typeof node.params.steps === 'number' ? node.params.steps : 5) : (typeof node.params.amount === 'number' ? node.params.amount : 1);
+    const ys = Array.from({ length: W + 1 }, (_, px) => easeJs(curve, dir, px / W, a));
+    const lo = Math.min(0, ...ys), hi = Math.max(1, ...ys), pad = 6;
+    const yToPy = (y: number) => H - pad - ((y - lo) / (hi - lo)) * (H - 2 * pad);
+    drawCurveGrid(ctx, W, H);
+    ctx.strokeStyle = '#3a3a4e';
+    ctx.setLineDash([2, 3]);
+    ctx.lineWidth = 1;
+    for (const y of [0, 1]) { ctx.beginPath(); ctx.moveTo(0, yToPy(y)); ctx.lineTo(W, yToPy(y)); ctx.stroke(); }
+    ctx.setLineDash([]);
+    ctx.strokeStyle = pal.peach;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ys.forEach((y, px) => (px === 0 ? ctx.moveTo(px, yToPy(y)) : ctx.lineTo(px, yToPy(y))));
+    ctx.stroke();
+  }, [node.type, paramsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <div style={vizContainer()}>
+      <canvas ref={canvasRef} width={240} height={80} style={{ display: 'block', width: '100%', height: '80px' }} />
     </div>
   );
 }
@@ -5321,6 +5358,7 @@ function NodeInlineVizSwitch({ node, onEnterGroup }: { node: GraphNode; onEnterG
     case 'quadBezierShaper':
     case 'shaper':
     case 'cubicBezierShaper':  return <ShaperCurveViz    node={node} />;
+    case 'ease':           return <EaseCurveViz           node={node} />;
     case 'sin':
     case 'cos':            return <SinCosWaveViz          node={node} />;
     case 'tan':            return <TanWaveViz              node={node} />;
@@ -5623,7 +5661,7 @@ export const INLINE_VIZ_TYPES = new Set<string>([
   'smoothstep', 'clamp', 'mix', 'addColor',
   'expEase', 'doubleExpSeat', 'doubleExpSigmoid', 'logisticSigmoid',
   'circularEaseIn', 'circularEaseOut', 'doubleCircleSeat', 'doubleCircleSigmoid',
-  'doubleEllipticSigmoid', 'quadBezierShaper', 'shaper', 'cubicBezierShaper',
+  'doubleEllipticSigmoid', 'quadBezierShaper', 'shaper', 'cubicBezierShaper', 'ease',
   'sin', 'cos', 'tan',
   'toneCurve', 'shadowsHighlights', 'liftGammaGain', 'hueRotate', 'colorSaturation',
   'mat2Construct', 'mat2Inspect', 'mat3Construct', 'mat3Inspect',
