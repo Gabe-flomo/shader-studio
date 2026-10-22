@@ -23,6 +23,7 @@ export const SEARCH_WORDS: Record<string, string[]> = {
   normalFromHeight: ['Embossed', 'Terrain', 'Shiny'],
   advect: ['Smoke', 'Ink', 'Marbling', 'Fluid', 'Liquid', 'Flow', 'TouchDesigner feedback displace'],
   convolve: ['Sharpen', 'Emboss', 'Edge detect', 'Filter', 'Kernel', 'TouchDesigner convolve'],
+  kuwahara: ['Oil paint', 'Painterly', 'Painting', 'Watercolour', 'Watercolor', 'Brush', 'Cartoon', 'Smooth edges', 'Filter'],
   sdfBevel: ['Bevel', 'Emboss', '3D button', 'Raised', 'Engraved', 'Inset', 'Drop shadow'],
   glitch: ['VHS'],
   crtScreen: ['CRT', 'Old TV'],

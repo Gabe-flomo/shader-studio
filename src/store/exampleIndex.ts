@@ -31,6 +31,7 @@ import { BEVEL_EXAMPLE_INDEX, BEVEL_SHOWCASE_KEYS } from './bevelExamples';
 import { NOISE_EXAMPLE_INDEX } from './noiseExamples';
 import { CONVOLVE_EXAMPLE_INDEX, CONVOLVE_SHOWCASE_KEYS } from './convolveExamples';
 import { ADVECT_EXAMPLE_INDEX, ADVECT_SHOWCASE_KEYS } from './advectExamples';
+import { KUWAHARA_EXAMPLE_INDEX, KUWAHARA_SHOWCASE_KEYS } from './kuwaharaExamples';
 import { EASE_EXAMPLE_INDEX, EASE_EXAMPLE_KEYS } from './easeExamples';
 import { PASS_EXAMPLE_INDEX } from './passExamples';
 import { AGENT_EXAMPLE_INDEX, AGENT_RULE_INDEX } from './agentExamples';
@@ -255,6 +256,8 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...CONVOLVE_EXAMPLE_INDEX,
   // Advect (advectExamples.ts, docs/advect.md): a picture carried along a flow, frame after frame.
   ...ADVECT_EXAMPLE_INDEX,
+  // Kuwahara (kuwaharaExamples.ts, docs/kuwahara.md): the painterly, oil-paint filter.
+  ...KUWAHARA_EXAMPLE_INDEX,
   // Ease (easeExamples.ts, docs/ease-node.md): named motion curves, the Ease & Motion folder.
   ...EASE_EXAMPLE_INDEX,
   // Pass nodes, render to texture (passExamples.ts).
@@ -369,6 +372,7 @@ export const EXAMPLE_FOLDERS: ExampleFolder[] = [
   { label: "Bump & Dither",     color: ctp.yellow, keys: SURFACE_SHOWCASE_KEYS },
   { label: "Convolve",          color: ctp.flamingo, keys: CONVOLVE_SHOWCASE_KEYS },
   { label: "Advect",            color: ctp.sky, keys: ADVECT_SHOWCASE_KEYS },
+  { label: "Painterly",         color: ctp.rosewater, keys: KUWAHARA_SHOWCASE_KEYS },
   { label: "Bevel",             color: ctp.peach, keys: BEVEL_SHOWCASE_KEYS },
   { label: "Effects & Lens",    color: ctp.mauve, keys: ['raysLightText','motionBlurTrails','dofDepthBlur','cmykNoise','crtTv'] },
   { label: "Texture tools",     color: ctp.flamingo, keys: ['ttRenderTargets','ttDataAdvect','ttCacheTimeMachine','ttDistanceRings','ttFeedbackTunnel'] },

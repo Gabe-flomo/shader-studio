@@ -65,7 +65,7 @@ Nodes that make shader building easier without GLSL but keep the power, after Bl
 
 - **Batch 1 (built):** Noise (Blender-style: Perlin, simplex, value, Worley; 2D/3D/4D; Detail, Roughness, Lacunarity, Distortion; Value, Colour and Slope outputs), Voronoi features (F2, edges, distance to edge, cell id, colour, position), Normal from Height (field socket, exact slope; bump and lit outputs), Dither (Bayer, blue noise; 1-bit, levels, two-colour).
 - **Batch 2 (built):** Ease (named Penner curves, loop and ping-pong), Convolve / Sharpen (3×3 and 5×5 kernel with presets), SDF Bevel (a 2D shape lit as if raised).
-- **Batch 3:** Advect (move a picture along a field every frame), Kuwahara (painterly). Pixel sort and slit-scan already exist as examples (`picPixelSort`, `timeCubeSlitScan`, Cache's time machine).
+- **Batch 3 (built):** Advect (move a picture along a field every frame), Kuwahara (painterly). Pixel sort and slit-scan already exist as examples (`picPixelSort`, `timeCubeSlitScan`, Cache's time machine).
 - **Group presets:** the retired fractals (Mandelbrot/Julia, Apollonian, IFS) as iterated groups you can open; reaction–diffusion as a findable preset (today a Grid Rules template); a small 2D fluid simulation.
 
 ## Later / skipped

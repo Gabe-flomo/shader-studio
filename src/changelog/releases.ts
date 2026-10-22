@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.328',
+    date: '2026-10-22',
+    title: 'Advect and Kuwahara',
+    highlights: [
+      { area: 'Studio', text: 'Advect: carry a picture along a flow every frame, for ink in water, smoke, marbled paper or a photo that melts. Wire any direction field, or use its own swirl.', link: { kind: 'doc', path: 'docs/advect.md' } },
+      { area: 'Studio', text: 'Kuwahara: the oil-paint filter. Flat areas turn into patches of paint while edges stay crisp; Classic, Generalised or strokes that follow the edges.', link: { kind: 'doc', path: 'docs/kuwahara.md' } },
+      { area: 'Studio', text: '12 new examples in two folders: Advect and Painterly, from a candle’s smoke to a photo as a comic panel.', link: { kind: 'example', key: 'kuwaharaComic' } },
+    ],
+  },
+  {
     id: '2026.10.327',
     date: '2026-10-22',
     title: 'Ease, Convolve and Bevel',

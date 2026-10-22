@@ -898,6 +898,41 @@ exports[`golden shaders: every Play example exports the same bundle > handTwoHan
 }
 `;
 
+exports[`golden shaders: every Play example exports the same bundle > kuwaharaClassicVsGeneralised 1`] = `
+{
+  "bundle": "0f878ce006164811ae38b2c7925b:15650",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > kuwaharaLivePainting 1`] = `
+{
+  "bundle": "128f19a2f9939f100658e630433f:12731",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > kuwaharaOilPhoto 1`] = `
+{
+  "bundle": "166d505f09965301a39d4ce796b4:10753",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > kuwaharaPaintedLandscape 1`] = `
+{
+  "bundle": "1f322d6bfe39061693fa706ac8ba:18199",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > kuwaharaWatercolour 1`] = `
+{
+  "bundle": "1f662f880692c6021ecefa37b349:16133",
+  "missing": [],
+}
+`;
+
 exports[`golden shaders: every Play example exports the same bundle > learn3dCamera 1`] = `
 {
   "bundle": "193877467f54cf17a807570a29e4:5285",
@@ -14484,6 +14519,175 @@ exports[`golden shaders: every example compiles as it did > inkInWater 1`] = `
   "success": true,
   "textureUniforms": {
     "u_tex_gpuparticl_0_image": "ink::image",
+  },
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > kuwaharaClassicVsGeneralised 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "0c02904a91173f1ff315e09ca9d2:14237",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "182c2126cc52b3068756f0d1f405:152",
+  "paramBindings": "069e9932100acb16a66eefdedbcf:390",
+  "paramUniforms": [
+    "u_p_kuwax0_mix",
+    "u_p_kuwax0_radius",
+    "u_p_kuwax0_spacing",
+    "u_p_kuwax0xc2_mix",
+    "u_p_kuwax0xc2_radius",
+    "u_p_kuwax0xc2_sharpness",
+    "u_p_kuwax0xc2_spacing",
+    "u_p_mixx0_t",
+    "u_p_sstepx0_edge0",
+    "u_p_sstepx0_edge1",
+  ],
+  "paramValues": "07c41ca23789a70afe531e505575:257",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {
+    "u_tex_tex_0": "photo",
+  },
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > kuwaharaLivePainting 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "0675ed83bc7a9d12b311fcdb8270:11657",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "0313589b5312430456d181310754:80",
+  "paramBindings": "1fb8097a58517a0620e8b5fddad7:199",
+  "paramUniforms": [
+    "u_p_colorsaturx0_amount",
+    "u_p_kuwax0_mix",
+    "u_p_kuwax0_radius",
+    "u_p_kuwax0_sharpness",
+    "u_p_kuwax0_spacing",
+  ],
+  "paramValues": "1582b1b3ffae2503ffce4c2418f6:131",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {
+    "u_tex_tex_0": "camera",
+  },
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > kuwaharaOilPhoto 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "01f3d9c22230ca1f77940d0f1d2c:9814",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "18f23bb55a357f066db94d244e60:54",
+  "paramBindings": "10c0e3988937c809dc009f0f185b:155",
+  "paramUniforms": [
+    "u_p_kuwax0_mix",
+    "u_p_kuwax0_radius",
+    "u_p_kuwax0_sharpness",
+    "u_p_kuwax0_spacing",
+  ],
+  "paramValues": "05f861c7decff00fd04abb3d1ac5:98",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {
+    "u_tex_tex_0": "photo",
+  },
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > kuwaharaPaintedLandscape 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "178d8ba8bc2bf91af9c6e72dfac7:16085",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "0c7b939641a26913f2448bdc09ac:145",
+  "paramBindings": "091a0ad230c5801836e3b4aa28f8:796",
+  "paramUniforms": [
+    "u_p_addx0_b",
+    "u_p_kuwax0_mix",
+    "u_p_kuwax0_radius",
+    "u_p_kuwax0_sharpness",
+    "u_p_kuwax0_spacing",
+    "u_p_mulx0_b",
+    "u_p_noisex0_detail",
+    "u_p_noisex0_lacunarity",
+    "u_p_noisex0_offsetX",
+    "u_p_noisex0_offsetY",
+    "u_p_noisex0_roughness",
+    "u_p_noisex0_scale",
+    "u_p_noisex0_speed",
+    "u_p_palx0_amplitude",
+    "u_p_palx0_anim",
+    "u_p_palx0_freq",
+    "u_p_palx0_offset",
+    "u_p_palx0_phase",
+    "u_p_palx0_scale",
+    "u_p_palx0_speed",
+    "u_p_palx0_value",
+  ],
+  "paramValues": "1e9b89f31405c5194c9602f63206:551",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > kuwaharaWatercolour 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "1cffc7f31b85dd013ebaf774228b:14311",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "1074e56622fb390149c1e3c96984:207",
+  "paramBindings": "0e3eb5ca0744d31e9226fd454c1d:629",
+  "paramUniforms": [
+    "u_p_colorpickex0_color",
+    "u_p_colorpickex0xc2_color",
+    "u_p_kuwax0_mix",
+    "u_p_kuwax0_radius",
+    "u_p_kuwax0_sharpness",
+    "u_p_kuwax0_spacing",
+    "u_p_mixx0_t",
+    "u_p_mulx0_b",
+    "u_p_noisex0_detail",
+    "u_p_noisex0_lacunarity",
+    "u_p_noisex0_offsetX",
+    "u_p_noisex0_offsetY",
+    "u_p_noisex0_roughness",
+    "u_p_noisex0_scale",
+    "u_p_noisex0_speed",
+    "u_p_postx0_levels",
+  ],
+  "paramValues": "1f6977d17a257f06f1ffb13e0144:435",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {
+    "u_tex_tex_0": "photo",
   },
   "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
   "videoUniforms": {},

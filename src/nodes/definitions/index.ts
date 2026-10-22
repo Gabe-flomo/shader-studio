@@ -176,6 +176,7 @@ export { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursN
 export { HeightLightNode } from './heightLight';
 export { NormalFromHeightNode } from './normalFromHeight';
 export { ConvolveNode } from './convolve';
+export { KuwaharaNode } from './kuwahara';
 export { SdfBevelNode } from './sdfBevel';
 export { DitherNode, DITHER_GLSL } from './dither';
 export { RandomFromIdNode } from './randomFromId';
@@ -332,6 +333,7 @@ import { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursN
 import { HeightLightNode } from './heightLight';
 import { NormalFromHeightNode } from './normalFromHeight';
 import { ConvolveNode } from './convolve';
+import { KuwaharaNode } from './kuwahara';
 import { SdfBevelNode } from './sdfBevel';
 import { DitherNode } from './dither';
 import { RandomFromIdNode } from './randomFromId';
@@ -642,6 +644,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   textureNeighbours: TextureNeighboursNode,
   // Convolve (docs/convolve.md): every kernel filter in one node, with presets and a Custom grid
   convolve: ConvolveNode,
+  // Kuwahara (docs/kuwahara.md): the painterly oil-paint filter, Classic, Generalised or Anisotropic
+  kuwahara: KuwaharaNode,
   textureChange: TextureChangeNode,
   distanceShape: DistanceShapeNode,
   heightLight: HeightLightNode,
