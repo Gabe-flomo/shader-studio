@@ -20,10 +20,9 @@
  * check it.
  */
 import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
-import { f, fieldFn, p, withParamSockets } from './helpers';
-import { passPxUniform, texUv } from './passes';
+import { f, p, withParamSockets } from './helpers';
 import { TEXTURE_TOOLS_CATEGORY } from './textureTools';
-import { collectFieldChain, fieldProblemOf } from '../../compiler/fieldSockets';
+import { neighbourSource, neighbourSourceNote } from './neighbourReads';
 
 const LUMA = 'vec3(0.299, 0.587, 0.114)';
 
@@ -153,19 +152,7 @@ export function convolveKernel(params: Record<string, unknown>): number[] {
 
 /** What Convolve reads its neighbours from, in words for the card (components/NodeGraph/ConvolveCard.tsx). */
 export function convolveSourceNote(node: GraphNode, nodes: readonly GraphNode[], defOf: (n: GraphNode) => NodeDefinition | undefined): string {
-  if (node.inputs.texture?.connection) return 'Reading the Texture at neighbouring pixels.';
-  const conn = node.inputs.colour?.connection;
-  if (!conn) return 'Wire a Texture, or any colour chain into Colour ƒ.';
-  const byId = new Map(nodes.map(n => [n.id, n]));
-  for (const id of collectFieldChain(conn.nodeId, byId)) {
-    const n = byId.get(id)!;
-    const why = fieldProblemOf(n, defOf);
-    if (why) {
-      const label = (typeof n.params.label === 'string' && n.params.label.trim()) || defOf(n)?.label || n.type;
-      return `Can't work out the Colour chain at other places (${label}: ${why}), so it passes through unchanged. Send it through a Pass and wire the Pass's Texture into Texture.`;
-    }
-  }
-  return 'Working out the Colour chain again at each neighbour.';
+  return neighbourSourceNote(node, nodes, defOf).text;
 }
 
 // ── The node ────────────────────────────────────────────────────────────────
@@ -216,32 +203,18 @@ export const ConvolveNode: NodeDefinition = withParamSockets({
     const P = node.params;
     const preset = presetOf(P.preset);
     const size = kernelSizeOf(P.size);
-    const tex = v.texture;
-    const fn = tex ? undefined : fieldFn(v.colour);
     const outs = { colour: `${id}_out`, luma: `${id}_luma` };
     const lines: string[] = [];
-    let read: ((x: number, y: number) => string) | null = null;
-    if (tex) {
-      lines.push(
-        `    vec2 ${id}_st = ${texUv(v.uv ?? 'g_uv')};\n`,
-        `    vec2 ${id}_d = ${passPxUniform(tex)} * ${p(P.spacing, 1)};\n`,
-        `    vec3 ${id}_c = texture2D(${tex}, ${id}_st).rgb;\n`,
-      );
-      read = (x, y) => `texture2D(${tex}, ${id}_st + vec2(${f(x)}, ${f(y)}) * ${id}_d).rgb`;
-    } else if (fn) {
-      // One picture pixel is 2 / height in picture units.
-      lines.push(
-        `    vec2 ${id}_q = ${v.uv ?? 'g_uv'};\n`,
-        `    float ${id}_e = ${p(P.spacing, 1)} * 2.0 / u_resolution.y;\n`,
-        `    vec3 ${id}_c = ${fn}(${id}_q, vec2(0.0), 1.0, 0.0);\n`,
-      );
-      read = (x, y) => `${fn}(${id}_q + vec2(${f(x)}, ${f(y)}) * ${id}_e, vec2(0.0), 1.0, 0.0)`;
-    } else {
+    // The neighbours (neighbourReads.ts): a Texture at texel offsets, else the Colour ƒ chain again at each offset.
+    const src = neighbourSource(id, v, p(P.spacing, 1));
+    if (!src) {
       // Only this pixel is known (a plain value, or nothing): pass it through.
       lines.push(`    vec3 ${id}_out = ${v.colour ?? 'vec3(0.0)'};\n`, `    float ${id}_luma = dot(${id}_out, ${LUMA});\n`);
       return { code: lines.join(''), outputVars: outs };
     }
-    const at = (i: number) => (i === 12 ? `${id}_c` : read!(...cellOffset(i)));
+    lines.push(...src.lines);
+    const read = (x: number, y: number) => src.read(`vec2(${f(x)}, ${f(y)})`);
+    const at = (i: number) => (i === 12 ? `${id}_c` : read(...cellOffset(i)));
     const cells = kernelCells(size);
     lines.push(`    vec3 ${id}_acc = vec3(0.0);\n`);
     let result: string;

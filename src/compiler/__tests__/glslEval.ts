@@ -1,7 +1,7 @@
 /**
  * A tiny evaluator for the GLSL the Agents nodes emit (test helper only): the
  * statement and expression subset their generateGLSL writes (declarations,
- * assignments, if / else chains, blocks; float / vec / bool arithmetic with
+ * assignments, if / else chains, blocks, for loops with continue / break; float / vec / bool arithmetic with
  * broadcasting, swizzles, comparisons, ?:, and the built-ins they call).
  * It runs a node's real emitted code on the CPU, so the tests check the GLSL
  * itself rather than a copy of its maths.
@@ -13,7 +13,7 @@ type Tok = { t: 'num' | 'id' | 'op'; v: string };
 
 function lex(src: string): Tok[] {
   const out: Tok[] = [];
-  const re = /\s*(?:(\/\/[^\n]*)|(\d+\.\d*(?:e[-+]?\d+)?|\.\d+(?:e[-+]?\d+)?|\d+(?:e[-+]?\d+)?u?|0x[0-9a-fA-F]+u?)|([A-Za-z_]\w*)|(\+=|-=|\*=|\/=|==|!=|<=|>=|&&|\|\||[-+*/%<>=!?:;,.(){}\[\]]))/gy;
+  const re = /\s*(?:(\/\/[^\n]*)|(\d+\.\d*(?:e[-+]?\d+)?|\.\d+(?:e[-+]?\d+)?|\d+(?:e[-+]?\d+)?u?|0x[0-9a-fA-F]+u?)|([A-Za-z_]\w*)|(\+\+|\+=|-=|\*=|\/=|==|!=|<=|>=|&&|\|\||[-+*/%<>=!?:;,.(){}\[\]]))/gy;
   let m: RegExpExecArray | null;
   re.lastIndex = 0;
   while (re.lastIndex < src.length && (m = re.exec(src))) {
@@ -44,6 +44,7 @@ export const BUILTINS: Env = {
   abs: (a: Val) => map1(a, Math.abs), sign: (a: Val) => map1(a, Math.sign), sqrt: (a: Val) => map1(a, Math.sqrt),
   fract: (a: Val) => map1(a, x => x - Math.floor(x)), floor: (a: Val) => map1(a, Math.floor),
   exp: (a: Val) => map1(a, Math.exp),
+  pow: (a: Val, b: Val) => map2(a, b, Math.pow), step: (e: Val, x: Val) => map2(e, x, (ed, v) => (v < ed ? 0 : 1)),
   mod: (a: Val, b: Val) => map2(a, b, (x, y) => x - y * Math.floor(x / y)),
   min: (a: Val, b: Val) => map2(a, b, Math.min), max: (a: Val, b: Val) => map2(a, b, Math.max),
   clamp: (a: Val, lo: Val, hi: Val) => map2(map2(a, lo, Math.max), hi, Math.min),
@@ -74,9 +75,44 @@ class Parser {
   eat(v: string) { const t = this.next(); if (!t || t.v !== v) throw new Error(`expected ${v}, got ${t?.v}`); }
   is(v: string) { return this.peek()?.v === v; }
 
+  // A `continue` or `break` taken: the rest of the loop body is skipped.
+  private cont = false;
+  private brk = false;
+
   // Statements run as they parse; `run` false skips (the untaken branch of an if).
   stmt(run: boolean): void {
+    if (this.cont || this.brk) run = false;
     const t = this.peek();
+    if (t.v === 'continue' || t.v === 'break') {
+      this.next(); this.eat(';');
+      if (run) { if (t.v === 'continue') this.cont = true; else this.brk = true; }
+      return;
+    }
+    if (t.v === 'for') {
+      // for (init; cond; step) body: parsed once dry to find its parts, then run from their token positions.
+      this.next(); this.eat('(');
+      this.stmt(run);
+      const condAt = this.i;
+      this.expr(false); this.eat(';');
+      const stepAt = this.i;
+      this.assign(false, ')');
+      const bodyAt = this.i;
+      this.stmt(false);
+      const endAt = this.i;
+      for (let guard = 0; run; guard++) {
+        if (guard > 1e6) throw new Error('for loop runs away');
+        this.i = condAt;
+        if (!this.expr(true)) break;
+        this.i = bodyAt;
+        this.stmt(true);
+        this.cont = false;
+        if (this.brk) { this.brk = false; break; }
+        this.i = stepAt;
+        this.assign(true, ')');
+      }
+      this.i = endAt;
+      return;
+    }
     if (t.v === '{') { this.next(); while (!this.is('}')) this.stmt(run); this.next(); return; }
     if (t.v === 'if') {
       this.next(); this.eat('(');
@@ -99,13 +135,19 @@ class Parser {
       this.eat(';');
       return;
     }
-    // Assignment: name[.swizzle] op expr
+    this.assign(run, ';');
+  }
+
+  // Assignment: name[.swizzle] op expr, or name++; then `end`.
+  assign(run: boolean, end: string): void {
     const name = this.next().v;
     let comp: string | null = null;
     if (this.is('.')) { this.next(); comp = this.next().v; }
-    const op = this.next().v;
-    const rhs = this.expr(run);
-    this.eat(';');
+    let op = this.next().v;
+    let rhs: Val = 1;
+    if (op === '++') op = '+=';
+    else rhs = this.expr(run);
+    this.eat(end);
     if (!run) return;
     const cur = this.env[name] as Val;
     const apply = (a: Val, b: Val): Val => op === '=' ? b : op === '+=' ? map2(a, b, (x, y) => x + y) : op === '-=' ? map2(a, b, (x, y) => x - y) : op === '*=' ? map2(a, b, (x, y) => x * y) : map2(a, b, (x, y) => x / y);
