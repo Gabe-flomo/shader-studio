@@ -686,6 +686,20 @@ exports[`2D agents and pass graphs compile as they did before 3D > gridRulesWire
 }
 `;
 
+exports[`2D agents and pass graphs compile as they did before 3D > kuwaharaComic 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "1c32f976cb3bf919f2a9530237dc:3838",
+  "paramBindings": "17dc45183ef3c21f2e056ca79a8a:393",
+  "paramUniforms": "100a1c0c1dae9d1b7d5abf4a22d8:282",
+  "passes": "04a62c59d4a8ee08427067a575bf:5215",
+  "success": true,
+  "textureUniforms": "1c7688bcdb4e030cec0e647e7d03:25",
+  "web": null,
+}
+`;
+
 exports[`2D agents and pass graphs compile as they did before 3D > passBlurGroup 1`] = `
 {
   "agents": "1fe1f0024152e81521f99e5e13c1:4",

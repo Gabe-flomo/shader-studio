@@ -1136,6 +1136,54 @@ exports[`golden outputs: examples > handTwoHands 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > kuwaharaClassicVsGeneralised 1`] = `
+{
+  "classicR": "- x120",
+  "generalR": "- x120",
+  "sharp": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > kuwaharaComic 1`] = `
+{
+  "lines": "- x120",
+  "radius": "- x120",
+  "spread": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > kuwaharaLivePainting 1`] = `
+{
+  "radius": "- x120",
+  "sharpness": "- x120",
+  "spacing": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > kuwaharaOilPhoto 1`] = `
+{
+  "mix": "- x120",
+  "radius": "- x120",
+  "sharpness": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > kuwaharaPaintedLandscape 1`] = `
+{
+  "brush": "- x120",
+  "hills": "- x120",
+  "radius": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > kuwaharaWatercolour 1`] = `
+{
+  "grain": "- x120",
+  "radius": "- x120",
+  "soft": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > learn3dCamera 1`] = `
 {
   "a": "- x120",
