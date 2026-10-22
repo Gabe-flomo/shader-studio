@@ -28,6 +28,7 @@ import { GRID_EXAMPLE_INDEX } from './gridExamples';
 import { BOUNDS_EXAMPLE_INDEX } from './boundsExamples';
 import { SURFACE_EXAMPLE_INDEX, SURFACE_SHOWCASE_KEYS } from './surfaceExamples';
 import { NOISE_EXAMPLE_INDEX } from './noiseExamples';
+import { CONVOLVE_EXAMPLE_INDEX, CONVOLVE_SHOWCASE_KEYS } from './convolveExamples';
 import { PASS_EXAMPLE_INDEX } from './passExamples';
 import { AGENT_EXAMPLE_INDEX, AGENT_RULE_INDEX } from './agentExamples';
 import { AGENT_SHADER_EXAMPLE_INDEX } from './agentShaderExamples';
@@ -245,6 +246,8 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...SURFACE_EXAMPLE_INDEX,
   // Noise (noiseExamples.ts, docs/noise-node.md): the Noise node's looks, and Voronoi's cell features.
   ...NOISE_EXAMPLE_INDEX,
+  // Convolve (convolveExamples.ts, docs/convolve.md): every kernel filter in one node.
+  ...CONVOLVE_EXAMPLE_INDEX,
   // Pass nodes, render to texture (passExamples.ts).
   ...PASS_EXAMPLE_INDEX,
   // The Agents group: slime mold and walkers built from nodes (agentExamples.ts).
@@ -354,6 +357,7 @@ export const EXAMPLE_FOLDERS: ExampleFolder[] = [
   { label: "Signals & Inputs",  color: ctp.teal, keys: ['memFollow','memBeat','memReadout','sendReceiveBeat','midiGlowKeys'] },
   { label: "Passes",            color: ctp.maroon, keys: ['passFeedbackTrails','passGlowBright','passJumpFlood','passEdgesFromPicture','displaceNoiseMap'] },
   { label: "Bump & Dither",     color: ctp.yellow, keys: SURFACE_SHOWCASE_KEYS },
+  { label: "Convolve",          color: ctp.flamingo, keys: CONVOLVE_SHOWCASE_KEYS },
   { label: "Effects & Lens",    color: ctp.mauve, keys: ['raysLightText','motionBlurTrails','dofDepthBlur','cmykNoise','crtTv'] },
   { label: "Texture tools",     color: ctp.flamingo, keys: ['ttRenderTargets','ttDataAdvect','ttCacheTimeMachine','ttDistanceRings','ttFeedbackTunnel'] },
   { label: "Seeing: segment, flow, track", color: ctp.flamingo, keys: ['ttSegmentPeople','ttSegmentPick','ttOpticalFlow','ttAnalyze','ttBlobStamp'] },

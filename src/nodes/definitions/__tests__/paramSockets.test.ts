@@ -41,7 +41,7 @@ function showing(def: NodeDefinition, key: string): Record<string, unknown> {
 }
 
 /** Texture tools read nothing until a texture is wired: a Pass of a circle. */
-const TEXTURE_TYPES = new Set(['displaceTexture', 'chromaTexture', 'edgesTexture', 'sampleTexture', 'textureChange', 'textureFlow', 'textureNeighbours', 'readTexture', 'textureLevels', 'textureMask', 'distanceShape', 'textureFade', 'radialFastBlur', 'chromaLens', 'deepGlowTexture', 'glowTexture', 'dofTexture', 'tiltShiftTexture', 'textureFeedback', 'textureFeedbackStep', 'cache', 'cacheRead', 'heightLight', 'channelPick']);
+const TEXTURE_TYPES = new Set(['displaceTexture', 'chromaTexture', 'edgesTexture', 'sampleTexture', 'textureChange', 'textureFlow', 'textureNeighbours', 'readTexture', 'textureLevels', 'textureMask', 'distanceShape', 'textureFade', 'radialFastBlur', 'chromaLens', 'deepGlowTexture', 'glowTexture', 'dofTexture', 'tiltShiftTexture', 'textureFeedback', 'textureFeedbackStep', 'cache', 'cacheRead', 'heightLight', 'channelPick', 'convolve']);
 const picture = (): GraphNode[] => [
   n('uv', 'uv', 0, 0),
   n('circleSDF', 'circ', 0, 0, { radius: 0.4 }, { position: ['uv', 'uv'] }),

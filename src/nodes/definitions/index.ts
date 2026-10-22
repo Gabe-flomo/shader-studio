@@ -174,6 +174,7 @@ export { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurText
 export { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursNode, TextureChangeNode, DistanceShapeNode, TextureFadeNode, ReadTextureNode } from './textureTools';
 export { HeightLightNode } from './heightLight';
 export { NormalFromHeightNode } from './normalFromHeight';
+export { ConvolveNode } from './convolve';
 export { DitherNode, DITHER_GLSL } from './dither';
 export { RandomFromIdNode } from './randomFromId';
 export { ShowDataNode } from './showData';
@@ -326,6 +327,7 @@ import { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurText
 import { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursNode, TextureChangeNode, DistanceShapeNode, TextureFadeNode, ReadTextureNode } from './textureTools';
 import { HeightLightNode } from './heightLight';
 import { NormalFromHeightNode } from './normalFromHeight';
+import { ConvolveNode } from './convolve';
 import { DitherNode } from './dither';
 import { RandomFromIdNode } from './randomFromId';
 import { ShowDataNode } from './showData';
@@ -631,6 +633,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   threshold: ThresholdNode,
   textureFlow: TextureFlowNode,
   textureNeighbours: TextureNeighboursNode,
+  // Convolve (docs/convolve.md): every kernel filter in one node, with presets and a Custom grid
+  convolve: ConvolveNode,
   textureChange: TextureChangeNode,
   distanceShape: DistanceShapeNode,
   heightLight: HeightLightNode,

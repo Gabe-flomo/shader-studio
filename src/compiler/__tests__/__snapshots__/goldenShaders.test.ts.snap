@@ -170,6 +170,48 @@ exports[`golden shaders: every Play example exports the same bundle > convertTun
 }
 `;
 
+exports[`golden shaders: every Play example exports the same bundle > convolveClarityPhoto 1`] = `
+{
+  "bundle": "1ca39b53ab28d90c30c7fe820f0a:7876",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > convolveCustomLeft 1`] = `
+{
+  "bundle": "17cc4fa449c3691bc5a88ca41243:9606",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > convolveEmbossStone 1`] = `
+{
+  "bundle": "085e7840da7898172c11a0320baa:12900",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > convolveMotionBall 1`] = `
+{
+  "bundle": "07c4fa0ec102910b1065b1cf7162:12698",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > convolveSharpenPhoto 1`] = `
+{
+  "bundle": "02fdc6418afce5023f5359d5d2dd:4836",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > convolveVoronoiInk 1`] = `
+{
+  "bundle": "02c7c9b825278408192b720b37e6:8588",
+  "missing": [],
+}
+`;
+
 exports[`golden shaders: every Play example exports the same bundle > curveTraceBeam 1`] = `
 {
   "bundle": "104e5db0c12b5406699527b82df5:15661",
@@ -4305,6 +4347,202 @@ exports[`golden shaders: every example compiles as it did > convertTunnelOptimis
     "u_p_colx2x1_spokes_b",
   ],
   "paramValues": "0068d9bb6369ef16457f58c1e5b8:625",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > convolveClarityPhoto 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "0a5d5a97fb1f5706aae602ff2a0f:6930",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "1bd45f59be4cc01ee313140f40c4:56",
+  "paramBindings": "1593a37b2f34ea105b59b9b6b169:193",
+  "paramUniforms": [
+    "u_p_convx0_amount",
+    "u_p_convx0_bias",
+    "u_p_convx0_mix",
+    "u_p_convx0_radius",
+    "u_p_convx0_spacing",
+  ],
+  "paramValues": "0636990a01d8e115dd3a25eabc58:121",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {
+    "u_tex_tex_0": "photo",
+  },
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > convolveCustomLeft 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "1c9c5b93dfde8f1cded71be219dd:7926",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "0d80cf4d0c85091c25344acf75d0:140",
+  "paramBindings": "08ae27537e08fa1ea6f6f2b37cac:625",
+  "paramUniforms": [
+    "u_p_colorpickex0_color",
+    "u_p_colorpickex0xc2_color",
+    "u_p_convx0_bias",
+    "u_p_convx0_k11",
+    "u_p_convx0_k12",
+    "u_p_convx0_k13",
+    "u_p_convx0_k16",
+    "u_p_convx0_k17",
+    "u_p_convx0_k18",
+    "u_p_convx0_k6",
+    "u_p_convx0_k7",
+    "u_p_convx0_k8",
+    "u_p_convx0_mix",
+    "u_p_convx0_spacing",
+    "u_p_fillx0_antialias",
+    "u_p_fillx0_strokeWidth",
+    "u_p_shapex0_r",
+    "u_p_shapex0_rf",
+  ],
+  "paramValues": "1d04d8829c91271caf904caf23eb:451",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > convolveEmbossStone 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "130bbb02d8182d1c0f726311e746:11466",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "099d6fe2c0035b0128444b797d1d:129",
+  "paramBindings": "10a74dde00e9520d3ee5fc40af45:498",
+  "paramUniforms": [
+    "u_p_colorpickex0_color",
+    "u_p_convx0_angle",
+    "u_p_convx0_bias",
+    "u_p_convx0_mix",
+    "u_p_convx0_spacing",
+    "u_p_mulx0_b",
+    "u_p_noisex0_detail",
+    "u_p_noisex0_lacunarity",
+    "u_p_noisex0_offsetX",
+    "u_p_noisex0_offsetY",
+    "u_p_noisex0_roughness",
+    "u_p_noisex0_scale",
+    "u_p_noisex0_speed",
+  ],
+  "paramValues": "1c6587d43d5740137e6d216e6121:338",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > convolveMotionBall 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "08be92fc0a02f816f4ec0bc10dd8:11169",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "1a99165d0a441d027133527d3df2:196",
+  "paramBindings": "18150ea9224dbc056b353183d21e:580",
+  "paramUniforms": [
+    "u_p_circx0_posX",
+    "u_p_circx0_posY",
+    "u_p_circx0_radius",
+    "u_p_colorpickex0_color",
+    "u_p_colorpickex0xc2_color",
+    "u_p_convx0_angle",
+    "u_p_convx0_bias",
+    "u_p_convx0_mix",
+    "u_p_convx0_spacing",
+    "u_p_fillx0_antialias",
+    "u_p_fillx0_strokeWidth",
+    "u_p_mkv2x0_x",
+    "u_p_mkv2x0_y",
+    "u_p_sinx0_amp",
+    "u_p_sinx0_freq",
+    "u_p_sinx0_input",
+  ],
+  "paramValues": "0235def9c664510d22d4a6390daf:417",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > convolveSharpenPhoto 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "1667790030fb74061cc9606406c7:4173",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "139aa994c619ff1ea601d0cd68f6:54",
+  "paramBindings": "15f6f61d90fe461ff8e286f080b5:107",
+  "paramUniforms": [
+    "u_p_convx0_bias",
+    "u_p_convx0_mix",
+    "u_p_convx0_spacing",
+  ],
+  "paramValues": "03f34c843f7b3f142d9475f6edf5:69",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {
+    "u_tex_tex_0": "photo",
+  },
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > convolveVoronoiInk 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "17068463423072052588c1c62ede:7295",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "16fd52b9f388200ad969db659c2e:164",
+  "paramBindings": "04676d338bc0da18f82240c1e8d2:417",
+  "paramUniforms": [
+    "u_p_colorpickex0_color",
+    "u_p_colorpickex0xc2_color",
+    "u_p_convx0_bias",
+    "u_p_convx0_mix",
+    "u_p_convx0_spacing",
+    "u_p_mixx0_t",
+    "u_p_sstepx0_edge0",
+    "u_p_sstepx0_edge1",
+    "u_p_vorox0_jitter",
+    "u_p_vorox0_scale",
+    "u_p_vorox0_time_scale",
+  ],
+  "paramValues": "1d79069553d73500974c80605d48:311",
   "passes": null,
   "success": true,
   "textureUniforms": {},

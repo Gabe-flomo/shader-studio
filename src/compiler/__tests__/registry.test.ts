@@ -71,6 +71,8 @@ const CONNECTION_GATED = new Set([
   // Radial Fast Blur: nothing to streak until a texture is wired.
   ...['length', 'centerX', 'centerY', 'threshold', 'knee', 'intensity', 'opacity', 'decay', 'falloff', 'tint'].map(k => `radialFastBlur.${k}`),
   // Texture tools (docs/texture-tools.md) likewise read nothing until a texture is wired; Read's Flow amount needs Flow
+  // Convolve passes the colour through until a Texture, or a Colour chain it can work out again, is wired
+  'convolve.spacing', 'convolve.mix', 'convolve.bias',
   'textureFlow.reach', 'textureNeighbours.spacing', 'textureChange.amount', 'textureChange.level', 'textureChange.width', 'readTexture.flowAmount',
   // Feedback (texture)'s Flow strength needs a Flow, as Read's does (its step is the same Read)
   'textureFeedback.flowAmount', 'textureFeedbackStep.flowAmount',

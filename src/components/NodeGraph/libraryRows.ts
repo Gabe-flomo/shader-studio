@@ -275,7 +275,7 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
   ],
   // Every node that works on a texture (the "(texture)" ones), in one row (docs/node-retirements.md).
   'Texture tools': [
-    { label: 'Effects', types: ['blurTexture', 'glowTexture', 'edgesTexture', 'dofTexture', 'tiltShiftTexture', 'chromaLens', 'radialFastBlur', 'displaceTexture', 'displacementMap', 'jumpFloodTexture'] },
+    { label: 'Effects', types: ['blurTexture', 'glowTexture', 'edgesTexture', 'convolve', 'dofTexture', 'tiltShiftTexture', 'chromaLens', 'radialFastBlur', 'displaceTexture', 'displacementMap', 'jumpFloodTexture'] },
     { label: 'Read', types: ['sampleTexture', 'readTexture', 'readChannels', 'readNeighbours', 'textureNeighbours', 'showData'] },
     { label: 'Shape the values', types: ['textureMask', 'textureLevels', 'curves', 'threshold', 'textureFlow', 'textureChange', 'distanceShape', 'heightLight', 'normalFromHeight'] },
     { label: 'Channels', types: ['channelPick', 'channelShuffle', 'channelColours', 'dataTexture', 'renderTargets'] },

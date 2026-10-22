@@ -24,6 +24,7 @@ import { fontFamily, radius } from '../../theme/tokens';
 import { openGridRulesEditor } from '../../builders/windows';
 import { RecipeChip } from '../builders/RecipeChip';
 import { CurvesCardViz } from './CurvesEditor';
+import { ConvolveCard } from './ConvolveCard';
 import { AudioToolCardBody } from '../audio/AudioToolCardBody';
 import { EnvelopeCardViz } from './EnvelopeCardViz';
 import { NodeInlineViz } from './NodeInlineViz';
@@ -80,6 +81,7 @@ export function MobileNodeExtras({ node, nodes }: { node: GraphNode; nodes: Grap
       {/* Curves' graph editor, the Audio Source's File | Mic, a Shader Texture's picture, a Pass's
           texture: the card bodies a phone used to leave out (the 2026-10 mobile audit) */}
       {node.type === 'curves' && <div style={box}><CurvesCardViz node={node} touch /></div>}
+      {node.type === 'convolve' && <div style={box}><ConvolveCard node={node} /></div>}
       {node.type === 'envelope' && <div style={box}><EnvelopeCardViz node={node} touch /></div>}
       {isAudioToolType(node.type) && <div style={box}><AudioToolCardBody node={node} /></div>}
       {node.type === 'shaderTexture' && <div style={box}><ShaderTextureCardBody node={node} /></div>}

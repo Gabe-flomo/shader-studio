@@ -1,4 +1,5 @@
 import { CurvesCardViz } from './CurvesEditor';
+import { ConvolveCard } from './ConvolveCard';
 import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { LOOP_MAX_CAP, loopCountValue, loopMax, loopOf } from '../../nodes/exprLoop';
 import { REMOVED_NODE_TYPES, removedNodeMessage } from '../../nodes/definitions/removedNodes';
@@ -3984,6 +3985,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           return null;
         })())))}
 
+        {/* ── Convolve: where its neighbours come from, and the kernel grid (ConvolveCard.tsx) ── */}
+        {!collapsed && node.type === 'convolve' && <ConvolveCard node={node} />}
         {/* ── Palette tools: presets, paste, copy / convert ── */}
         {!collapsed && (node.type === 'palette' || node.type === 'stopPalette') && <PaletteTools node={node} />}
         {/* ── Data: the dataset, its size and the way into the editor ── */}
