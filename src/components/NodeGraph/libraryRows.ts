@@ -151,7 +151,7 @@ export const CATEGORY_INFO: Record<string, string> = {
   Noise: 'Smooth random patterns (value, Perlin, simplex, fBm, Voronoi) for textures, warps and motion.',
   Sources: 'Inputs from outside the graph: UV, time, mouse, resolution, video, constants (sound: the Audio row).',
   Audio: 'Sound into pictures: an Audio Source (a file or the microphone, with its own frequency bands) and the nodes that listen to it: how loud a band is, when a drum hits, the spectrum, its history and the wave itself.',
-  Animation: 'Values that move over time: LFOs, envelopes and keyframes.',
+  Animation: 'Values that move over time: LFOs, Ease (named motion curves: Bounce, Back, Elastic…), envelopes and keyframes.',
   Math: 'Arithmetic, trigonometry, rounding, interpolation, vectors and comparison, one operation per node.',
   Matrix: '2×2, 3×3 and 4×4 matrices: build, combine and apply transforms.',
   Shapers: 'Curves that reshape a 0 to 1 value: Shaper (eases, seats, S-curves, a Bezier: pick the Curve) and Cubic Bezier.',

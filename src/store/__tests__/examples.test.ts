@@ -48,7 +48,9 @@ describe('bundled examples', () => {
   });
 
   it('the curated showcase: five per category (From the Internet as it is), the courses under Learn', () => {
-    for (const f of SHOWCASE_FOLDERS) if (f.label !== 'From the Internet') expect(f.keys.length, f.label).toBe(5);
+    // ROOMY folders may list more than five: From the Internet as it is, and a new node's own folder with an example per idea.
+    const ROOMY = new Set(['From the Internet', 'Ease & Motion']);
+    for (const f of SHOWCASE_FOLDERS) if (!ROOMY.has(f.label)) expect(f.keys.length, f.label).toBe(5);
     expect(EXAMPLE_FOLDERS.filter(f => f.course).map(f => f.label)).toEqual(['Learn · Play course', 'Learn · Book of Shaders course', 'Learn · 3D course']);
     expect(EXAMPLE_FOLDERS.find(f => f.label === 'Learn · Play course')!.keys).toEqual(PLAY_EXAMPLE_KEYS);
     // Audio examples are off the lists (user feedback 2026-10-19); they still open by key.

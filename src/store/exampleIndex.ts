@@ -26,6 +26,7 @@ import { MATRIX_EXAMPLE_INDEX } from './matrixExamples';
 import { DATA_EXAMPLE_INDEX } from './dataExampleIndex';
 import { GRID_EXAMPLE_INDEX } from './gridExamples';
 import { BOUNDS_EXAMPLE_INDEX } from './boundsExamples';
+import { EASE_EXAMPLE_INDEX, EASE_EXAMPLE_KEYS } from './easeExamples';
 import { PASS_EXAMPLE_INDEX } from './passExamples';
 import { AGENT_EXAMPLE_INDEX, AGENT_RULE_INDEX } from './agentExamples';
 import { AGENT_SHADER_EXAMPLE_INDEX } from './agentShaderExamples';
@@ -239,6 +240,8 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...GRID_EXAMPLE_INDEX,
   // Bounds (boundsExamples.ts, docs/bounds-node.md): copies bouncing in their boxes.
   ...BOUNDS_EXAMPLE_INDEX,
+  // Ease (easeExamples.ts, docs/ease-node.md): named motion curves, the Ease & Motion folder.
+  ...EASE_EXAMPLE_INDEX,
   // Pass nodes, render to texture (passExamples.ts).
   ...PASS_EXAMPLE_INDEX,
   // The Agents group: slime mold and walkers built from nodes (agentExamples.ts).
@@ -339,6 +342,7 @@ export const EXAMPLE_FOLDERS: ExampleFolder[] = [
   { label: "2D: Shapes, Space & Colour", color: ctp.peach, keys: ['fractalRings','colorStopsCycle','spaceAtlas','perspectivePlanes','newtonFractalZ5'] },
   { label: "2D: Scene Builder", color: ctp.pink, keys: ['sb2Kaleidoscope','sb2RingOfRings','sb2RippleGrid','sb2DepthBeams','sb2Melt'] },
   { label: "Curves & Shapes",   color: ctp.lavender, keys: ['curveTraceBeam','curveTraceIntervals','curveTraceMorph','chladniModeFreqDemo','agentRideHarmonograph'] },
+  { label: "Ease & Motion",     color: ctp.peach, keys: EASE_EXAMPLE_KEYS },
   { label: "Grid",              color: ctp.sky, keys: ['gridTourMorph','gridTourRipple','gridTourOverflow','gridDensityWave','boundsBouncingCopies'] },
   { label: "Matrices",          color: ctp.peach, keys: ['matrixFoldFractal','matrixLattices','matrixAnyBasis','matrixCornerPin','matrixNoiseOctaves'] },
   { label: "Node Combos",       color: ctp.flamingo, keys: ['comboDomeRepeat','comboVoxelSpheres','comboGridGroupFlower','comboArrayStars','comboRepeatCellHash'] },

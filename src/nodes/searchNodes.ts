@@ -34,6 +34,7 @@ export const SEARCH_WORDS: Record<string, string[]> = {
   sampleHold: ['Freeze', 'Hold', 'Latch'],
   segment: ['People', 'Person', 'Face', 'Cutout', 'Background removal'],
   blobTrack: ['Track', 'Tracking', 'Follow', 'Face track'],
+  ease: ['Bounce', 'Elastic', 'Spring', 'Ease out back', 'Animate from to'],
 };
 
 /** Search words the node is the default answer for, beyond its own `leadsFor`. */
@@ -44,6 +45,8 @@ export const SEARCH_LEADS: Record<string, string[]> = {
   // Shape SDF draws these (its Shape options); other nodes only mention them.
   shapeSDF: ['heart', 'star', 'hexagon', 'pentagon', 'octagon', 'polygon', 'triangle', 'moon', 'cross', 'arrow'],
   toneMap: ['tonemap', 'tone map'],
+  // Ease plays the named motion curves (Shaper has Golan Levin's maths ones).
+  ease: ['easing', 'tween', 'ease in', 'ease out'],
   transform: ['translate 3d', 'rotate 3d', 'scale 3d', 'move 3d', 'translate 4d', 'rotate 4d', 'scale 4d', 'translate 2d', 'rotate 2d'],
 };
 
