@@ -164,7 +164,7 @@ float voroBorder(vec2 p, float jitter) {
 const VORONOI_METRICS = ['euclidean', 'manhattan', 'chebyshev'] as const;
 
 /** The outputs Voronoi gained with its cell features: added to an older node's card on load (the shader only reads a wired one). */
-const VORONOI_FEATURE_OUTPUTS: GraphNode['outputs'] = {
+export const VORONOI_FEATURE_OUTPUTS: GraphNode['outputs'] = {
   f2:         { type: 'float', label: 'F2 distance' },
   edge:       { type: 'float', label: 'Edge (F2 − F1)' },
   edgeDist:   { type: 'float', label: 'Distance to edge' },

@@ -43,8 +43,8 @@ export const RELEASES: Release[] = [
     date: '2026-10-22',
     title: 'Ease, Convolve and Bevel',
     highlights: [
-      { area: 'Studio', text: 'Ease: named motion curves (Sine, Cubic, Back, Elastic, Bounce…) In, Out or both, playing once, on repeat or there and back, with a hold at each end. Value, Progress and Speed out.', link: { kind: 'doc', path: 'docs/ease-node.md' } },
-      { area: 'Studio', text: 'Convolve: sharpen, unsharp mask, emboss, outline, edges and blurs from one node, or type your own 3×3 or 5×5 kernel on the card. Works on a picture, a Pass or any chain of nodes.', link: { kind: 'doc', path: 'docs/convolve.md' } },
+      { area: 'Studio', text: 'Ease: named motion curves (Sine, Cubic, Back, Elastic, Bounce…), In, Out or both, played once, on repeat or there and back, with a hold at each end.', link: { kind: 'doc', path: 'docs/ease-node.md' } },
+      { area: 'Studio', text: 'Convolve: sharpen, emboss, outline, edges and blurs in one node, or type your own 3×3 or 5×5 kernel. Works on a picture, a Pass or any chain of nodes.', link: { kind: 'doc', path: 'docs/convolve.md' } },
       { area: 'Studio', text: 'SDF Bevel: any shape lit as if raised or engraved, with six bevel profiles, a soft drop shadow and an outline. Icons, badges, tiles and terraced maps.', link: { kind: 'doc', path: 'docs/sdf-bevel.md' } },
       { area: 'Studio', text: '18 new examples in three folders: Ease & Motion, Convolve and Bevel.', link: { kind: 'example', key: 'bevelAppIcon' } },
     ],
@@ -54,9 +54,9 @@ export const RELEASES: Release[] = [
     date: '2026-10-22',
     title: 'Noise, bumps and dither',
     highlights: [
-      { area: 'Studio', text: 'A new Noise node, like Blender’s: Perlin, Simplex, Value or Worley, in 2D, or 3D and 4D so it changes in place. Detail, Roughness, Lacunarity and Distortion; Value, Colour and Slope out.', link: { kind: 'doc', path: 'docs/noise-node.md' } },
-      { area: 'Studio', text: 'Voronoi gives more: the second-nearest distance, Edge (cracks and borders), the exact distance to the edge, and each cell’s ID, colour and centre. Square and diamond cells with Metric.' },
-      { area: 'Studio', text: 'Normal from Height turns any height into a lit surface: noise into hammered metal or terrain, a photo into relief, a shape into a bevel. The light and its colour are sliders.', link: { kind: 'doc', path: 'docs/normal-from-height.md' } },
+      { area: 'Studio', text: 'A Noise node like Blender’s: Perlin, Simplex, Value or Worley, in 2D, or 3D and 4D so it changes in place, with Detail, Roughness and Distortion.', link: { kind: 'doc', path: 'docs/noise-node.md' } },
+      { area: 'Studio', text: 'Voronoi gives more: Edge (cracks and borders), the exact distance to the edge, and each cell’s ID, colour and centre. Square and diamond cells with Metric.' },
+      { area: 'Studio', text: 'Normal from Height turns any height into a lit surface: noise into hammered metal or terrain, a photo into relief, a shape into a bevel.', link: { kind: 'doc', path: 'docs/normal-from-height.md' } },
       { area: 'Studio', text: 'Dither: Bayer or blue-noise dithering in 1-bit, a few levels, two colours or Game Boy greens, with chunky pixels.', link: { kind: 'doc', path: 'docs/dither.md' } },
       { area: 'Studio', text: '18 new examples in three folders: Noise, Noise: cells, and Bump & Dither.', link: { kind: 'example', key: 'noiseMarble' } },
     ],

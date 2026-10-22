@@ -29,6 +29,7 @@ import { graphOutput } from '../nodes/scene3dDefaults';
 import { placeNear } from '../nodes/recipes';
 import { getNodeDefinition, getNodeDefinitionFor } from '../nodes/definitions';
 import { VECTORIZABLE_NODES } from '../nodes/definitions/math';
+import { VORONOI_FEATURE_OUTPUTS } from '../nodes/definitions/noise';
 import { planSwitch, applySwitchToList, switchOptions, type SwitchContext } from '../nodes/switchNode';
 import { typesCompatible } from '../lib/typesCompatible';
 import { loopIfWired, loopPath, loopTip } from '../compiler/graphLoops';
@@ -266,10 +267,20 @@ function consumers(nodes: GraphNode[], id: string, key?: string): Array<[string,
   return out;
 }
 
+/**
+ * Outputs added to a node after the Do… bar's sentences were written: used when named ("colour by its
+ * cell colour"), never picked by type, so an old sentence keeps doing what it did (Voronoi's colour
+ * by it stays by Distance, not the new Cell colour).
+ */
+const QUIET_OUTPUTS: Record<string, ReadonlySet<string>> = {
+  voronoi: new Set(Object.keys(VORONOI_FEATURE_OUTPUTS)),
+};
+
 /** An output of `node`: the named one, else the first of a wanted type, else one that fits, else the first. */
 function pickOut(node: GraphNode, key?: string, want?: string[]): { key: string; type: string } | null {
   if (key && node.outputs[key]) return { key, type: node.outputs[key].type };
-  const outs = Object.entries(node.outputs);
+  const quiet = QUIET_OUTPUTS[node.type];
+  const outs = Object.entries(node.outputs).filter(([k]) => !quiet?.has(k));
   if (want) {
     for (const t of want) { const e = outs.find(([, o]) => o.type === t); if (e) return { key: e[0], type: e[1].type }; }
     const e = outs.find(([, o]) => want.some(t => typesCompatible(o.type, t)));

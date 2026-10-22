@@ -50,7 +50,7 @@
   "ok": true,
   "added": [],
   "removed": [],
-  "hash": "286d4c14"
+  "hash": "d4e848e2"
  },
  "commands:empty · circle in the middle with a glow, falloff 8": {
   "reads": "build",
@@ -276,7 +276,7 @@
    "voronoi"
   ],
   "removed": [],
-  "hash": "04364f3e"
+  "hash": "66f3ac4c"
  },
  "commands:circle · add a star at the top left": {
   "reads": "create",
@@ -686,7 +686,7 @@
   "ok": true,
   "added": [],
   "removed": [],
-  "hash": "286d4c14"
+  "hash": "d4e848e2"
  },
  "commands:circle · switch the circle to a palette": {
   "reads": "replace!error",
@@ -1321,7 +1321,7 @@
   "ok": true,
   "added": [],
   "removed": [],
-  "hash": "286d4c14"
+  "hash": "d4e848e2"
  },
  "verb replace:circle · turn the circle into a box": {
   "reads": "replace",
