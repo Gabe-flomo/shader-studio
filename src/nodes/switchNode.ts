@@ -45,7 +45,7 @@ export const SWITCH_FAMILIES: readonly SwitchFamily[] = [
   { id: 'noise', label: 'Noise', types: ['fbm', 'noiseFloat', 'voronoi', 'scatter'] },
   { id: 'colour-adjust', label: 'Colour adjustments', types: [
     'brightnessContrast', 'colorSaturation', 'hueRotate', 'liftGammaGain', 'shadowsHighlights', 'toneCurve', 'toneMap',
-    'invert', 'posterize', 'hsv', 'hueRange', 'grain',
+    'invert', 'posterize', 'dither', 'hsv', 'hueRange', 'grain',
   ] },
   { id: 'colour-mix', label: 'Colour mixing', types: ['blendModes', 'oklabMix', 'addColor', 'mask'] },
   { id: 'palettes', label: 'Palettes', types: ['palette', 'stopPalette', 'colorRamp', 'blackbody'] },

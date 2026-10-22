@@ -218,7 +218,7 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
   Color: [
     { label: 'Build',   types: ['colorPicker', 'colorize', 'floatToVec3'] },
     { label: 'Palette', types: ['palette', 'stopPalette', 'gradient', 'colorRamp', 'blackbody'] },
-    { label: 'Convert', types: ['hsv', 'normalToColor', 'luminance', 'posterize'] },
+    { label: 'Convert', types: ['hsv', 'normalToColor', 'luminance', 'posterize', 'dither'] },
     { label: 'Blend',   types: ['blendModes', 'oklabMix'] },
   ],
   Math: [
@@ -277,7 +277,7 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
   'Texture tools': [
     { label: 'Effects', types: ['blurTexture', 'glowTexture', 'edgesTexture', 'dofTexture', 'tiltShiftTexture', 'chromaLens', 'radialFastBlur', 'displaceTexture', 'displacementMap', 'jumpFloodTexture'] },
     { label: 'Read', types: ['sampleTexture', 'readTexture', 'readChannels', 'readNeighbours', 'textureNeighbours', 'showData'] },
-    { label: 'Shape the values', types: ['textureMask', 'textureLevels', 'curves', 'threshold', 'textureFlow', 'textureChange', 'distanceShape', 'heightLight'] },
+    { label: 'Shape the values', types: ['textureMask', 'textureLevels', 'curves', 'threshold', 'textureFlow', 'textureChange', 'distanceShape', 'heightLight', 'normalFromHeight'] },
     { label: 'Channels', types: ['channelPick', 'channelShuffle', 'channelColours', 'dataTexture', 'renderTargets'] },
     { label: 'Pass and time', types: ['pass', 'textureFeedback', 'cache', 'cacheRead'] },
     { label: 'Look and track', types: ['depth', 'depthMix', 'segment', 'blobTrack', 'blobSpace', 'analyze', 'opticalFlow'] },

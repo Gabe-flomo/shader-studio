@@ -101,7 +101,7 @@ export interface OutputSuggestion {
 }
 
 /** Nodes that are meant to be flat, stepped or clipped: no fixes for them. */
-const INTENDED = new Set(['posterize', 'quantize', 'floor', 'ceil', 'round', 'step', 'compare', 'cellFilter', 'colorPicker', 'constant', 'vec2Const', 'time', 'mouse', 'output', 'cmykHalftone', 'pixelate', 'scanlines']);
+const INTENDED = new Set(['posterize', 'dither', 'quantize', 'floor', 'ceil', 'round', 'step', 'compare', 'cellFilter', 'colorPicker', 'constant', 'vec2Const', 'time', 'mouse', 'output', 'cmykHalftone', 'pixelate', 'scanlines']);
 const MARCH_TYPES = new Set(['marchLoopGroup', 'giLitMarchGroup']);
 
 /** Fixes the measurement calls for, strongest first. Empty when nothing is confident. */

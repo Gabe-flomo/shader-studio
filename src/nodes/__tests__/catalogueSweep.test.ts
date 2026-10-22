@@ -383,7 +383,7 @@ describe('T7: search finds the everyday words (the real scorer, over the library
     square: 'boxSDF', rectangle: 'boxSDF', cube: 'boxSDF3D', sine: 'sin', cosine: 'cos', lerp: 'mix', interpolate: 'mix',
     raymarch: 'marchLoopGroup', tonemap: 'toneMap', hdr: 'toneMap', exposure: 'toneMap', perlin: 'noiseFloat', worley: 'voronoi',
     hsl: 'hsv', font: 'text', letters: 'text', checkerboard: 'gridPattern', stripes: 'modSelect' /* Every Nth; Wave Texture was retired 2026-10-19 */, slider: 'constant',
-    record: 'cache', people: 'segment', 'translate 3d': 'transform', 'rotate 4d': 'transform', vhs: 'glitch', dither: 'posterize',
+    record: 'cache', people: 'segment', 'translate 3d': 'transform', 'rotate 4d': 'transform', vhs: 'glitch', dither: 'dither',
   };
   for (const [q, t] of Object.entries(FIRST)) it(`“${q}” → ${t} first`, () => expect(top(q)[0]).toBe(t));
   const AMONG: Record<string, string> = {

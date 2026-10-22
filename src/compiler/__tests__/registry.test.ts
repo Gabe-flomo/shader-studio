@@ -28,6 +28,7 @@ const SKIP = new Set(['output', 'vec4Output']);
  * declared but legitimately unread; a `showWhen` can't express a connection.
  */
 const CONNECTION_GATED = new Set([
+  'normalFromHeight.distance', // Sample distance: only when Height is a field function (a wired chain that can be read elsewhere)
   'neighborDist.dispScale',   // only in the hash-displacement path (cellID wired, displacement not)
   'glassScene.diffuseness',   // the node emits no code at all until its scene inputs are wired
   // Depth Light: the glow settings only with a Glowing scene wired, the shadow ones only with Shadows from

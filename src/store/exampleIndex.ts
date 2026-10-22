@@ -26,6 +26,7 @@ import { MATRIX_EXAMPLE_INDEX } from './matrixExamples';
 import { DATA_EXAMPLE_INDEX } from './dataExampleIndex';
 import { GRID_EXAMPLE_INDEX } from './gridExamples';
 import { BOUNDS_EXAMPLE_INDEX } from './boundsExamples';
+import { SURFACE_EXAMPLE_INDEX, SURFACE_SHOWCASE_KEYS } from './surfaceExamples';
 import { PASS_EXAMPLE_INDEX } from './passExamples';
 import { AGENT_EXAMPLE_INDEX, AGENT_RULE_INDEX } from './agentExamples';
 import { AGENT_SHADER_EXAMPLE_INDEX } from './agentShaderExamples';
@@ -239,6 +240,8 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...GRID_EXAMPLE_INDEX,
   // Bounds (boundsExamples.ts, docs/bounds-node.md): copies bouncing in their boxes.
   ...BOUNDS_EXAMPLE_INDEX,
+  // Normal from Height and Dither (surfaceExamples.ts, docs/normal-from-height.md, docs/dither.md): bumps lit by a lamp, dithering.
+  ...SURFACE_EXAMPLE_INDEX,
   // Pass nodes, render to texture (passExamples.ts).
   ...PASS_EXAMPLE_INDEX,
   // The Agents group: slime mold and walkers built from nodes (agentExamples.ts).
@@ -345,6 +348,7 @@ export const EXAMPLE_FOLDERS: ExampleFolder[] = [
   { label: "Groups & Code",     color: ctp.sapphire, keys: ['groupJuliaBreak','loopKali','ringGlow','publishAndKeyframes','convertTunnelOptimised'] },
   { label: "Signals & Inputs",  color: ctp.teal, keys: ['memFollow','memBeat','memReadout','sendReceiveBeat','midiGlowKeys'] },
   { label: "Passes",            color: ctp.maroon, keys: ['passFeedbackTrails','passGlowBright','passJumpFlood','passEdgesFromPicture','displaceNoiseMap'] },
+  { label: "Bump & Dither",     color: ctp.yellow, keys: SURFACE_SHOWCASE_KEYS },
   { label: "Effects & Lens",    color: ctp.mauve, keys: ['raysLightText','motionBlurTrails','dofDepthBlur','cmykNoise','crtTv'] },
   { label: "Texture tools",     color: ctp.flamingo, keys: ['ttRenderTargets','ttDataAdvect','ttCacheTimeMachine','ttDistanceRings','ttFeedbackTunnel'] },
   { label: "Seeing: segment, flow, track", color: ctp.flamingo, keys: ['ttSegmentPeople','ttSegmentPick','ttOpticalFlow','ttAnalyze','ttBlobStamp'] },

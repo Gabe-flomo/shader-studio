@@ -1129,6 +1129,13 @@ export class ShaderAssembler {
       if (!src) { delete inputVars[key]; continue; }
       const label = (typeof node.params.label === 'string' && node.params.label.trim()) || def.label;
       const where = `${label}'s ${def.inputs[key]?.label ?? key}`;
+      if (def.inputs[key]?.fieldOptional) {
+        // Optional (Normal from Height): a chain that can't be a function keeps its plain value, and the node
+        // falls back on its own. A chain that can is compiled as usual.
+        if (src === 'loop') continue;
+        try { inputVars[key] = this.compileFieldFunction(origId, where, src, def.inputs[key].type); } catch { /* keep the plain value */ }
+        continue;
+      }
       if (src === 'loop') throw new Error(`Node ${origId}: the shape wired into ${where} is a value carried round an iterated group's loop, which can't be evaluated per cell. Build the shape inside the group instead.`);
       inputVars[key] = this.compileFieldFunction(origId, where, src, def.inputs[key].type);
     }
