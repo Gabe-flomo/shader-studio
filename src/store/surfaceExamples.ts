@@ -56,13 +56,13 @@ export function buildSurfaceExamples(): Record<string, ExampleGraph> {
       counter: 20,
       nodes: [
         n('uv', 'uv', 40, 260, note(['UV: this pixel\'s place in the picture.'])),
-        n('fbm', 'dents', 300, 260, { scale: 3, octaves: 5, gain: 0.5, ...note(['Fractal Noise (FBM): soft lumps, small ones on big ones, from 0 to about 1. It is the height of the metal: the dents and bumps of a hammered sheet.']) }, { uv: ['uv', 'uv'] }),
+        n('noise', 'dents', 300, 260, { kind: 'perlin', dims: '2d', scale: 3, detail: 4, roughness: 0.5, ...note(['Noise (Perlin, 2D, Detail 4): soft lumps, small ones on big ones, from 0 to 1. It is the height of the metal: the dents and bumps of a hammered sheet. (Its layers are offset from each other, so lighting shows no creases along the middle.)']) }, { uv: ['uv', 'uv'] }),
         n('colorPicker', 'steel', 300, 520, { color: [0.62, 0.64, 0.68], ...note(['Colour: the metal\'s own colour, a cool steel grey.']) }),
         n('normalFromHeight', 'bump', 600, 260, {
-          strength: 0.3, distance: 1, lightAngle: 120, lightHeight: 35, lightColour: [1, 0.95, 0.85], ambient: 0.12, specular: 0.9, shininess: 48, mode: 'lit',
+          strength: 0.12, distance: 1.5, lightAngle: 120, lightHeight: 35, lightColour: [1, 0.95, 0.85], ambient: 0.12, specular: 0.9, shininess: 48, mode: 'lit',
           ...note([
             'Normal from Height: reads the noise as a height a little to each side of every point, so it knows the slope, and from the slope which way the surface faces.',
-            'It lights that with one lamp (Light from 120°, up and to the left, 35° high) and a sharp highlight (Specular 0.9, Shininess 48), so it reads as polished metal. Strength 0.3 is how deep the dents are.',
+            'It lights that with one lamp (Light from 120°, up and to the left, 35° high) and a sharp highlight (Specular 0.9, Shininess 48), so it reads as polished metal. Strength 0.12 is how deep the dents are; Sample distance 1.5 pixels smooths the finest grain.',
           ]),
         }, { height: ['dents', 'value'], colour: ['steel', 'rgb'] }),
         n('output', 'out', 900, 260, note(['Output: the lit metal (Normal from Height\'s Colour).']), { color: ['bump', 'colour'] }),
@@ -83,7 +83,7 @@ export function buildSurfaceExamples(): Record<string, ExampleGraph> {
       counter: 20,
       nodes: [
         n('uv', 'uv', 40, 260, note(['UV: this pixel\'s place in the picture.'])),
-        n('fbm', 'land', 300, 260, { scale: 2.2, octaves: 6, gain: 0.5, ...note(['Fractal Noise (FBM), 6 octaves: big hills with smaller and smaller ridges on them. It is the height of the land.']) }, { uv: ['uv', 'uv'] }),
+        n('noise', 'land', 300, 260, { kind: 'perlin', dims: '2d', scale: 2.2, detail: 6, roughness: 0.5, ...note(['Noise (Perlin, 2D, Detail 6): big hills with smaller and smaller ridges on them. It is the height of the land.']) }, { uv: ['uv', 'uv'] }),
         n('palette', 'earth', 600, 520, { preset: 'custom', offset: [0.42, 0.38, 0.3], amplitude: [0.38, 0.32, 0.26], freq: [0.8, 0.8, 0.8], phase: [0.55, 0.6, 0.68], ...note(['Palette: the land\'s colour by its height, from dark green-brown valleys to pale sandy peaks.']) }, { value: ['land', 'value'] }),
         n('time', 'clock', 40, 720, note(['Time: seconds since the start. It turns the sun.'])),
         n('multiply', 'turn', 300, 720, { b: 20, ...note(['Multiply: Time × 20, the sun\'s direction in degrees: once round every 18 seconds.']) }, { a: ['clock', 'time'] }),
@@ -261,7 +261,7 @@ export function buildSurfaceExamples(): Record<string, ExampleGraph> {
       nodes: [
         n('uv', 'uv', 40, 260, note(['UV: this pixel\'s place in the picture.'])),
         n('polarSpace', 'polar', 300, 260, { ...note(['Polar Space: the point as an angle round the middle and a distance from it.']) }, { input: ['uv', 'uv'] }),
-        n('multiply', 'turns', 540, 160, { b: 0.159, ...note(['Multiply: the angle ÷ 6.28 (× 0.159): once round the middle is one step through the palette.']) }, { a: ['polar', 'angle'] }),
+        n('multiply', 'turns', 540, 160, { b: 1, ...note(['Multiply: the angle (Polar Space gives 0 to 1 once round) × 1: once round the middle is exactly one trip through the palette, so the ends meet with no seam.']) }, { a: ['polar', 'angle'] }),
         n('multiply', 'out1', 540, 380, { b: 1.4, ...note(['Multiply: the distance × 1.4, so the colours also change going outward: a swirl.']) }, { a: ['polar', 'radius'] }),
         n('add', 'swirl', 780, 260, { ...note(['Add: angle plus distance, the swirl\'s place in the palette.']) }, { a: ['turns', 'result'], b: ['out1', 'result'] }),
         n('time', 'clock', 540, 600, note(['Time: seconds since the start. It turns the swirl.'])),

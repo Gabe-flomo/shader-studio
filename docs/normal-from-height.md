@@ -46,4 +46,6 @@ Slope = ((h(right) − h(left)), (h(up) − h(down))) / (2 × distance), with In
 
 ## Examples
 
-In the **Bump & Dither** folder: *Normal from Height: hammered metal from noise* (FBM, a sharp highlight), *terrain under a moving sun* (Light from wired to Time), *water rings over a photo* (Slope bends where a photo is read, the highlight added on top). Opening by key: `bumpPhotoRelief` (a photo's brightness as height, in its own colours) and `bumpBevelShape` (a star's distance as a bevel, Normal as colour). Built in `src/store/surfaceExamples.ts`.
+In the **Bump & Dither** folder: *Normal from Height: hammered metal from noise* (the Noise node, Perlin; a sharp highlight), *terrain under a moving sun* (Light from wired to Time), *water rings over a photo* (Slope bends where a photo is read, the highlight added on top). Also *photo relief* (`bumpPhotoRelief`: a photo's brightness as height, in its own colours) and *bevelled star* (`bumpBevelShape`: a star's distance as a bevel, Normal as colour).
+
+A height from the old Fractal Noise (FBM) node shows faint creases along the middle of the picture when lit: its layers all line up at the centre. The Noise node offsets its layers, so lit noise looks even. Built in `src/store/surfaceExamples.ts`.

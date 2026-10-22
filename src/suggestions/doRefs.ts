@@ -100,7 +100,7 @@ export function splitClauses(toks: Tok[], isHead: (toks: Tok[], i: number) => bo
 /** Short words for node types that their labels don't say. A word can name several types. */
 export const TYPE_WORDS: Readonly<Record<string, string[]>> = {
   glow: ['light'], halo: ['light'], light: ['light'],
-  noise: ['fbm', 'noiseFloat', 'voronoi'], fbm: ['fbm'], clouds: ['fbm'], cells: ['voronoi'],
+  noise: ['fbm', 'noiseFloat', 'voronoi', 'noise'], fbm: ['fbm'], clouds: ['fbm'], cells: ['voronoi'],
   palette: ['palette', 'stopPalette'], gradient: ['gradient'],
   fill: ['sdfFill'],
   uv: ['uv'], space: ['uv'], coordinates: ['uv'],

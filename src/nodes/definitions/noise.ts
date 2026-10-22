@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { f, p, pv3, withParamSockets, phaseParamDefs, phaseOf, PHASE_KEYS } from './helpers';
+import { f, p, pv3, withParamSockets, withNewOutputs, phaseParamDefs, phaseOf, PHASE_KEYS } from './helpers';
 
 // ─── FBM — Fractal Brownian Motion ───────────────────────────────────────────
 
@@ -92,11 +92,92 @@ float voronoi(vec2 p, float jitter) {
     return minDist;
 }`;
 
+/**
+ * Voronoi's cell features (F2, Edge, Distance to edge, Cell ID, Cell colour, Cell position) and its Metric. Each
+ * feature output is an expression that calls one of these, so a helper is in the shader only while something reads
+ * that output (the assembler drops helpers nothing calls), and an old graph that reads Distance compiles exactly as
+ * before. The feature point is the one voronoi() uses, so F1 here is the Distance output. The comments live inside
+ * the functions: the assembler keeps any text between functions, which would change every Voronoi shader.
+ */
+const VORONOI_FEATURES_GLSL = `vec2 voroPoint(vec2 cell, float jitter) {
+    // The cell's random point, as voronoi() places it (0–1 inside the cell).
+    return 0.5 + 0.5 * sin(jitter * 6.2831853 * noiseHash2(cell));
+}
+float voroDist(vec2 d, int metric) {
+    // Distance by metric: 0 straight line (Euclidean), 1 Manhattan, 2 Chebyshev.
+    if (metric == 1) return abs(d.x) + abs(d.y);
+    if (metric == 2) return max(abs(d.x), abs(d.y));
+    return length(d);
+}
+vec4 voroCells(vec2 p, float jitter, int metric) {
+    // x = F1, y = F2 (nearest and second-nearest point), zw = the nearest point's cell (whole numbers).
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    float f1 = 8.0;
+    float f2 = 8.0;
+    vec2 cell = i;
+    for (int y = -2; y <= 2; y++) {
+        for (int x = -2; x <= 2; x++) {
+            vec2 g = vec2(float(x), float(y));
+            float d = voroDist(g + voroPoint(i + g, jitter) - f, metric);
+            if (d < f1) { f2 = f1; f1 = d; cell = i + g; }
+            else if (d < f2) { f2 = d; }
+        }
+    }
+    return vec4(f1, f2, cell);
+}
+float voroF2(vec2 p, float jitter, int metric) { return voroCells(p, jitter, metric).y; }
+float voroEdge(vec2 p, float jitter, int metric) { vec4 c = voroCells(p, jitter, metric); return c.y - c.x; }
+vec2 voroCellId(vec2 p, float jitter, int metric) { return voroCells(p, jitter, metric).zw; }
+vec2 voroNearestPoint(vec2 p, float jitter, int metric) { vec2 c = voroCells(p, jitter, metric).zw; return c + voroPoint(c, jitter); }
+vec3 voroCellColour(vec2 cell) {
+    // A steady random colour per cell.
+    return fract(sin(vec3(dot(cell, vec2(127.1, 311.7)), dot(cell, vec2(269.5, 183.3)), dot(cell, vec2(419.2, 371.9)))) * 43758.5453);
+}
+float voroBorder(vec2 p, float jitter) {
+    // Exact distance to the nearest cell border (Inigo Quilez, "Voronoi edges", 2012): find the nearest point, then
+    // the nearest bisector between it and its neighbours. Straight-line distance whatever the Metric.
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 mg = vec2(0.0);
+    vec2 mr = vec2(0.0);
+    float md = 8.0;
+    for (int y = -1; y <= 1; y++) {
+        for (int x = -1; x <= 1; x++) {
+            vec2 g = vec2(float(x), float(y));
+            vec2 r = g + voroPoint(i + g, jitter) - f;
+            float d = dot(r, r);
+            if (d < md) { md = d; mr = r; mg = g; }
+        }
+    }
+    md = 8.0;
+    for (int y = -2; y <= 2; y++) {
+        for (int x = -2; x <= 2; x++) {
+            vec2 g = mg + vec2(float(x), float(y));
+            vec2 r = g + voroPoint(i + g, jitter) - f;
+            if (dot(mr - r, mr - r) > 0.00001) md = min(md, dot(0.5 * (mr + r), normalize(r - mr)));
+        }
+    }
+    return md;
+}`;
+
+const VORONOI_METRICS = ['euclidean', 'manhattan', 'chebyshev'] as const;
+
+/** The outputs Voronoi gained with its cell features: added to an older node's card on load (the shader only reads a wired one). */
+const VORONOI_FEATURE_OUTPUTS: GraphNode['outputs'] = {
+  f2:         { type: 'float', label: 'F2 distance' },
+  edge:       { type: 'float', label: 'Edge (F2 − F1)' },
+  edgeDist:   { type: 'float', label: 'Distance to edge' },
+  cellId:     { type: 'vec2',  label: 'Cell ID' },
+  cellColour: { type: 'vec3',  label: 'Cell colour' },
+  cellPos:    { type: 'vec2',  label: 'Cell position' },
+};
+
 export const VoronoiNode: NodeDefinition = {
   type: 'voronoi',
   label: 'Voronoi',
   category: 'Noise',
-  description: 'Worley (cell) noise — returns distance to nearest cell center. Great for organic patterns, cracked textures, and cell-glow effects.',
+  description: 'Worley (cell) noise — returns distance to nearest cell center. Great for organic patterns, cracked textures, and cell-glow effects. More outputs for cell looks: F2 distance (to the second-nearest center), Edge (F2 − F1, dark along the borders), Distance to edge (exact, for crisp lines and cracks), Cell ID, Cell colour (random per cell) and Cell position (the nearest center, in UV).',
   inputs: {
     uv:        { type: 'vec2',  label: 'UV'        },
     time:      { type: 'float', label: 'Time', hint: 'Wire Time to animate; unwired the cells are frozen.' },
@@ -107,13 +188,24 @@ export const VoronoiNode: NodeDefinition = {
   outputs: {
     dist: { type: 'float', label: 'Distance' },
     uv:   { type: 'vec2',  label: 'UV (pass-through)' },
+    ...VORONOI_FEATURE_OUTPUTS,
   },
+  syncSockets: withNewOutputs(VORONOI_FEATURE_OUTPUTS),
   glslFunction: VORONOI_GLSL,
-  defaultParams: { scale: 5.0, jitter: 1.0, time_scale: 0.0 },
+  glslFunctions: [VORONOI_FEATURES_GLSL],
+  defaultParams: { scale: 5.0, jitter: 1.0, time_scale: 0.0, metric: 'euclidean' },
   paramDefs: {
     scale:      { label: 'Cell density',      type: 'float', min: 0.5,  max: 20.0, step: 0.1, hint: 'Cells per unit.'  },
     jitter:     { label: 'Randomness',     type: 'float', min: 0.0,  max: 1.0,  step: 0.01, hint: '0 is a regular grid, 1 is fully random.' },
     time_scale: { label: 'Speed', type: 'float', min: 0.0,  max: 2.0,  step: 0.01, hint: 'How fast the cells move. Needs Time wired.' },
+    metric: {
+      label: 'Metric', type: 'select', hint: 'How distance is measured. Euclidean gives round cells, Manhattan diamond-like ones, Chebyshev square ones. Distance to edge is always measured in straight lines.',
+      options: [
+        { value: 'euclidean', label: 'Euclidean (round)' },
+        { value: 'manhattan', label: 'Manhattan (diamond)' },
+        { value: 'chebyshev', label: 'Chebyshev (square)' },
+      ],
+    },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id        = node.id;
@@ -123,12 +215,28 @@ export const VoronoiNode: NodeDefinition = {
     const jitter    = inputVars.jitter     ?? p(node.params.jitter, 1.0);
     const timeScale = inputVars.time_scale ?? p(node.params.time_scale, 0.0);
     const outVar    = `${id}_dist`;
-    const animUV = parseFloat(timeScale) === 0.0
+    const still = parseFloat(timeScale) === 0.0;
+    const animUV = still
       ? `${uvVar} * ${scale}`
       : `(${uvVar} + ${timeVar} * ${timeScale} * vec2(0.13, 0.27)) * ${scale}`;
+    const metricIdx = Math.max(0, VORONOI_METRICS.indexOf(node.params.metric as typeof VORONOI_METRICS[number]));
+    const m = String(metricIdx);
+    // Euclidean (the default, and every graph saved before Metric) writes the line it always wrote.
+    const distExpr = metricIdx === 0 ? `voronoi(${animUV}, ${jitter})` : `voroCells(${animUV}, ${jitter}, ${m}).x`;
+    // The nearest point back in UV: undo Cell density, then the drift.
+    const drift = still ? '' : ` - ${timeVar} * ${timeScale} * vec2(0.13, 0.27)`;
     return {
-      code: `    float ${outVar} = voronoi(${animUV}, ${jitter});\n`,
-      outputVars: { dist: outVar, uv: uvVar },
+      code: `    float ${outVar} = ${distExpr};\n`,
+      outputVars: {
+        dist: outVar,
+        uv: uvVar,
+        f2:         `voroF2(${animUV}, ${jitter}, ${m})`,
+        edge:       `voroEdge(${animUV}, ${jitter}, ${m})`,
+        edgeDist:   `voroBorder(${animUV}, ${jitter})`,
+        cellId:     `voroCellId(${animUV}, ${jitter}, ${m})`,
+        cellColour: `voroCellColour(voroCellId(${animUV}, ${jitter}, ${m}))`,
+        cellPos:    `(voroNearestPoint(${animUV}, ${jitter}, ${m}) / (${scale})${drift})`,
+      },
     };
   },
 };

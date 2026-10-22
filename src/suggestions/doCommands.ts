@@ -428,6 +428,7 @@ const PARAM_ALIASES: Record<string, Record<string, string>> = {
   fbm: { size: 'scale', zoom: 'scale', speed: 'time_scale' },
   voronoi: { size: 'scale', zoom: 'scale', speed: 'time_scale' },
   noiseFloat: { size: 'scale', zoom: 'scale' },
+  noise: { size: 'scale', zoom: 'scale', octaves: 'detail', layers: 'detail', warp: 'distortion' },
   palette: { speed: 'speed', bands: 'scale' },
   shapeSDF: { radius: 'r', size: 'r' },
   boxSDF: { size: 'width', radius: 'width' },

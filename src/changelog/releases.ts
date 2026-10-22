@@ -39,6 +39,18 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.326',
+    date: '2026-10-22',
+    title: 'Noise, bumps and dither',
+    highlights: [
+      { area: 'Studio', text: 'A new Noise node, like Blender’s: Perlin, Simplex, Value or Worley, in 2D, or 3D and 4D so it changes in place. Detail, Roughness, Lacunarity and Distortion; Value, Colour and Slope out.', link: { kind: 'doc', path: 'docs/noise-node.md' } },
+      { area: 'Studio', text: 'Voronoi gives more: the second-nearest distance, Edge (cracks and borders), the exact distance to the edge, and each cell’s ID, colour and centre. Square and diamond cells with Metric.' },
+      { area: 'Studio', text: 'Normal from Height turns any height into a lit surface: noise into hammered metal or terrain, a photo into relief, a shape into a bevel. The light and its colour are sliders.', link: { kind: 'doc', path: 'docs/normal-from-height.md' } },
+      { area: 'Studio', text: 'Dither: Bayer or blue-noise dithering in 1-bit, a few levels, two colours or Game Boy greens, with chunky pixels.', link: { kind: 'doc', path: 'docs/dither.md' } },
+      { area: 'Studio', text: '18 new examples in three folders: Noise, Noise: cells, and Bump & Dither.', link: { kind: 'example', key: 'noiseMarble' } },
+    ],
+  },
+  {
     id: '2026.10.325',
     date: '2026-10-22',
     title: 'Auto types',

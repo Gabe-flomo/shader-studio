@@ -37,4 +37,4 @@ Each pixel (or Pixel size block) gets a threshold t from the pattern, 0 to 1. Th
 
 ## Examples
 
-In the **Bump & Dither** folder: *1-bit Bayer clouds* (FBM in black and white, Bayer 8×8) and *Game Boy: four greens, chunky pixels* (Four colours, Pixel size 4). Opening by key: `ditherBlueSwirl` (blue noise on a palette swirl, 3 levels per channel). Built in `src/store/surfaceExamples.ts`.
+In the **Bump & Dither** folder: *1-bit Bayer clouds* (FBM in black and white, Bayer 8×8) and *Game Boy: four greens, chunky pixels* (Four colours, Pixel size 4). Also *blue-noise swirl* (`ditherBlueSwirl`: blue noise on a palette swirl, 3 levels per channel). Built in `src/store/surfaceExamples.ts`.

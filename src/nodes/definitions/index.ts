@@ -104,6 +104,7 @@ export { LoopCarryNode, LoopBreakNode } from './loop';
 
 // Noise
 export { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode, NoiseFloatNode, ScatterNode } from './noise';
+export { NoiseNode } from './noiseNode';
 
 // Fractals
 export { MandelbrotNode, IFSNode, NewtonFractalNode, LyapunovNode, ApollonianNode, SphericalFoldFractalNode } from './fractals';
@@ -255,6 +256,7 @@ import {
 import { LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode, LoopColorRingStepNode } from './loopPair';
 import { LoopCarryNode, LoopBreakNode } from './loop';
 import { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode, NoiseFloatNode, ScatterNode } from './noise';
+import { NoiseNode } from './noiseNode';
 import { MandelbrotNode, IFSNode, NewtonFractalNode, LyapunovNode, ApollonianNode, SphericalFoldFractalNode } from './fractals';
 import { ChladniFieldNode, ChladniModeFreqNode } from './physics';
 import { VectorFieldNode, GravityFieldNode, SpiralFieldNode } from './vectorFields';
@@ -577,6 +579,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   flowField: FlowFieldNode,
   circlePack: CirclePackNode,
   noiseFloat: NoiseFloatNode,
+  noise: NoiseNode,
   scatter: ScatterNode,
   // Fractals
   mandelbrot: MandelbrotNode,

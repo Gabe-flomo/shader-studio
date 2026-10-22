@@ -83,7 +83,7 @@ export const FAMILIES: Family[] = [
 const DISTANCE_PORTS = /^(distance|dist|d|sdf|value|dCenter|distToCenter|cellDist)$/i;
 const SHAPE_CATS = new Set(['2D Primitives', '3D Primitives', 'SDF', 'Field']);
 const LIGHT_TYPES = ['light', 'volumeGlow', 'glowToColor', 'glowTexture', 'bloom'];
-const NOISE_TYPES = ['fbm', 'noiseFloat', 'voronoi', 'domainWarp', 'turbulence', 'magicTexture', 'waveTexture', 'gyroidField'];
+const NOISE_TYPES = ['fbm', 'noise', 'noiseFloat', 'voronoi', 'domainWarp', 'turbulence', 'magicTexture', 'waveTexture', 'gyroidField'];
 const WAVE_TYPES = ['sin', 'cos', 'lfo', 'sineLFO', 'waveTerm', 'waveTexture'];
 
 const catOf = (t: string) => getNodeDefinition(t)?.category ?? '';
@@ -565,7 +565,7 @@ export const TECHNIQUES: Technique[] = [
     slots: { in: [S('position', 'position', 'vec2'), S('time', 'time', 'float')], out: [S('value', 'value', 'float')] },
     variants: [
       { id: 'node', name: 'Fractal Noise node', match: nodes(['fbm']) },
-      { id: 'noise', name: 'Noise / Voronoi node', match: nodes(['noiseFloat', 'voronoi', 'gyroidField', 'magicTexture']) },
+      { id: 'noise', name: 'Noise / Voronoi node', match: nodes(['noise', 'noiseFloat', 'voronoi', 'gyroidField', 'magicTexture']) },
       { id: 'code', name: 'octave loop in code', match: code(re(/\b(?:amp|a)\s*\*=\s*0?\.5|\bfbm\w*\s*\(/)) },
     ],
   },

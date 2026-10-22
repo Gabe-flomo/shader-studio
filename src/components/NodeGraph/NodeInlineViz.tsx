@@ -5475,7 +5475,8 @@ function NodeInlineVizSwitch({ node, onEnterGroup }: { node: GraphNode; onEnterG
     // ── Noise ─────────────────────────────────────────────────────────────────
     case 'fbm':
     case 'voronoi':
-    case 'noiseFloat':       return <NoisePatchViz           node={node} />;
+    case 'noiseFloat':
+    case 'noise':            return <NoisePatchViz           node={node} />;
 
     // ── Space / UV warps → param display ─────────────────────────────────────
     case 'fract':

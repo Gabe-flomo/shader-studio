@@ -42,7 +42,7 @@ export const SWITCH_FAMILIES: readonly SwitchFamily[] = [
   { id: 'sdf-modify', label: 'SDF modifiers', types: ['sdfOffset', 'sdfOnion', 'sdfSharpen', 'abs', 'negate'] },
   { id: 'arith', label: 'Arithmetic', types: ['add', 'subtract', 'multiply', 'divide', 'pow', 'minMath', 'max', 'mod'] },
   { id: 'interp', label: 'Interpolation', types: ['mix', 'smoothstep', 'remap', 'clamp', 'step'] },
-  { id: 'noise', label: 'Noise', types: ['fbm', 'noiseFloat', 'voronoi', 'scatter'] },
+  { id: 'noise', label: 'Noise', types: ['fbm', 'noise', 'noiseFloat', 'voronoi', 'scatter'] },
   { id: 'colour-adjust', label: 'Colour adjustments', types: [
     'brightnessContrast', 'colorSaturation', 'hueRotate', 'liftGammaGain', 'shadowsHighlights', 'toneCurve', 'toneMap',
     'invert', 'posterize', 'dither', 'hsv', 'hueRange', 'grain',
